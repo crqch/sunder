@@ -9,7 +9,7 @@ defmodule Sunder.Repo.Migrations.CreateAccountEntries do
       add :description, :string
       add :location, :string
       add :account_id, references(:accounts, on_delete: :nothing)
-      add :category, references(:categories, on_delete: :nothing)
+      add :category, references(:entry_categories, on_delete: :nothing)
 
       timestamps()
     end
