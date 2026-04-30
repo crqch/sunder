@@ -3,7 +3,8 @@ defmodule Sunder.Account do
   import Ecto.Changeset
 
   schema "accounts" do
-    field(:name, :string)
+    field :name, :string
+    field :user_id, :string
 
     timestamps()
   end
@@ -11,7 +12,7 @@ defmodule Sunder.Account do
   @doc false
   def changeset(account, attrs) do
     account
-    |> cast(attrs, [:id, :name])
-    |> validate_required([:id, :name])
+    |> cast(attrs, [:user_id, :name])
+    |> validate_required([:user_id, :name])
   end
 end

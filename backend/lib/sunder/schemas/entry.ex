@@ -9,7 +9,7 @@ defmodule Sunder.Account.Entry do
     field(:location, :string)
     field(:amount, :float)
     field(:account_id, :id)
-    field(:category, :id)
+    field(:category_id, :id)
 
     timestamps()
   end
