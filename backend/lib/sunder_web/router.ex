@@ -17,7 +17,11 @@ defmodule SunderWeb.Router do
     pipe_through(:api)
 
     get("/", StatusController, :index)
+
+    post("/auth/register", AuthController, :register)
+    post("/auth/login", AuthController, :login)
   end
+
 
   # Other scopes may use custom stacks.
   # scope "/api", SunderWeb do
