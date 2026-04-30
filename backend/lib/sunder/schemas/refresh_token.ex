@@ -1,11 +1,13 @@
-defmodule Sunder.RefreshToken do
+defmodule Sunder.Accounts.RefreshToken do
   use Sunder.Schema
   import Ecto.Changeset
 
+  @derive {Jason.Encoder, only: [:token]}
+
   schema "refresh_tokens" do
-    field :token, :string
-    field :expires_at, :naive_datetime
-    field :user_id, :string
+    field(:token, :string)
+    field(:expires_at, :naive_datetime)
+    field(:user_id, :string)
 
     timestamps()
   end

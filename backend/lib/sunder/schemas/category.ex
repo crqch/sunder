@@ -1,6 +1,9 @@
 defmodule Sunder.Entry.Category do
   use Sunder.Schema
   import Ecto.Changeset
+  alias Sunder.Entry.Category
+
+  @derive {Jason.Encoder, only: [:title, :description, :color]}
 
   schema "entry_categories" do
     field(:description, :string)

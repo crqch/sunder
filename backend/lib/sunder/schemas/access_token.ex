@@ -1,11 +1,13 @@
-defmodule Sunder.AccessToken do
+defmodule Sunder.Accounts.AccessToken do
   use Sunder.Schema
   import Ecto.Changeset
 
+  @derive {Jason.Encoder, only: [:token]}
+
   schema "access_tokens" do
-    field :token, :string
-    field :expires_at, :naive_datetime
-    field :user_id, :string
+    field(:token, :string)
+    field(:expires_at, :naive_datetime)
+    field(:user_id, :string)
 
     timestamps()
   end

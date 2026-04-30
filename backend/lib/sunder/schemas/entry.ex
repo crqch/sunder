@@ -1,6 +1,9 @@
 defmodule Sunder.Account.Entry do
   use Sunder.Schema
   import Ecto.Changeset
+  alias Sunder.Accounts.User
+
+  @derive {Jason.Encoder, only: [:date, :amount, :title, :description, :location]}
 
   schema "account_entries" do
     field(:date, :naive_datetime)
