@@ -6,6 +6,7 @@ defmodule Sunder.Repo.Migrations.CreateEntryCategories do
       add :title, :string
       add :description, :string
       add :color, :string
+      add :eco_user_id, :string
 
       timestamps()
     end

@@ -3,7 +3,7 @@ defmodule Sunder.Repo.Migrations.CreateAccounts do
 
   def change do
     create table(:accounts) do
-      add :user_id, :string
+      add :eco_user_id, :string
       add :name, :string
 
       timestamps()
