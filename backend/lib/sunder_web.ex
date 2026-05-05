@@ -21,6 +21,9 @@ defmodule SunderWeb do
     quote do
       use Phoenix.Controller, namespace: SunderWeb
 
+      use Oaskit.Controller
+      plug(Oaskit.Plugs.ValidateRequest)
+
       import Plug.Conn
       import SunderWeb.Gettext
       alias SunderWeb.Router.Helpers, as: Routes

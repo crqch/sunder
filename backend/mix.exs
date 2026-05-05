@@ -47,7 +47,8 @@ defmodule Sunder.MixProject do
       {:plug_cowboy, "~> 2.0"},
       {:argon2_elixir, "~> 4.0"},
       {:ex_cuid2, "~> 0.10.1"},
-      {:timex, "~> 3.7"}
+      {:timex, "~> 3.7"},
+      {:oaskit, "~> 0.12.0"}
     ]
   end
 

@@ -2,6 +2,50 @@ defmodule SunderWeb.AuthController do
   use SunderWeb, :controller
   alias Sunder.Contexts.Accounts
 
+  operation(:register,
+    summary: "Register an account",
+    parameters: [
+      invite: [
+        in: :path,
+        schema: %{type: :string},
+        description: "Invite code"
+      ]
+    ],
+    request_body: {
+      %{
+        type: :object,
+        properties: %{
+          email: %{type: :string, description: "Email address"},
+          username: %{type: :string, description: "Username"},
+          pass: %{type: :string, description: "Password"}
+        }
+      },
+      []
+    },
+    responses: [
+      created: {
+        %{
+          type: :object,
+          properties: %{
+            id: %{type: :string},
+            message: %{type: :string}
+          }
+        },
+        [description: "User id"]
+      },
+      bad_request: {
+        %{
+          type: :object,
+          properties: %{
+            error_code: %{type: :string},
+            message: %{type: :string}
+          }
+        },
+        [description: "Error"]
+      }
+    ]
+  )
+
   def register(conn, params) do
     case Accounts.register_with_invite(params) do
       {:ok, %{user: user}} ->
@@ -34,6 +78,43 @@ defmodule SunderWeb.AuthController do
     end
   end
 
+  operation(:login,
+    summary: "Login",
+    request_body: {
+      %{
+        type: :object,
+        properties: %{
+          email: %{type: :string, description: "Email address"},
+          pass: %{type: :string, description: "Password"}
+        }
+      },
+      []
+    },
+    responses: [
+      ok: {
+        %{
+          type: :object,
+          properties: %{
+            id: %{type: :string},
+            message: %{type: :string},
+            refresh_token: %{type: :string}
+          }
+        },
+        [description: "User id and refresh token"]
+      },
+      bad_request: {
+        %{
+          type: :object,
+          properties: %{
+            error_code: %{type: :string},
+            message: %{type: :string}
+          }
+        },
+        [description: "Error"]
+      }
+    ]
+  )
+
   def login(conn, params) do
     case Accounts.login(params) do
       {:ok, %{user: user, refresh_token: refresh_token}} ->
@@ -65,6 +146,41 @@ defmodule SunderWeb.AuthController do
         |> json(%{error_code: "INVALID_CREDENTIALS", message: "Invalid email or password."})
     end
   end
+
+  operation(:refresh_token,
+    summary: "Refresh token",
+    request_body: {
+      %{
+        type: :object,
+        properties: %{
+          refresh_token: %{type: :string, description: "Refresh token"}
+        }
+      },
+      []
+    },
+    responses: [
+      ok: {
+        %{
+          type: :object,
+          properties: %{
+            message: %{type: :string},
+            id: %{type: :string}
+          }
+        },
+        [description: "Token refreshed"]
+      },
+      bad_request: {
+        %{
+          type: :object,
+          properties: %{
+            error_code: %{type: :string},
+            message: %{type: :string}
+          }
+        },
+        [description: "Error"]
+      }
+    ]
+  )
 
   def refresh_token(conn, params) do
     case Accounts.refresh_token(params) do

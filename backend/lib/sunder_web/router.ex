@@ -11,6 +11,14 @@ defmodule SunderWeb.Router do
 
   pipeline :api do
     plug(:accepts, ["json"])
+    plug(Oaskit.Plugs.SpecProvider, spec: SunderWeb.ApiSpec)
+  end
+
+  scope "/api" do
+    pipe_through(:api)
+
+    get("/openapi.json", Oaskit.SpecController, spec: SunderWeb.ApiSpec)
+    get("/docs", Oaskit.SpecController, redoc: "/api/openapi.json")
   end
 
   scope "/", SunderWeb do
@@ -21,7 +29,6 @@ defmodule SunderWeb.Router do
     post("/auth/register", AuthController, :register)
     post("/auth/login", AuthController, :login)
   end
-
 
   # Other scopes may use custom stacks.
   # scope "/api", SunderWeb do
