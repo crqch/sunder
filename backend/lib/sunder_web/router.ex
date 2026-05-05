@@ -28,6 +28,7 @@ defmodule SunderWeb.Router do
 
     post("/auth/register", AuthController, :register)
     post("/auth/login", AuthController, :login)
+    post("/auth/refresh_token", AuthController, :refresh_token)
   end
 
   # Other scopes may use custom stacks.

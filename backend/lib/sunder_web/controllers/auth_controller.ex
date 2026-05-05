@@ -164,7 +164,8 @@ defmodule SunderWeb.AuthController do
           type: :object,
           properties: %{
             message: %{type: :string},
-            id: %{type: :string}
+            id: %{type: :string},
+            access_token: %{type: :string}
           }
         },
         [description: "Token refreshed"]
@@ -184,10 +185,14 @@ defmodule SunderWeb.AuthController do
 
   def refresh_token(conn, params) do
     case Accounts.refresh_token(params) do
-      {:ok, %{user: user}} ->
+      {:ok, %{user: user, access_token: access_token}} ->
         conn
         |> put_status(:ok)
-        |> json(%{message: "Token refreshed successfully!", id: user.id})
+        |> json(%{
+          message: "Token refreshed successfully!",
+          id: user.id,
+          access_token: access_token.token
+        })
 
       {:error, :user, %Ecto.Changeset{} = changeset, _changes} ->
         conn
