@@ -7,7 +7,8 @@ defmodule Sunder.Accounts.AccessToken do
   schema "access_tokens" do
     field(:token, :string)
     field(:expires_at, :naive_datetime)
-    field(:user_id, :string)
+
+    belongs_to(:user, Sunder.Accounts.User)
 
     timestamps()
   end

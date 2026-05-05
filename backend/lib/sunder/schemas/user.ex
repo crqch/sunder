@@ -10,6 +10,11 @@ defmodule Sunder.Accounts.User do
     field(:username, :string)
     field(:email, :string)
 
+    has_many(:access_tokens, Sunder.Accounts.AccessToken)
+    has_many(:refresh_tokens, Sunder.Accounts.RefreshToken)
+
+    has_one(:eco_user, Sunder.Accounts.EcoUser)
+
     timestamps()
   end
 

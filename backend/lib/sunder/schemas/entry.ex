@@ -1,7 +1,6 @@
 defmodule Sunder.Eco.Entry do
   use Sunder.Schema
   import Ecto.Changeset
-  alias Sunder.Accounts.User
 
   @derive {Jason.Encoder, only: [:date, :amount, :title, :description, :location]}
 
@@ -11,8 +10,10 @@ defmodule Sunder.Eco.Entry do
     field(:title, :string)
     field(:location, :string)
     field(:amount, :float)
-    field(:account_id, :id)
-    field(:category_id, :id)
+
+    belongs_to(:account, Sunder.Eco.Account)
+    belongs_to(:category, Sunder.Eco.Category)
+    belongs_to(:eco_user, Sunder.Eco.EcoUser)
 
     timestamps()
   end
@@ -20,7 +21,25 @@ defmodule Sunder.Eco.Entry do
   @doc false
   def changeset(entry, attrs) do
     entry
-    |> cast(attrs, [:date, :amount, :title, :description, :location])
-    |> validate_required([:date, :amount, :title, :description, :location])
+    |> cast(attrs, [
+      :date,
+      :amount,
+      :title,
+      :description,
+      :location,
+      :account_id,
+      :category_id,
+      :eco_user_id
+    ])
+    |> validate_required([
+      :date,
+      :amount,
+      :title,
+      :description,
+      :location,
+      :account_id,
+      :category_id,
+      :eco_user_id
+    ])
   end
 end
