@@ -1,4 +1,4 @@
-defmodule Sunder.Account.Entry do
+defmodule Sunder.Eco.Entry do
   use Sunder.Schema
   import Ecto.Changeset
   alias Sunder.Accounts.User

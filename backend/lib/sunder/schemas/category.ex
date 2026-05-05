@@ -1,4 +1,4 @@
-defmodule Sunder.Entry.Category do
+defmodule Sunder.Eco.Category do
   use Sunder.Schema
   import Ecto.Changeset
   alias Sunder.Entry.Category

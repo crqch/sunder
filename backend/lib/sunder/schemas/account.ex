@@ -1,4 +1,4 @@
-defmodule Sunder.Account do
+defmodule Sunder.Eco.Account do
   use Sunder.Schema
   import Ecto.Changeset
 
