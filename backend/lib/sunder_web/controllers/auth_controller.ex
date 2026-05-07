@@ -1,6 +1,6 @@
 defmodule SunderWeb.AuthController do
   use SunderWeb, :controller
-  alias Sunder.Contexts.Accounts
+  alias Sunder.Contexts.Users
 
   operation(:register,
     summary: "Register an account",
@@ -47,7 +47,7 @@ defmodule SunderWeb.AuthController do
   )
 
   def register(conn, params) do
-    case Accounts.register_with_invite(params) do
+    case Users.register_with_invite(params) do
       {:ok, %{user: user}} ->
         conn
         |> put_status(:created)
@@ -116,7 +116,7 @@ defmodule SunderWeb.AuthController do
   )
 
   def login(conn, params) do
-    case Accounts.login(params) do
+    case Users.login(params) do
       {:ok, %{user: user, refresh_token: refresh_token}} ->
         conn
         |> put_status(:ok)
@@ -184,7 +184,7 @@ defmodule SunderWeb.AuthController do
   )
 
   def refresh_token(conn, params) do
-    case Accounts.refresh_token(params) do
+    case Users.refresh_token(params) do
       {:ok, %{user: user, access_token: access_token}} ->
         conn
         |> put_status(:ok)

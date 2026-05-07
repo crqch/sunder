@@ -1,4 +1,4 @@
-defmodule Sunder.Contexts.Accounts do
+defmodule Sunder.Contexts.Users do
   import Ecto.Query
 
   alias Sunder.Repo
