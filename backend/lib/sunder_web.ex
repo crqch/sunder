@@ -22,7 +22,7 @@ defmodule SunderWeb do
       use Phoenix.Controller, namespace: SunderWeb
 
       use Oaskit.Controller
-      plug(Oaskit.Plugs.ValidateRequest)
+      plug(Oaskit.Plugs.ValidateRequest, security: false)
 
       import Plug.Conn
       import SunderWeb.Gettext
