@@ -11,7 +11,14 @@
     }
   ],
   "components": {
-    "schemas": {}
+    "schemas": {},
+    "securitySchemes": {
+      "auth": {
+        "in": "cookie",
+        "name": "authorization",
+        "type": "apiKey"
+      }
+    }
   },
   "paths": {
     "/": {
@@ -153,7 +160,7 @@
             "application/json": {
               "schema": {
                 "properties": {
-                  "refresh_token": {
+                  "token": {
                     "description": "Refresh token",
                     "type": "string"
                   }
@@ -243,6 +250,70 @@
           "required": true
         },
         "summary": "Register an account"
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "security": [
+          {
+            "auth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "User id and refresh token"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error_code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing/invalid cookie"
+          }
+        },
+        "operationId": "dashboard_index_FHMHL3Q",
+        "summary": "Get user"
       }
     }
   }

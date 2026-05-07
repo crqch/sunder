@@ -31,6 +31,13 @@ defmodule SunderWeb.Router do
     post("/auth/refresh_token", AuthController, :refresh_token)
   end
 
+  scope "/dashboard", SunderWeb.Authed do
+    pipe_through(:api)
+    pipe_through(SunderWeb.Plugs.AuthPlug)
+
+    get("/", DashboardController, :index)
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", SunderWeb do
   #   pipe_through :api

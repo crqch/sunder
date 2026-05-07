@@ -14,7 +14,16 @@ defmodule SunderWeb.ApiSpec do
       servers: [
         %{url: "http://localhost:4000", description: "Local Development Server"}
       ],
-      paths: Paths.from_router(SunderWeb.Router)
+      paths: Paths.from_router(SunderWeb.Router),
+      components: %{
+        securitySchemes: %{
+          "auth" => %{
+            type: "apiKey",
+            in: "cookie",
+            name: "authorization"
+          }
+        }
+      }
     }
   end
 end
