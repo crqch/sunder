@@ -29,6 +29,6 @@ defmodule SunderWeb.Authed.DashboardController do
   )
 
   def index(%{assigns: %{user: user}} = conn, _params) do
-    conn |> json(%{id: user.id, username: user.username})
+    conn |> json(%{id: user.id, username: user.username, flags: user.flags})
   end
 end
