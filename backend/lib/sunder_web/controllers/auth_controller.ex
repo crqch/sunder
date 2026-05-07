@@ -153,7 +153,7 @@ defmodule SunderWeb.AuthController do
       %{
         type: :object,
         properties: %{
-          refresh_token: %{type: :string, description: "Refresh token"}
+          token: %{type: :string, description: "Refresh token"}
         }
       },
       []

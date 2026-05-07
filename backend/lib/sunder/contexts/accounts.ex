@@ -88,11 +88,21 @@ defmodule Sunder.Contexts.Accounts do
       end
     end)
     |> Ecto.Multi.run(:user, fn repo, %{find_refresh_token: token} ->
-      repo.get(User, token.user_id)
+      case repo.get(User, token.user_id) do
+        nil ->
+          {:error, :user_not_found}
+
+        user ->
+          {:ok, user}
+      end
     end)
     |> Ecto.Multi.insert(:access_token, fn %{user: user} ->
       %AccessToken{}
-      |> AccessToken.changeset(%{user_id: user.id, token: Sunder.Tokens.generate_token()})
+      |> AccessToken.changeset(%{
+        user_id: user.id,
+        token: Sunder.Tokens.generate_token(),
+        expires_at: Timex.shift(DateTime.utc_now(), hours: 1)
+      })
     end)
     |> Ecto.Multi.update(:extend_token, fn %{find_refresh_token: token} ->
       RefreshToken.changeset(token, %{expires_at: Timex.shift(DateTime.utc_now(), days: 30)})
