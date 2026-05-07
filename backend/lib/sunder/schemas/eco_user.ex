@@ -1,5 +1,5 @@
 defmodule Sunder.Eco.EcoUser do
-  use Ecto.Schema
+  use Sunder.Schema
   import Ecto.Changeset
 
   schema "eco_users" do
