@@ -1,6 +1,7 @@
 defmodule Sunder.Contexts.Users do
   import Ecto.Query
 
+  alias Sunder.Eco.EcoUser
   alias Sunder.Repo
   alias Sunder.Accounts.{User, Invite, AccessToken, RefreshToken}
 
@@ -21,6 +22,14 @@ defmodule Sunder.Contexts.Users do
     end)
     |> Ecto.Multi.insert(:user, fn _changes ->
       User.registration_changeset(%User{}, params)
+    end)
+    |> Ecto.Multi.insert(:eco_user, fn %{user: user} = changes ->
+      EcoUser.changeset(
+        %EcoUser{
+          user_id: user.id
+        },
+        params
+      )
     end)
     |> Ecto.Multi.update(:mark_invite_used, fn %{invite: invite} ->
       Ecto.Changeset.change(invite, used: true)

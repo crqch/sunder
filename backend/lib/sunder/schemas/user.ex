@@ -13,7 +13,7 @@ defmodule Sunder.Accounts.User do
     has_many(:access_tokens, Sunder.Accounts.AccessToken)
     has_many(:refresh_tokens, Sunder.Accounts.RefreshToken)
 
-    has_one(:eco_user, Sunder.Accounts.EcoUser)
+    has_one(:eco_user, Sunder.Eco.EcoUser)
 
     timestamps()
   end
