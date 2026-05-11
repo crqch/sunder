@@ -38,6 +38,12 @@ defmodule SunderWeb.Router do
     get("/", DashboardController, :index)
   end
 
+  scope "/dashboard/eco", SunderWeb.Authed do
+    pipe_through(:api)
+    pipe_through(SunderWeb.Plugs.AuthPlug)
+    pipe_through(SunderWeb.Plugs.EcoUserPlug)
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", SunderWeb do
   #   pipe_through :api
