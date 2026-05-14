@@ -42,6 +42,8 @@ defmodule SunderWeb.Router do
     pipe_through(:api)
     pipe_through(SunderWeb.Plugs.AuthPlug)
     pipe_through(SunderWeb.Plugs.EcoUserPlug)
+
+    resources("/accounts", AccountController)
   end
 
   # Other scopes may use custom stacks.

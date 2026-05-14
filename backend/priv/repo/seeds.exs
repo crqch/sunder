@@ -10,9 +10,16 @@
 # We recommend using the bang functions (`insert!`, `update!`
 # and so on) as they will fail if something goes wrong.
 
-Sunder.Repo.insert!(%Sunder.Accounts.User{
+
+alias Sunder.Accounts.{User}
+alias Sunder.Eco.{EcoUser}
+
+case Sunder.Repo.insert(%User{
   email: "admin",
   username: "admin",
   pass: Argon2.hash_pwd_salt("admin"),
   flags: ["is_admin"]
-})
+}) do
+  {:ok, user} -> Sunder.Repo.insert(%EcoUser{user_id: user.id})
+  nil -> false
+end

@@ -15,9 +15,16 @@ defmodule Sunder.Eco.Account do
   end
 
   @doc false
-  def changeset(account, attrs) do
+  def create_changeset(account, attrs) do
     account
     |> cast(attrs, [:eco_user_id, :name])
     |> validate_required([:eco_user_id, :name])
+  end
+
+  @doc false
+  def update_changeset(account, attrs) do
+    account
+    |> cast(attrs, [:eco_user_id])
+    |> validate_required([:eco_user_id])
   end
 end
