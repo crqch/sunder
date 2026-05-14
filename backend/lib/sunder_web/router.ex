@@ -27,6 +27,7 @@ defmodule SunderWeb.Router do
     get("/", StatusController, :index)
 
     post("/auth/register", AuthController, :register)
+    post("/auth/register/:invite", AuthController, :register)
     post("/auth/login", AuthController, :login)
     post("/auth/refresh_token", AuthController, :refresh_token)
   end
