@@ -1,8 +1,13 @@
 services:
   db:
-    image: postgres
-    restart: always
+    image: postgres:17
+    restart: unless-stopped
     shm_size: 128mb
     network_mode: host
     environment:
       POSTGRES_PASSWORD: passwd
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_dev_data:
