@@ -2,7 +2,7 @@ defmodule Sunder.Eco.Account do
   use Sunder.Schema
   import Ecto.Changeset
 
-  @derive {Jason.Encoder, only: [:name]}
+  @derive {Jason.Encoder, only: [:id, :name]}
 
   local_schema "accounts" do
     field(:name, :string)
@@ -13,9 +13,9 @@ defmodule Sunder.Eco.Account do
   end
 
   @doc false
-  def create_changeset(account, attrs) do
+  def changeset(account, attrs) do
     account
-    |> cast(attrs, [:eco_user_id, :name])
+    |> cast(attrs, [:id, :eco_user_id, :name])
     |> validate_required([:eco_user_id, :name])
   end
 

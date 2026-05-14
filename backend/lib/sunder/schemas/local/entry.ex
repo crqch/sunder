@@ -2,7 +2,7 @@ defmodule Sunder.Eco.Entry do
   use Sunder.Schema
   import Ecto.Changeset
 
-  @derive {Jason.Encoder, only: [:date, :amount, :title, :description, :location]}
+  @derive {Jason.Encoder, only: [:id, :date, :amount, :title, :description, :location]}
 
   local_schema "account_entries" do
     field(:date, :naive_datetime)
@@ -20,6 +20,7 @@ defmodule Sunder.Eco.Entry do
   def changeset(entry, attrs) do
     entry
     |> cast(attrs, [
+      :id,
       :date,
       :amount,
       :title,
