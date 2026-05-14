@@ -43,7 +43,7 @@ defmodule SunderWeb.Router do
     pipe_through(SunderWeb.Plugs.AuthPlug)
     pipe_through(SunderWeb.Plugs.EcoUserPlug)
 
-    resources("/accounts", AccountController)
+    post("/sync", SunderWeb.Authed.SyncController, :sync)
   end
 
   # Other scopes may use custom stacks.
