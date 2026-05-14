@@ -4,7 +4,7 @@ defmodule Sunder.Eco.Entry do
 
   @derive {Jason.Encoder, only: [:date, :amount, :title, :description, :location]}
 
-  schema "account_entries" do
+  local_schema "account_entries" do
     field(:date, :naive_datetime)
     field(:description, :string)
     field(:title, :string)
@@ -14,8 +14,6 @@ defmodule Sunder.Eco.Entry do
     belongs_to(:account, Sunder.Eco.Account)
     belongs_to(:category, Sunder.Eco.Category)
     belongs_to(:eco_user, Sunder.Eco.EcoUser)
-
-    timestamps()
   end
 
   @doc false

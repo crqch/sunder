@@ -5,14 +5,12 @@ defmodule Sunder.Eco.Category do
 
   @derive {Jason.Encoder, only: [:title, :description, :color]}
 
-  schema "entry_categories" do
+  local_schema "entry_categories" do
     field(:description, :string)
     field(:title, :string)
     field(:color, :string)
 
     belongs_to(:eco_user, EcoUser)
-
-    timestamps()
   end
 
   @doc false

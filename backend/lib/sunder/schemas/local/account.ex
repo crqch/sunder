@@ -4,14 +4,12 @@ defmodule Sunder.Eco.Account do
 
   @derive {Jason.Encoder, only: [:name]}
 
-  schema "accounts" do
+  local_schema "accounts" do
     field(:name, :string)
 
     belongs_to(:eco_user, Sunder.Eco.EcoUser)
 
     has_many(:entries, Sunder.Eco.Entry)
-
-    timestamps()
   end
 
   @doc false
