@@ -22,7 +22,7 @@ defmodule SunderWeb.Plugs.AuthPlug do
            ) do
       assign(conn, :user, user)
     else
-      err ->
+      _ ->
         conn
         |> put_status(401)
         |> json(%{message: "Missing/invalid cookie!"})

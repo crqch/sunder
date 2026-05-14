@@ -1,7 +1,7 @@
 defmodule Sunder.Eco.Category do
+  alias Sunder.Eco.EcoUser
   use Sunder.Schema
   import Ecto.Changeset
-  alias Sunder.Entry.Category
 
   @derive {Jason.Encoder, only: [:title, :description, :color]}
 
@@ -9,6 +9,8 @@ defmodule Sunder.Eco.Category do
     field(:description, :string)
     field(:title, :string)
     field(:color, :string)
+
+    belongs_to(:eco_user, EcoUser)
 
     timestamps()
   end

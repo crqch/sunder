@@ -1,6 +1,5 @@
 defmodule SunderWeb.ApiSpec do
   alias Oaskit.Spec.Paths
-  alias Oaskit.Spec.Server
   use Oaskit
 
   @impl true

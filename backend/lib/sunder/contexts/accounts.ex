@@ -62,7 +62,7 @@ defmodule SunderWeb.Contexts.Accounts do
         account -> {:ok, account}
       end
     end)
-    |> Ecto.Multi.delete(:delete, fn _, %{account: account} -> account end)
+    |> Ecto.Multi.delete(:delete, fn %{account: account} -> account end)
     |> Repo.transact()
   end
 end

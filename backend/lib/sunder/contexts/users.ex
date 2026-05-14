@@ -23,7 +23,7 @@ defmodule Sunder.Contexts.Users do
     |> Ecto.Multi.insert(:user, fn _changes ->
       User.registration_changeset(%User{}, params)
     end)
-    |> Ecto.Multi.insert(:eco_user, fn %{user: user} = changes ->
+    |> Ecto.Multi.insert(:eco_user, fn %{user: user} = _changes ->
       EcoUser.changeset(
         %EcoUser{
           user_id: user.id
@@ -34,7 +34,7 @@ defmodule Sunder.Contexts.Users do
     |> Ecto.Multi.update(:mark_invite_used, fn %{invite: invite} ->
       Ecto.Changeset.change(invite, used: true)
     end)
-    |> Repo.transaction()
+    |> Repo.transact()
   end
 
   def login(params) do
@@ -80,7 +80,7 @@ defmodule Sunder.Contexts.Users do
           |> repo.insert()
       end
     end)
-    |> Repo.transaction()
+    |> Repo.transact()
   end
 
   def refresh_token(params) do
@@ -116,6 +116,6 @@ defmodule Sunder.Contexts.Users do
     |> Ecto.Multi.update(:extend_token, fn %{find_refresh_token: token} ->
       RefreshToken.changeset(token, %{expires_at: Timex.shift(DateTime.utc_now(), days: 30)})
     end)
-    |> Repo.transaction()
+    |> Repo.transact()
   end
 end

@@ -1,7 +1,6 @@
 defmodule SunderWeb.Authed.AccountController do
   use SunderWeb, :controller
   alias SunderWeb.Contexts.Accounts
-  alias Plug.Conn
 
   # ✅ GET     /dashboard/accounts                    SunderWeb.Authed.AccountController :index
   def index(%{assigns: %{eco_user: eco_user}} = conn, _params) do
