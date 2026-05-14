@@ -2,9 +2,20 @@ defmodule Sunder.Eco.Entry do
   use Sunder.Schema
   import Ecto.Changeset
 
-  @derive {Jason.Encoder, only: [:id, :date, :amount, :title, :description, :location]}
+  @derive {Jason.Encoder,
+           only: [
+             :id,
+             :date,
+             :amount,
+             :title,
+             :description,
+             :location,
+             :deleted_at,
+             :inserted_at,
+             :updated_at
+           ]}
 
-  local_schema "account_entries" do
+  schema "account_entries" do
     field(:date, :naive_datetime)
     field(:description, :string)
     field(:title, :string)
@@ -14,6 +25,9 @@ defmodule Sunder.Eco.Entry do
     belongs_to(:account, Sunder.Eco.Account)
     belongs_to(:category, Sunder.Eco.Category)
     belongs_to(:eco_user, Sunder.Eco.EcoUser)
+
+    field(:deleted_at, :utc_datetime)
+    timestamps()
   end
 
   @doc false
@@ -28,7 +42,9 @@ defmodule Sunder.Eco.Entry do
       :location,
       :account_id,
       :category_id,
-      :eco_user_id
+      :eco_user_id,
+      :deleted_at,
+      :updated_at
     ])
     |> validate_required([
       :date,
