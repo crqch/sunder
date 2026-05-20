@@ -63,20 +63,36 @@ fun SunderApp(user: User?) {
         composable<SignIn> {
             SignInScreen(
                 {
-
+                    navController.navigate(Home) {
+                        popUpTo(SignIn) {
+                            inclusive = true
+                        }
+                    }
                 },
                 {
-                    navController.navigate(SignUp)
+                    navController.navigate(SignUp) {
+                        popUpTo(SignIn) {
+                            inclusive = true
+                        }
+                    }
                 }
             )
         }
         composable<SignUp> {
             SignUpScreen(
                 {
-
+                    navController.navigate(Home) {
+                        popUpTo(SignUp) {
+                            inclusive = true
+                        }
+                    }
                 },
                 {
-                    navController.navigate(SignIn)
+                    navController.navigate(SignIn) {
+                        popUpTo(SignUp) {
+                            inclusive = true
+                        }
+                    }
                 }
             )
         }
