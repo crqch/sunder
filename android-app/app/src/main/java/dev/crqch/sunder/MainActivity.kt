@@ -4,22 +4,21 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import dagger.hilt.android.AndroidEntryPoint
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.compose.NavHost
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.ui.SunderApp
 import dev.crqch.sunder.ui.theme.SunderTheme
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +35,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun RootContainer(
-    viewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory),
+    viewModel: AuthViewModel = hiltViewModel(),
     innerPadding: PaddingValues
 ) {
     rememberNavController()
@@ -49,13 +48,8 @@ fun RootContainer(
             Text("Splash screen")
         }
 
-        user != null -> {
-            SunderApp(null)
-        }
-
         else -> {
-            SunderApp(user)
+            SunderApp(viewModel, user)
         }
-
     }
 }

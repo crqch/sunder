@@ -1,5 +1,6 @@
 package dev.crqch.sunder.ui
 
+import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.scaleIn
@@ -7,14 +8,18 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import dev.crqch.sunder.AuthViewModel
 import dev.crqch.sunder.data.local.User
 import dev.crqch.sunder.ui.screens.HomeScreen
 import dev.crqch.sunder.ui.screens.auth.SignInScreen
 import dev.crqch.sunder.ui.screens.auth.SignUpScreen
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -37,7 +42,7 @@ val smoothOffsetSpec = tween<IntOffset>(
 )
 
 @Composable
-fun SunderApp(user: User?) {
+fun SunderApp(authViewModel: AuthViewModel, user: User?) {
     val navController = rememberNavController()
     NavHost(
         navController, startDestination = if (user == null) SignIn else Home,
@@ -61,11 +66,21 @@ fun SunderApp(user: User?) {
             HomeScreen()
         }
         composable<SignIn> {
+            val scope = rememberCoroutineScope()
+            val context = LocalContext.current
             SignInScreen(
                 {
-                    navController.navigate(Home) {
-                        popUpTo(SignIn) {
-                            inclusive = true
+                    scope.launch {
+                        val res = authViewModel.signIn(it)
+                        if (res.success) {
+
+                            navController.navigate(Home) {
+                                popUpTo(SignIn) {
+                                    inclusive = true
+                                }
+                            }
+                        } else {
+                            Toast.makeText(context, res.errorMessage ?: "Sign in failed", Toast.LENGTH_SHORT).show()
                         }
                     }
                 },

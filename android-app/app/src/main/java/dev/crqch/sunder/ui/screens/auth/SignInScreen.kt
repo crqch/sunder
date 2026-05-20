@@ -28,14 +28,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import dev.crqch.sunder.R
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
-data class SignInFormFields(val username: String = "", val password: String = "") : Parcelable {
+data class SignInFormFields(val login: String = "", val password: String = "") : Parcelable {
 
     fun isFilled(): Boolean {
-        return this.username != "" && this.password != ""
+        return this.login != "" && this.password != ""
     }
 }
 
@@ -100,13 +102,16 @@ fun SignInScreen(
                 fontWeight = FontWeight.Bold,
             )
             TextField(
-                value = input.username,
-                onValueChange = { input = input.copy(username = it) },
-                label = { Text(stringResource(R.string.username)) })
+                value = input.login,
+                onValueChange = { input = input.copy(login = it) },
+                label = { Text(stringResource(R.string.login)) },
+            )
             TextField(
                 value = input.password,
                 onValueChange = { input = input.copy(password = it) },
                 label = { Text(stringResource(R.string.password)) },
+                maxLines = 1,
+                visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
         }
