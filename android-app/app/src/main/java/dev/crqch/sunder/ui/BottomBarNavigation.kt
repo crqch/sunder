@@ -1,9 +1,14 @@
 package dev.crqch.sunder.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -19,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -27,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.ui.screens.AccountsScreen
+import dev.crqch.sunder.ui.screens.CreateAccountScreen
 import dev.crqch.sunder.ui.screens.EntriesScreen
 import dev.crqch.sunder.ui.screens.HomeScreen
 
@@ -54,34 +61,58 @@ fun AppNavHost(
         enterTransition = {
             val initial = Destination.entries.find { it.route == initialState.destination.route }
             val target = Destination.entries.find { it.route == targetState.destination.route }
-            val isLeft = initial != null && target != null && target.ordinal < initial.ordinal
-            slideInHorizontally(
-                animationSpec = smoothOffsetSpec,
-                initialOffsetX = { if (isLeft) -it else it })
+            if (initial != null && target != null) {
+                val isLeft = target.ordinal < initial.ordinal
+                slideInHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    initialOffsetX = { if (isLeft) -it else it })
+            } else {
+                slideInHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    initialOffsetX = { it })
+            }
         },
         exitTransition = {
             val initial = Destination.entries.find { it.route == initialState.destination.route }
             val target = Destination.entries.find { it.route == targetState.destination.route }
-            val isLeft = initial != null && target != null && target.ordinal < initial.ordinal
-            slideOutHorizontally(
-                animationSpec = smoothOffsetSpec,
-                targetOffsetX = { if (isLeft) it else -it })
+            if (initial != null && target != null) {
+                val isLeft = target.ordinal < initial.ordinal
+                slideOutHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    targetOffsetX = { if (isLeft) it else -it })
+            } else {
+                slideOutHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    targetOffsetX = { -it })
+            }
         },
         popEnterTransition = {
             val initial = Destination.entries.find { it.route == initialState.destination.route }
             val target = Destination.entries.find { it.route == targetState.destination.route }
-            val isLeft = initial != null && target != null && target.ordinal < initial.ordinal
-            slideInHorizontally(
-                animationSpec = smoothOffsetSpec,
-                initialOffsetX = { if (isLeft) -it else it })
+            if (initial != null && target != null) {
+                val isLeft = target.ordinal < initial.ordinal
+                slideInHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    initialOffsetX = { if (isLeft) -it else it })
+            } else {
+                slideInHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    initialOffsetX = { -it })
+            }
         },
         popExitTransition = {
             val initial = Destination.entries.find { it.route == initialState.destination.route }
             val target = Destination.entries.find { it.route == targetState.destination.route }
-            val isLeft = initial != null && target != null && target.ordinal < initial.ordinal
-            slideOutHorizontally(
-                animationSpec = smoothOffsetSpec,
-                targetOffsetX = { if (isLeft) it else -it })
+            if (initial != null && target != null) {
+                val isLeft = target.ordinal < initial.ordinal
+                slideOutHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    targetOffsetX = { if (isLeft) it else -it })
+            } else {
+                slideOutHorizontally(
+                    animationSpec = smoothOffsetSpec,
+                    targetOffsetX = { it })
+            }
         }
     ) {
         Destination.entries.forEach { destination ->
@@ -89,9 +120,14 @@ fun AppNavHost(
                 when (destination) {
                     Destination.ENTRIES -> EntriesScreen()
                     Destination.HOME -> HomeScreen()
-                    Destination.ACCOUNTS -> AccountsScreen()
+                    Destination.ACCOUNTS -> AccountsScreen(
+                        onAddAccount = { navController.navigate("create_account") }
+                    )
                 }
             }
+        }
+        composable("create_account") {
+            CreateAccountScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }
@@ -133,7 +169,9 @@ fun BottomBarNavigation(modifier: Modifier = Modifier) {
         }
     ) { contentPadding ->
         AppNavHost(
-            navController, startDestination, modifier = Modifier.padding(contentPadding),
+            navController,
+            startDestination,
+            modifier = Modifier.padding(contentPadding).consumeWindowInsets(contentPadding),
         )
     }
 }

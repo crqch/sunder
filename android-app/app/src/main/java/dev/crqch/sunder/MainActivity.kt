@@ -25,9 +25,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SunderTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    RootContainer(innerPadding = innerPadding)
-                }
+                RootContainer()
             }
         }
     }
@@ -35,11 +33,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun RootContainer(
-    viewModel: AuthViewModel = hiltViewModel(),
-    innerPadding: PaddingValues
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
-    rememberNavController()
-
     val isInitializing by viewModel.isInitializing.collectAsState()
     val user by viewModel.currentUser.collectAsState()
 
