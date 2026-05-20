@@ -26,7 +26,9 @@ import androidx.compose.ui.unit.em
 import android.os.Parcelable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import dev.crqch.sunder.R
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -64,7 +66,7 @@ fun SignInScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                 ) {
-                    Text("Sign in")
+                    Text(stringResource(R.string.sign_in))
                 }
                 OutlinedButton(
                     onClick = {
@@ -73,7 +75,7 @@ fun SignInScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                 ) {
-                    Text("Sign up")
+                    Text(stringResource(R.string.sign_up))
                 }
             }
         }
@@ -92,7 +94,7 @@ fun SignInScreen(
             )
         ) {
             Text(
-                "Sign in",
+                stringResource(R.string.sign_in),
                 Modifier.padding(bottom = 16.dp),
                 fontSize = 10.em,
                 fontWeight = FontWeight.Bold,
@@ -100,11 +102,11 @@ fun SignInScreen(
             TextField(
                 value = input.username,
                 onValueChange = { input = input.copy(username = it) },
-                label = { Text("Username") })
+                label = { Text(stringResource(R.string.username)) })
             TextField(
                 value = input.password,
                 onValueChange = { input = input.copy(password = it) },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.password)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
         }

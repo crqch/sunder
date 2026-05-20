@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Sunder</string>
+    <string name="email">E-mail</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="sign_in">Sign in</string>
+    <string name="sign_up">Sign up</string>
 </resources>

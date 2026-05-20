@@ -26,10 +26,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import dev.crqch.sunder.R
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -72,7 +74,7 @@ fun SignUpScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                 ) {
-                    Text("Sign up")
+                    Text(stringResource(R.string.sign_up))
                 }
                 OutlinedButton(
                     onClick = {
@@ -81,7 +83,7 @@ fun SignUpScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                 ) {
-                    Text("Sign in")
+                    Text(stringResource(R.string.sign_in))
                 }
             }
         }
@@ -100,7 +102,7 @@ fun SignUpScreen(
             )
         ) {
             Text(
-                "Sign up",
+                stringResource(R.string.sign_up),
                 Modifier.padding(bottom = 16.dp),
                 fontSize = 10.em,
                 fontWeight = FontWeight.Bold,
@@ -108,17 +110,17 @@ fun SignUpScreen(
             TextField(
                 value = input.email,
                 onValueChange = { input = input.copy(email = it) },
-                label = { Text("E-mail") },
+                label = { Text(stringResource(R.string.email)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
             )
             TextField(
                 value = input.username,
                 onValueChange = { input = input.copy(username = it) },
-                label = { Text("Username") })
+                label = { Text(stringResource(R.string.username)) })
             TextField(
                 value = input.password,
                 onValueChange = { input = input.copy(password = it) },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.password)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
         }
