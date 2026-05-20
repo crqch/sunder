@@ -84,7 +84,7 @@ defmodule SunderWeb.AuthController do
       %{
         type: :object,
         properties: %{
-          email: %{type: :string, description: "Email address"},
+          login: %{type: :string, description: "Email address or username"},
           pass: %{type: :string, description: "Password"}
         }
       },

@@ -40,8 +40,12 @@ defmodule Sunder.Contexts.Users do
   def login(params) do
     Ecto.Multi.new()
     |> Ecto.Multi.run(:user, fn repo, _changes ->
-      case repo.get_by(User, email: params["email"]) do
-        nil -> {:error, :invalid_email}
+      case repo.one(
+             from(u in User,
+               where: u.email == ^params["login"] or u.username == ^params["login"]
+             )
+           ) do
+        nil -> {:error, :invalid_email_or_username}
         user -> {:ok, user}
       end
     end)
