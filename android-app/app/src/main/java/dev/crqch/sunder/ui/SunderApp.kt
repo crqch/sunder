@@ -1,6 +1,13 @@
 package dev.crqch.sunder.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -19,10 +26,37 @@ object SignIn
 @Serializable
 object SignUp
 
+val smoothSpec = tween<Float>(
+    durationMillis = 500,
+    easing = FastOutSlowInEasing
+)
+
+val smoothOffsetSpec = tween<IntOffset>(
+    durationMillis = 500,
+    easing = FastOutSlowInEasing
+)
+
 @Composable
 fun SunderApp(user: User?) {
     val navController = rememberNavController()
-    NavHost(navController, startDestination = if (user == null) SignIn else Home) {
+    NavHost(
+        navController, startDestination = if (user == null) SignIn else Home,
+        enterTransition = {
+            slideInHorizontally(animationSpec = smoothOffsetSpec, initialOffsetX = { it }) +
+                    scaleIn(animationSpec = smoothSpec, initialScale = 0.85f)
+        },
+        exitTransition = {
+            slideOutHorizontally(animationSpec = smoothOffsetSpec, targetOffsetX = { -it }) +
+                    scaleOut(animationSpec = smoothSpec, targetScale = 0.85f)
+        },
+        popEnterTransition = {
+            slideInHorizontally(animationSpec = smoothOffsetSpec, initialOffsetX = { -it }) +
+                    scaleIn(animationSpec = smoothSpec, initialScale = 0.85f)
+        },
+        popExitTransition = {
+            slideOutHorizontally(animationSpec = smoothOffsetSpec, targetOffsetX = { it }) +
+                    scaleOut(animationSpec = smoothSpec, targetScale = 0.85f)
+        }) {
         composable<Home> {
             HomeScreen()
         }
