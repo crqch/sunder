@@ -10,7 +10,9 @@ defmodule SunderWeb.Authed.DashboardController do
           type: :object,
           properties: %{
             id: %{type: :string},
-            username: %{type: :string}
+            username: %{type: :string},
+            email: %{type: :string},
+            flags: %{type: :array, items: %{type: :string}}
           }
         },
         [description: "User id and refresh token"]

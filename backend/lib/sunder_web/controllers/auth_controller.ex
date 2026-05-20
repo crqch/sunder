@@ -120,7 +120,7 @@ defmodule SunderWeb.AuthController do
       {:ok, %{user: user, refresh_token: refresh_token}} ->
         conn
         |> put_status(:ok)
-        |> json(%{message: "Login successful!", id: user.id, refresh_token: refresh_token})
+        |> json(%{message: "Login successful!", id: user.id, refresh_token: refresh_token.token})
 
       {:error, :user, %Ecto.Changeset{} = changeset, _changes} ->
         conn
