@@ -2,6 +2,7 @@ package dev.crqch.sunder.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -25,19 +26,21 @@ fun HomeScreen(viewModel: AuthViewModel = hiltViewModel()) {
     val currentUser by viewModel.currentUser.collectAsState()
 
     if (currentUser != null) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(
-                8.dp
-            )
-        ) {
-            Text(
-                text = "Welcome, ${currentUser?.username ?: "User"}",
-                style = MaterialTheme.typography.headlineMedium
-            )
+        Scaffold { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(vertical = 24.dp, horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(
+                    8.dp
+                )
+            ) {
+                Text(
+                    text = "Welcome, ${currentUser?.username ?: "User"}",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+            }
         }
     } else {
         Text("Loading...")

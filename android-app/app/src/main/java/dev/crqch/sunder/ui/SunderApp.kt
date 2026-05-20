@@ -16,14 +16,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.AuthViewModel
 import dev.crqch.sunder.data.local.User
-import dev.crqch.sunder.ui.screens.HomeScreen
 import dev.crqch.sunder.ui.screens.auth.SignInScreen
 import dev.crqch.sunder.ui.screens.auth.SignUpScreen
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 @Serializable
-object Home
+object Main
 
 @Serializable
 object SignIn
@@ -45,7 +44,7 @@ val smoothOffsetSpec = tween<IntOffset>(
 fun SunderApp(authViewModel: AuthViewModel, user: User?) {
     val navController = rememberNavController()
     NavHost(
-        navController, startDestination = if (user == null) SignIn else Home,
+        navController, startDestination = if (user == null) SignIn else Main,
         enterTransition = {
             slideInHorizontally(animationSpec = smoothOffsetSpec, initialOffsetX = { it }) +
                     scaleIn(animationSpec = smoothSpec, initialScale = 0.85f)
@@ -62,8 +61,8 @@ fun SunderApp(authViewModel: AuthViewModel, user: User?) {
             slideOutHorizontally(animationSpec = smoothOffsetSpec, targetOffsetX = { it }) +
                     scaleOut(animationSpec = smoothSpec, targetScale = 0.85f)
         }) {
-        composable<Home> {
-            HomeScreen()
+        composable<Main> {
+            BottomBarNavigation()
         }
         composable<SignIn> {
             val scope = rememberCoroutineScope()
@@ -74,13 +73,17 @@ fun SunderApp(authViewModel: AuthViewModel, user: User?) {
                         val res = authViewModel.signIn(it)
                         if (res.success) {
 
-                            navController.navigate(Home) {
+                            navController.navigate(Main) {
                                 popUpTo(SignIn) {
                                     inclusive = true
                                 }
                             }
                         } else {
-                            Toast.makeText(context, res.errorMessage ?: "Sign in failed", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                res.errorMessage ?: "Sign in failed",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 },
@@ -96,7 +99,7 @@ fun SunderApp(authViewModel: AuthViewModel, user: User?) {
         composable<SignUp> {
             SignUpScreen(
                 {
-                    navController.navigate(Home) {
+                    navController.navigate(Main) {
                         popUpTo(SignUp) {
                             inclusive = true
                         }
