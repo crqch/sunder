@@ -44,12 +44,16 @@ android {
             )
             val prodUrl = secrets["API_URL_RELEASE"]
             buildConfigField("String", "BASE_URL", prodUrl.toString())
+            manifestPlaceholders["appName"] = "@string/app_name"
         }
 
         debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
             val debugUrl = secrets["API_URL_DEBUG"] ?: "\"http://127.0.0.1:4000\""
             android.buildFeatures.buildConfig = true
             buildConfigField("String", "BASE_URL", debugUrl.toString())
+            manifestPlaceholders["appName"] = "Sunder (Dev)"
         }
     }
     compileOptions {
