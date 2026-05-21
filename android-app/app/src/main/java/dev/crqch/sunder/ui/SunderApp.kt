@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -43,6 +44,15 @@ val smoothOffsetSpec = tween<IntOffset>(
 @Composable
 fun SunderApp(authViewModel: AuthViewModel, user: User?) {
     val navController = rememberNavController()
+
+    LaunchedEffect(user) {
+        if (user == null) {
+            navController.navigate(SignIn) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
+
     NavHost(
         navController, startDestination = if (user == null) SignIn else Main,
         enterTransition = {
