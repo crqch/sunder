@@ -10,5 +10,7 @@ import javax.inject.Singleton
 class EntryRepository @Inject constructor(private val entryDao: EntryDao) {
     val allEntries: Flow<List<EntryEntity>> = entryDao.getAllEntries()
 
+    fun getEntries(accountId: String): Flow<List<EntryEntity>> =
+        entryDao.getEntriesByAccountId(accountId)
 
 }

@@ -1,13 +1,7 @@
 package dev.crqch.sunder.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -24,7 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -36,98 +30,134 @@ import dev.crqch.sunder.ui.screens.AccountsScreen
 import dev.crqch.sunder.ui.screens.CreateAccountScreen
 import dev.crqch.sunder.ui.screens.EntriesScreen
 import dev.crqch.sunder.ui.screens.HomeScreen
+import kotlinx.serialization.Serializable
+import kotlin.reflect.KClass
 
-enum class Destination(
-    val route: String,
-    val label: String,
-    val icon: ImageVector,
-    val contentDescription: String
-) {
-    ENTRIES("entries", "Entries", Icons.Default.Payments, "Entries"),
-    HOME("home", "Home", Icons.Default.Home, "Home"),
-    ACCOUNTS("accounts", "Accounts", Icons.Default.SwitchAccount, "Accounts")
+sealed interface SubRoute {
+    @Serializable
+
+    data class CreateEntry(val accountId: String?) : SubRoute
+
+    @Serializable
+    object CreateAccount : SubRoute
+}
+
+sealed class TopLevelDestination {
+    abstract val label: String
+    abstract val icon: ImageVector
+    abstract val contentDescription: String
+    abstract val order: Int
+
+    // 2. Now the children can be cleanly @Serializable
+    @Serializable
+    object Entries : TopLevelDestination() {
+        override val label = "Entries"
+        override val icon = Icons.Default.Payments
+        override val contentDescription = "Entries"
+        override val order = 0
+    }
+
+    @Serializable
+    object Home : TopLevelDestination() {
+        override val label = "Home"
+        override val icon = Icons.Default.Home
+        override val contentDescription = "Home"
+        override val order = 1
+    }
+
+    @Serializable
+    object Accounts : TopLevelDestination() {
+        override val label = "Accounts"
+        override val icon = Icons.Default.SwitchAccount
+        override val contentDescription = "Accounts"
+        override val order = 2
+    }
+
+    companion object {
+        val entries by lazy { listOf(Entries, Home, Accounts) }
+
+        fun fromRouteClass(routeClass: String?): TopLevelDestination? {
+            return entries.find { routeClass?.contains(it::class.qualifiedName ?: "") == true }
+        }
+    }
 }
 
 @Composable
 fun AppNavHost(
     navController: NavHostController,
-    startDestination: Destination,
-    modifier: Modifier = Modifier
+    startDestination: TopLevelDestination, modifier: Modifier = Modifier
 ) {
     NavHost(
         navController,
-        startDestination = startDestination.route,
+        startDestination = startDestination,
         modifier = modifier,
         enterTransition = {
-            val initial = Destination.entries.find { it.route == initialState.destination.route }
-            val target = Destination.entries.find { it.route == targetState.destination.route }
+            val initial = TopLevelDestination.fromRouteClass(initialState.destination.route)
+            val target = TopLevelDestination.fromRouteClass(targetState.destination.route)
             if (initial != null && target != null) {
-                val isLeft = target.ordinal < initial.ordinal
+                val isLeft = target.order < initial.order
                 slideInHorizontally(
                     animationSpec = smoothOffsetSpec,
                     initialOffsetX = { if (isLeft) -it else it })
-            } else {
-                slideInHorizontally(
-                    animationSpec = smoothOffsetSpec,
-                    initialOffsetX = { it })
-            }
+            } else slideInHorizontally(animationSpec = smoothOffsetSpec, initialOffsetX = { it })
         },
         exitTransition = {
-            val initial = Destination.entries.find { it.route == initialState.destination.route }
-            val target = Destination.entries.find { it.route == targetState.destination.route }
+            val initial = TopLevelDestination.fromRouteClass(initialState.destination.route)
+            val target = TopLevelDestination.fromRouteClass(targetState.destination.route)
             if (initial != null && target != null) {
-                val isLeft = target.ordinal < initial.ordinal
+                val isLeft = target.order < initial.order
                 slideOutHorizontally(
                     animationSpec = smoothOffsetSpec,
                     targetOffsetX = { if (isLeft) it else -it })
-            } else {
-                slideOutHorizontally(
-                    animationSpec = smoothOffsetSpec,
-                    targetOffsetX = { -it })
-            }
+            } else slideOutHorizontally(animationSpec = smoothOffsetSpec, targetOffsetX = { -it })
         },
         popEnterTransition = {
-            val initial = Destination.entries.find { it.route == initialState.destination.route }
-            val target = Destination.entries.find { it.route == targetState.destination.route }
+            val initial = TopLevelDestination.fromRouteClass(initialState.destination.route)
+            val target = TopLevelDestination.fromRouteClass(targetState.destination.route)
             if (initial != null && target != null) {
-                val isLeft = target.ordinal < initial.ordinal
+                val isLeft = target.order < initial.order
                 slideInHorizontally(
                     animationSpec = smoothOffsetSpec,
                     initialOffsetX = { if (isLeft) -it else it })
-            } else {
-                slideInHorizontally(
-                    animationSpec = smoothOffsetSpec,
-                    initialOffsetX = { -it })
-            }
+            } else slideInHorizontally(animationSpec = smoothOffsetSpec, initialOffsetX = { -it })
         },
         popExitTransition = {
-            val initial = Destination.entries.find { it.route == initialState.destination.route }
-            val target = Destination.entries.find { it.route == targetState.destination.route }
+            val initial = TopLevelDestination.fromRouteClass(initialState.destination.route)
+            val target = TopLevelDestination.fromRouteClass(targetState.destination.route)
             if (initial != null && target != null) {
-                val isLeft = target.ordinal < initial.ordinal
+                val isLeft = target.order < initial.order
                 slideOutHorizontally(
                     animationSpec = smoothOffsetSpec,
                     targetOffsetX = { if (isLeft) it else -it })
-            } else {
-                slideOutHorizontally(
-                    animationSpec = smoothOffsetSpec,
-                    targetOffsetX = { it })
-            }
+            } else slideOutHorizontally(animationSpec = smoothOffsetSpec, targetOffsetX = { it })
         }
     ) {
-        Destination.entries.forEach { destination ->
-            composable(destination.route) {
-                when (destination) {
-                    Destination.ENTRIES -> EntriesScreen()
-                    Destination.HOME -> HomeScreen()
-                    Destination.ACCOUNTS -> AccountsScreen(
-                        onAddAccount = { navController.navigate("create_account") }
-                    )
+        composable<TopLevelDestination.Entries> {
+            EntriesScreen(
+                onAddEntry = { accountId ->
+                    navController.navigate(SubRoute.CreateEntry(accountId = accountId))
                 }
-            }
+            )
         }
-        composable("create_account") {
+
+        composable<TopLevelDestination.Home> {
+            HomeScreen()
+        }
+
+        composable<TopLevelDestination.Accounts> {
+            AccountsScreen(
+                onAddAccount = {
+                    navController.navigate(SubRoute.CreateAccount)
+                }
+            )
+        }
+
+        composable<SubRoute.CreateAccount> {
             CreateAccountScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable<SubRoute.CreateEntry> { backStackEntry ->
+            Text(text = "Create entry screen")
         }
     }
 }
@@ -135,7 +165,7 @@ fun AppNavHost(
 @Composable
 fun BottomBarNavigation(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
-    val startDestination = Destination.HOME
+    val startDestination = TopLevelDestination.Home
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -144,11 +174,11 @@ fun BottomBarNavigation(modifier: Modifier = Modifier) {
         modifier = modifier,
         bottomBar = {
             NavigationBar(windowInsets = NavigationBarDefaults.windowInsets) {
-                Destination.entries.forEach { destination ->
+                TopLevelDestination.entries.forEach { destination ->
                     NavigationBarItem(
-                        selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true,
+                        selected = currentDestination?.hierarchy?.any { it.hasRoute(destination::class) } == true,
                         onClick = {
-                            navController.navigate(destination.route) {
+                            navController.navigate(destination) {
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
@@ -171,7 +201,9 @@ fun BottomBarNavigation(modifier: Modifier = Modifier) {
         AppNavHost(
             navController,
             startDestination,
-            modifier = Modifier.padding(contentPadding).consumeWindowInsets(contentPadding),
+            modifier = Modifier
+                .padding(contentPadding)
+                .consumeWindowInsets(contentPadding),
         )
     }
 }
