@@ -17,6 +17,15 @@ interface EntryDao {
     @Query("select * from entries where accountId = :accountId")
     fun getEntriesByAccountId(accountId: String): Flow<List<EntryEntity>>
 
+    @Query("select * from entries where categoryId = :categoryId")
+    fun getEntriesByCategoryId(categoryId: String): Flow<List<EntryEntity>>
+
+    @Query("select * from entries where accountId = :accountId and categoryId = :categoryId")
+    fun getEntriesByAccountAndCategoryId(
+        accountId: String,
+        categoryId: String
+    ): Flow<List<EntryEntity>>
+
     @Insert(onConflict = REPLACE)
     suspend fun upsert(entryEntity: EntryEntity)
 
