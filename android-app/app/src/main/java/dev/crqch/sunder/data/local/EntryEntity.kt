@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 data class EntryEntity(
     @PrimaryKey val id: String,
     val title: String,
-    val date: String,
+    val date: Long,
     val location: String,
     val amount: Float,
     val accountId: String,

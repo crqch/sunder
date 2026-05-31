@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import kotlin.jvm.java
 
-@Database(entities = [EntryEntity::class, CategoryEntity::class, AccountEntity::class], version = 1)
+@Database(entities = [EntryEntity::class, CategoryEntity::class, AccountEntity::class], version = 2)
 abstract class SunderDatabase : RoomDatabase() {
     abstract fun entryDao(): EntryDao
     abstract fun categoryDao(): CategoryDao
@@ -23,7 +23,9 @@ abstract class SunderDatabase : RoomDatabase() {
                     context.applicationContext,
                     SunderDatabase::class.java,
                     "sunder_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }
