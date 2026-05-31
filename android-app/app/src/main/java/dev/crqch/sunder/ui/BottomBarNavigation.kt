@@ -28,6 +28,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.ui.screens.AccountsScreen
 import dev.crqch.sunder.ui.screens.CreateAccountScreen
+import dev.crqch.sunder.ui.screens.CreateCategoryScreen
+import dev.crqch.sunder.ui.screens.CreateEntryScreen
 import dev.crqch.sunder.ui.screens.EntriesScreen
 import dev.crqch.sunder.ui.screens.HomeScreen
 import kotlinx.serialization.Serializable
@@ -36,7 +38,12 @@ import kotlin.reflect.KClass
 sealed interface SubRoute {
     @Serializable
 
-    data class CreateEntry(val accountId: String?) : SubRoute
+    data class CreateEntry(val accountId: String?, val categoryId: String?) : SubRoute
+
+    @Serializable
+    object CreateCategory : SubRoute {
+
+    }
 
     @Serializable
     object CreateAccount : SubRoute
@@ -134,8 +141,17 @@ fun AppNavHost(
     ) {
         composable<TopLevelDestination.Entries> {
             EntriesScreen(
-                onAddEntry = { accountId ->
-                    navController.navigate(SubRoute.CreateEntry(accountId = accountId))
+                onAddEntry = { accountId, categoryId ->
+                    navController.navigate(
+                        SubRoute.CreateEntry(
+                            accountId = accountId,
+                            categoryId = categoryId
+                        )
+                    )
+                },
+                onAddCategory = { navController.navigate(SubRoute.CreateCategory) },
+                onAddAccount = {
+                    navController.navigate(SubRoute.CreateAccount)
                 }
             )
         }
@@ -156,8 +172,20 @@ fun AppNavHost(
             CreateAccountScreen(onNavigateBack = { navController.popBackStack() })
         }
 
-        composable<SubRoute.CreateEntry> { backStackEntry ->
-            Text(text = "Create entry screen")
+        composable<SubRoute.CreateEntry> {
+            CreateEntryScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onAddCategory = { navController.navigate(SubRoute.CreateCategory) },
+                onAddAccount = {
+                    navController.navigate(SubRoute.CreateAccount)
+                }
+            )
+        }
+
+        composable<SubRoute.CreateCategory> {
+            CreateCategoryScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }
