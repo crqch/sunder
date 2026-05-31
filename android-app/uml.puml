@@ -1,0 +1,9 @@
+@startuml
+class dev.crqch.sunder.MainActivity {
++ void onCreate(Bundle?)
+}
+
+
+
+androidx.activity.ComponentActivity <|-- dev.crqch.sunder.MainActivity
+@enduml
