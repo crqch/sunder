@@ -7,5 +7,5 @@
     <string name="sign_in">Zaloguj się</string>
     <string name="sign_up">Zarejestruj się</string>
     <string name="login">Nazwa użytkownika lub adres e-mail</string>
-    <string name="any_account">Dowolne</string>
+    <string name="any_filter">Dowolne</string>
 </resources>

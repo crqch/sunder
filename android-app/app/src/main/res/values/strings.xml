@@ -6,6 +6,6 @@
     <string name="sign_in">Sign in</string>
     <string name="sign_up">Sign up</string>
     <string name="login">Username or e-mail address</string>
-    <string name="any_account">Any</string>
+    <string name="any_filter">Any</string>
     <string name="add_entry">Add entry</string>
 </resources>
