@@ -2,6 +2,7 @@ package dev.crqch.sunder.data.repositories
 
 import dev.crqch.sunder.data.local.EntryDao
 import dev.crqch.sunder.data.local.EntryEntity
+import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.utils.Cuid2
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -10,9 +11,12 @@ import javax.inject.Singleton
 
 @Singleton
 class EntryRepository @Inject constructor(private val entryDao: EntryDao) {
-    val allEntries: Flow<List<EntryEntity>> = entryDao.getAllEntries()
+    val allEntries: Flow<List<EntryWithDetails>> = entryDao.getAllEntries()
 
-    fun getEntries(accountId: String? = null, categoryId: String? = null): Flow<List<EntryEntity>> {
+    fun getEntries(
+        accountId: String? = null,
+        categoryId: String? = null
+    ): Flow<List<EntryWithDetails>> {
         return when {
             accountId != null && categoryId != null -> {
                 entryDao.getEntriesByAccountAndCategoryId(accountId, categoryId)

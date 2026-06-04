@@ -10,6 +10,7 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.AccountWithBalance
 import dev.crqch.sunder.data.local.EntryEntity
+import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.data.repositories.AccountRepository
 import dev.crqch.sunder.data.repositories.CategoryRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
@@ -102,7 +103,7 @@ class EntriesViewModel @Inject constructor(
     )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val entries: StateFlow<List<EntryEntity>> =
+    val entries: StateFlow<List<EntryWithDetails>> =
         combine(_selectedAccountId, _selectedCategoryId) { accountId, categoryId ->
             accountId to categoryId
         }.flatMapLatest { (accountId, categoryId) ->
