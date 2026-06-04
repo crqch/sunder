@@ -20,6 +20,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -50,6 +51,11 @@ sealed interface SubRoute {
 
     @Serializable
     object CreateAccount : SubRoute
+
+    @Serializable
+    data class Entry(val entryId: String) : SubRoute {
+
+    }
 }
 
 sealed class TopLevelDestination {
@@ -155,6 +161,9 @@ fun AppNavHost(
                 onAddCategory = { navController.navigate(SubRoute.CreateCategory) },
                 onAddAccount = {
                     navController.navigate(SubRoute.CreateAccount)
+                },
+                onEntryPick = { entryId ->
+                    navController.navigate(SubRoute.Entry(entryId))
                 }
             )
         }
@@ -234,6 +243,7 @@ fun BottomBarNavigation(modifier: Modifier = Modifier) {
             startDestination,
             modifier = Modifier
                 .padding(contentPadding)
+                .padding(6.dp, 0.dp)
                 .consumeWindowInsets(contentPadding),
         )
     }
