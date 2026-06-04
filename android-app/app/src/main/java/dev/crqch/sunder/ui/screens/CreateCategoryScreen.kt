@@ -29,8 +29,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.crqch.sunder.R
 
 data class CategoryFormState(
     val name: String = "",
@@ -50,10 +52,13 @@ fun CreateCategoryScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text("Create Category") },
+                title = { Text(stringResource(R.string.create_category)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back)
+                        )
                     }
                 }
             )
@@ -71,7 +76,7 @@ fun CreateCategoryScreen(
                         .padding(16.dp),
                     enabled = formState.name.isNotBlank()
                 ) {
-                    Text("Submit")
+                    Text(stringResource(R.string.submit))
                 }
             }
         }
@@ -86,20 +91,20 @@ fun CreateCategoryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "A category is used to group entries by the purpose.",
+                text = stringResource(R.string.category_description),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             OutlinedTextField(
                 value = formState.name,
                 onValueChange = { formState = formState.copy(name = it) },
-                label = { Text("Category Name") },
+                label = { Text(stringResource(R.string.category_name)) },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = formState.description,
                 onValueChange = { formState = formState.copy(description = it) },
-                label = { Text("Description") },
+                label = { Text(stringResource(R.string.description)) },
                 modifier = Modifier.fillMaxWidth()
             )
         }

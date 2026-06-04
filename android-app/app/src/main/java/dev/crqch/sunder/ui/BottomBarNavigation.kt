@@ -16,8 +16,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -26,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.screens.AccountsScreen
 import dev.crqch.sunder.ui.screens.CreateAccountScreen
 import dev.crqch.sunder.ui.screens.CreateCategoryScreen
@@ -50,33 +53,33 @@ sealed interface SubRoute {
 }
 
 sealed class TopLevelDestination {
-    abstract val label: String
+    abstract val labelRes: Int
     abstract val icon: ImageVector
-    abstract val contentDescription: String
+    abstract val contentDescriptionRes: Int
     abstract val order: Int
 
     // 2. Now the children can be cleanly @Serializable
     @Serializable
     object Entries : TopLevelDestination() {
-        override val label = "Entries"
+        override val labelRes = R.string.entries
         override val icon = Icons.Default.Payments
-        override val contentDescription = "Entries"
+        override val contentDescriptionRes = R.string.entries
         override val order = 0
     }
 
     @Serializable
     object Home : TopLevelDestination() {
-        override val label = "Home"
+        override val labelRes = R.string.home
         override val icon = Icons.Default.Home
-        override val contentDescription = "Home"
+        override val contentDescriptionRes = R.string.home
         override val order = 1
     }
 
     @Serializable
     object Accounts : TopLevelDestination() {
-        override val label = "Accounts"
+        override val labelRes = R.string.accounts
         override val icon = Icons.Default.SwitchAccount
-        override val contentDescription = "Accounts"
+        override val contentDescriptionRes = R.string.accounts
         override val order = 2
     }
 
@@ -217,10 +220,10 @@ fun BottomBarNavigation(modifier: Modifier = Modifier) {
                         icon = {
                             Icon(
                                 destination.icon,
-                                contentDescription = destination.contentDescription
+                                contentDescription = stringResource(destination.contentDescriptionRes)
                             )
                         },
-                        label = { Text(destination.label) }
+                        label = { Text(stringResource(destination.labelRes)) }
                     )
                 }
             }

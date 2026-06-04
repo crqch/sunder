@@ -17,14 +17,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.crqch.sunder.R
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +60,7 @@ fun CreateEntryScreen(
     val selectedAccount = accounts.find { it.account.id == entryFormState.accountId }
     val selectedCategory = categories.find { it.id == entryFormState.categoryId }
 
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM dd, yyyy") }
+    val dateFormatter = remember { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM) }
     val formattedDate = remember(entryFormState.date) {
         Instant.ofEpochMilli(entryFormState.date)
             .atZone(ZoneId.systemDefault())
@@ -69,10 +72,15 @@ fun CreateEntryScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("New Entry") },
+                title = { Text(stringResource(R.string.new_entry)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(
+                                R.string.back
+                            )
+                        )
                     }
                 }
             )
@@ -97,7 +105,10 @@ fun CreateEntryScreen(
                     enabled = entryFormState.isFilled(),
                     shape = MaterialTheme.shapes.extraLarge
                 ) {
-                    Text("Create Entry", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.create_entry),
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
             }
         }
@@ -117,7 +128,7 @@ fun CreateEntryScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "Amount",
+                    stringResource(R.string.amount),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -166,8 +177,9 @@ fun CreateEntryScreen(
             ) {
                 Column {
                     SelectorField(
-                        label = "Account",
-                        selectedName = selectedAccount?.account?.name ?: "Select Account",
+                        label = stringResource(R.string.account),
+                        selectedName = selectedAccount?.account?.name
+                            ?: stringResource(R.string.select_account),
                         icon = Icons.Default.AccountBalance,
                         onClick = {
                             selectionType = SelectionType.ACCOUNT
@@ -179,8 +191,9 @@ fun CreateEntryScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SelectorField(
-                        label = "Category",
-                        selectedName = selectedCategory?.title ?: "Select Category",
+                        label = stringResource(R.string.category),
+                        selectedName = selectedCategory?.title
+                            ?: stringResource(R.string.select_category),
                         icon = Icons.Default.Category,
                         onClick = {
                             selectionType = SelectionType.CATEGORY
@@ -192,7 +205,7 @@ fun CreateEntryScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SelectorField(
-                        label = "Date",
+                        label = stringResource(R.string.date),
                         selectedName = formattedDate,
                         icon = Icons.Default.CalendarToday,
                         onClick = {
@@ -202,13 +215,12 @@ fun CreateEntryScreen(
                 }
             }
 
-            // Title & Description
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = entryFormState.title,
                     onValueChange = { viewModel.updateForm(entryFormState.copy(title = it)) },
-                    label = { Text("Title") },
-                    placeholder = { Text("What is this for?") },
+                    label = { Text(stringResource(R.string.title)) },
+                    placeholder = { Text(stringResource(R.string.what_is_this_for)) },
                     leadingIcon = { Icon(Icons.Default.Title, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
@@ -222,8 +234,8 @@ fun CreateEntryScreen(
                 OutlinedTextField(
                     value = entryFormState.description,
                     onValueChange = { viewModel.updateForm(entryFormState.copy(description = it)) },
-                    label = { Text("Description") },
-                    placeholder = { Text("Add more details...") },
+                    label = { Text(stringResource(R.string.description)) },
+                    placeholder = { Text(stringResource(R.string.add_more_details)) },
                     leadingIcon = {
                         Box(modifier = Modifier.fillMaxHeight()) {
                             Icon(
@@ -261,7 +273,9 @@ fun CreateEntryScreen(
                     .padding(bottom = 32.dp)
             ) {
                 Text(
-                    text = if (selectionType == SelectionType.ACCOUNT) "Select Account" else "Select Category",
+                    text = if (selectionType == SelectionType.ACCOUNT) stringResource(R.string.select_account) else stringResource(
+                        R.string.select_category
+                    ),
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
                 )
@@ -271,7 +285,7 @@ fun CreateEntryScreen(
                 ) {
                     item {
                         SelectionItem(
-                            label = "Add New",
+                            label = stringResource(R.string.add_new),
                             icon = Icons.Default.Add,
                             onClick = {
                                 showSheet = false
@@ -319,12 +333,12 @@ fun CreateEntryScreen(
                     }
                     showDatePicker = false
                 }) {
-                    Text("OK")
+                    Text(stringResource(R.string.ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         ) {
@@ -379,7 +393,7 @@ fun SelectorField(
                     Text(
                         text = selectedName,
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (selectedName.startsWith("Select")) {
+                        color = if (selectedName.startsWith(stringResource(R.string.select))) {
                             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         } else {
                             MaterialTheme.colorScheme.onSurface
@@ -438,7 +452,7 @@ fun SelectionItem(
             {
                 Icon(
                     Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.selected),
                     tint = contentColor
                 )
             }

@@ -28,9 +28,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.crqch.sunder.R
 
 @Composable
 fun AccountsScreen(
@@ -43,7 +45,10 @@ fun AccountsScreen(
         floatingActionButton = {
             if (accounts.isNotEmpty()) {
                 FloatingActionButton(onClick = onAddAccount) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Account")
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = stringResource(R.string.add_account)
+                    )
                 }
             }
         }
@@ -66,12 +71,12 @@ fun AccountsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No accounts yet",
+                            text = stringResource(R.string.no_accounts),
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
-                            text = "Create your first account to get started",
+                            text = stringResource(R.string.create_first_account),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

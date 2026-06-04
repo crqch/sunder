@@ -15,10 +15,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.AuthViewModel
 import dev.crqch.sunder.BuildConfig
+import dev.crqch.sunder.R
 import dev.crqch.sunder.data.repositories.UserRepository
 
 @Composable
@@ -38,13 +40,13 @@ fun HomeScreen(viewModel: AuthViewModel = hiltViewModel()) {
                 )
             ) {
                 Text(
-                    text = "Welcome, ${currentUser?.username ?: "User"}",
+                    text = stringResource(R.string.welcome, currentUser?.username ?: "User"),
                     style = MaterialTheme.typography.headlineMedium
                 )
             }
         }
     } else {
-        Text("Loading...")
+        Text(stringResource(R.string.loading))
     }
 
 }

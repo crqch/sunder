@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.AuthViewModel
+import dev.crqch.sunder.R
 import dev.crqch.sunder.data.local.User
 import dev.crqch.sunder.ui.screens.auth.SignInScreen
 import dev.crqch.sunder.ui.screens.auth.SignUpScreen
@@ -91,7 +92,7 @@ fun SunderApp(authViewModel: AuthViewModel, user: User?) {
                         } else {
                             Toast.makeText(
                                 context,
-                                res.errorMessage ?: "Sign in failed",
+                                res.errorMessage ?: context.getString(R.string.sign_in_failed),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }

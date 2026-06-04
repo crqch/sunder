@@ -43,7 +43,7 @@ fun EntriesScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { onAddEntry(selectedAccountId, selectedCategoryId) }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Account")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_account))
             }
         }
     ) { padding ->
@@ -54,7 +54,7 @@ fun EntriesScreen(
                 .padding(horizontal = 4.dp)
         ) {
             Text(
-                "Account",
+                stringResource(R.string.account),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -84,12 +84,12 @@ fun EntriesScreen(
                     FilterChip(
                         selected = false,
                         onClick = { onAddAccount() },
-                        label = { Text("Add account") }
+                        label = { Text(stringResource(R.string.add_account)) }
                     )
                 }
             }
             Text(
-                "Category",
+                stringResource(R.string.category),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -118,7 +118,7 @@ fun EntriesScreen(
                     FilterChip(
                         selected = false,
                         onClick = { onAddCategory() },
-                        label = { Text("Add category") }
+                        label = { Text(stringResource(R.string.add_category)) }
                     )
                 }
             }
