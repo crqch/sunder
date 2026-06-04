@@ -127,6 +127,35 @@ fun CreateEntryScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                ) {
+                    SegmentedButton(
+                        selected = entryFormState.isExpense,
+                        onClick = { viewModel.updateForm(entryFormState.copy(isExpense = true)) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.errorContainer,
+                            activeContentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    ) {
+                        Text(stringResource(R.string.expense))
+                    }
+                    SegmentedButton(
+                        selected = !entryFormState.isExpense,
+                        onClick = { viewModel.updateForm(entryFormState.copy(isExpense = false)) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Text(stringResource(R.string.income))
+                    }
+                }
+
                 Text(
                     stringResource(R.string.amount),
                     style = MaterialTheme.typography.titleSmall,
@@ -138,7 +167,8 @@ fun CreateEntryScreen(
                     onValueChange = { viewModel.updateAmount(it) },
                     textStyle = MaterialTheme.typography.displayLarge.copy(
                         textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = if (entryFormState.isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     ),
                     placeholder = {
                         Text(
@@ -159,11 +189,11 @@ fun CreateEntryScreen(
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,
                         disabledContainerColor = Color.Transparent,
-                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                        focusedIndicatorColor = if (entryFormState.isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant.copy(
                             alpha = 0.5f
                         ),
-                        cursorColor = MaterialTheme.colorScheme.primary
+                        cursorColor = if (entryFormState.isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     ),
                     singleLine = true
                 )

@@ -43,4 +43,6 @@
     <string name="account_name">Account Name</string>
     <string name="create_first_account">Create your first account to get started</string>
     <string name="no_accounts">No accounts yet</string>
+    <string name="expense">Expense</string>
+    <string name="income">Income</string>
 </resources>

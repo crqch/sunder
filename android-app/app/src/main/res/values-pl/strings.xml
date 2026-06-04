@@ -44,4 +44,6 @@
     <string name="account_name">Nazwa konta</string>
     <string name="create_first_account">Utwórz swoje pierwsze konto, aby rozpocząć</string>
     <string name="no_accounts">Brak kont</string>
+    <string name="expense">Wydatek</string>
+    <string name="income">Przychód</string>
 </resources>

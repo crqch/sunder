@@ -243,7 +243,6 @@ fun BottomBarNavigation(modifier: Modifier = Modifier) {
             startDestination,
             modifier = Modifier
                 .padding(contentPadding)
-                .padding(6.dp, 0.dp)
                 .consumeWindowInsets(contentPadding),
         )
     }

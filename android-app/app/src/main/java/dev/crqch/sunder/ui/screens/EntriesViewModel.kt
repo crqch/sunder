@@ -35,6 +35,7 @@ data class EntryFormState(
     val accountId: String = "",
     val categoryId: String = "",
     val description: String = "",
+    val isExpense: Boolean = true,
 ) {
     fun isFilled(): Boolean {
         if (title.isBlank()) return false
@@ -121,10 +122,12 @@ class EntriesViewModel @Inject constructor(
 
     fun createEntry(entryFormState: EntryFormState, onComplete: () -> Unit) {
         viewModelScope.launch {
+            val finalAmount =
+                if (entryFormState.isExpense) -entryFormState.amount else entryFormState.amount
             entryRepository.createEntry(
                 entryFormState.title,
                 entryFormState.description,
-                entryFormState.amount,
+                finalAmount,
                 entryFormState.accountId,
                 entryFormState.categoryId,
                 entryFormState.date
