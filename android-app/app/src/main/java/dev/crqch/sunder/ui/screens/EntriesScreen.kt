@@ -87,10 +87,22 @@ fun EntriesScreen(
                     inputField = {
                         SearchBarDefaults.InputField(
                             query = searchBarQuery,
-                            onQueryChange = { new -> searchBarQuery = new },
-                            onSearch = { search -> searchBarExpanded = false },
+                            onQueryChange = { new ->
+                                searchBarQuery = new
+                                viewModel.updateQuery(new.takeIf { it.isNotBlank() })
+                            },
+                            onSearch = { search ->
+                                searchBarExpanded = false
+                                viewModel.updateQuery(search.takeIf { it.isNotBlank() })
+                            },
                             expanded = searchBarExpanded,
-                            onExpandedChange = { exp -> searchBarExpanded = exp },
+                            onExpandedChange = { exp ->
+                                searchBarExpanded = exp
+                                if (!exp) {
+                                    searchBarQuery = ""
+                                    viewModel.updateQuery(null)
+                                }
+                            },
                             placeholder = { Text("Search") },
                             trailingIcon = {
                                 IconButton(onClick = { showFilterModal = true }) {
@@ -100,7 +112,13 @@ fun EntriesScreen(
                         )
                     },
                     expanded = searchBarExpanded,
-                    onExpandedChange = { t -> searchBarExpanded = t },
+                    onExpandedChange = { exp ->
+                        searchBarExpanded = exp
+                        if (!exp) {
+                            searchBarQuery = ""
+                            viewModel.updateQuery(null)
+                        }
+                    },
                     modifier = Modifier.weight(1f),
                     content = {
                         LazyColumn(

@@ -11,27 +11,28 @@ import javax.inject.Singleton
 
 @Singleton
 class EntryRepository @Inject constructor(private val entryDao: EntryDao) {
-    val allEntries: Flow<List<EntryWithDetails>> = entryDao.getAllEntries()
+    val allEntries: Flow<List<EntryWithDetails>> = entryDao.getAllEntries(null)
 
     fun getEntries(
         accountId: String? = null,
-        categoryId: String? = null
+        categoryId: String? = null,
+        query: String? = null
     ): Flow<List<EntryWithDetails>> {
         return when {
             accountId != null && categoryId != null -> {
-                entryDao.getEntriesByAccountAndCategoryId(accountId, categoryId)
+                entryDao.getEntriesByAccountAndCategoryId(accountId, categoryId, query)
             }
 
             accountId != null -> {
-                entryDao.getEntriesByAccountId(accountId)
+                entryDao.getEntriesByAccountId(accountId, query)
             }
 
             categoryId != null -> {
-                entryDao.getEntriesByCategoryId(categoryId)
+                entryDao.getEntriesByCategoryId(categoryId, query)
             }
 
             else -> {
-                allEntries
+                entryDao.getAllEntries(query)
             }
         }
     }

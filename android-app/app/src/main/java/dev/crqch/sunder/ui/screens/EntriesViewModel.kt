@@ -89,6 +89,10 @@ class EntriesViewModel @Inject constructor(
 
     val selectedCategoryId: StateFlow<String?> = _selectedCategoryId.asStateFlow()
 
+    private val _query = MutableStateFlow<String?>(null)
+
+    val query: StateFlow<String?> = _query.asStateFlow()
+
     val availableAccounts: StateFlow<List<AccountWithBalance>> =
         accountRepository.accountsWithBalance.stateIn(
             scope = viewModelScope,
@@ -104,10 +108,10 @@ class EntriesViewModel @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val entries: StateFlow<List<EntryWithDetails>> =
-        combine(_selectedAccountId, _selectedCategoryId) { accountId, categoryId ->
-            accountId to categoryId
-        }.flatMapLatest { (accountId, categoryId) ->
-            entryRepository.getEntries(accountId, categoryId)
+        combine(_selectedAccountId, _selectedCategoryId, _query) { accountId, categoryId, query ->
+            Triple(accountId, categoryId, query)
+        }.flatMapLatest { (accountId, categoryId, query) ->
+            entryRepository.getEntries(accountId, categoryId, query)
         }
             .stateIn(
                 scope = viewModelScope,
@@ -135,5 +139,9 @@ class EntriesViewModel @Inject constructor(
 
     fun selectCategory(categoryId: String?) {
         _selectedCategoryId.value = categoryId
+    }
+
+    fun updateQuery(query: String?) {
+        _query.value = query
     }
 }
