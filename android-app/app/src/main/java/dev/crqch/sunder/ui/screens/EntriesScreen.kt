@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.data.local.EntryWithDetails
+import dev.crqch.sunder.ui.components.CompressedEntryCard
 import dev.crqch.sunder.ui.components.EntriesList
 import kotlin.math.abs
 
@@ -173,7 +174,7 @@ fun EntriesScreen(
                 Modifier.padding(16.dp, 8.dp),
             ) {
 
-                Text("Więcej opcji", style = MaterialTheme.typography.titleLarge)
+                Text("More options", style = MaterialTheme.typography.titleLarge)
 
                 Text(
                     stringResource(R.string.account),
@@ -252,61 +253,4 @@ fun EntriesScreen(
 
         }
 
-}
-
-@Composable
-fun CompressedEntryCard(
-    entryWithDetails: EntryWithDetails,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val entry = entryWithDetails.entry
-    val isNegative = entry.amount < 0
-    val amountPrefix = if (isNegative) "-" else "+"
-    val amountColor =
-        if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-
-
-    Row(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .fillMaxWidth()
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = entry.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (entry.description.isNotBlank()) {
-                Text(
-                    text = entry.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Text("${entryWithDetails.account.name} | ${entryWithDetails.category.title}")
-        }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Text(
-            text = "$amountPrefix${abs(entry.amount)}",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = amountColor
-        )
-    }
 }

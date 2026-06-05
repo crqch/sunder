@@ -143,6 +143,67 @@ fun EntryCard(
     }
 }
 
+
+@Composable
+fun CompressedEntryCard(
+    entryWithDetails: EntryWithDetails,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val entry = entryWithDetails.entry
+    val isNegative = entry.amount < 0
+    val amountPrefix = if (isNegative) "-" else "+"
+    val amountColor =
+        if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+
+
+    Row(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .fillMaxWidth()
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = entry.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                InfoTag(
+                    icon = Icons.Filled.Person,
+                    text = entryWithDetails.account.name
+                )
+                InfoTag(
+                    icon = Icons.Filled.Category,
+                    text = entryWithDetails.category.title,
+                    isPrimary = true
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Text(
+            text = "$amountPrefix${abs(entry.amount)}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = amountColor
+        )
+    }
+}
+
 @Composable
 private fun InfoTag(
     icon: ImageVector,
