@@ -131,6 +131,7 @@ fun EntriesScreen(
                                 key = { it.entry.id }
                             ) { entryWithDetails ->
                                 CompressedEntryCard(
+                                    modifier = Modifier.animateItem(),
                                     entryWithDetails = entryWithDetails,
                                     onClick = { onEntryPick(entryWithDetails.entry.id) }
                                 )
@@ -267,7 +268,7 @@ fun CompressedEntryCard(
 
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clickable(onClick = onClick)
             .fillMaxWidth()
             .padding(4.dp),
