@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
+import java.util.Locale
 
 @Composable
 fun AccountsScreen(
@@ -122,7 +123,11 @@ fun AccountsScreen(
                             },
                             trailingContent = {
                                 Text(
-                                    text = "$${String.format("%.2f", accountWithBalance.balance)}",
+                                    text = String.format(
+                                        Locale.getDefault(),
+                                        "%.2f",
+                                        accountWithBalance.balance
+                                    ),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.primary
                                 )
