@@ -227,7 +227,7 @@ fun EntriesScreen(
                         FilterChip(
                             selected = selectedCategoryId == null,
                             onClick = { viewModel.selectCategory(null) },
-                            label = { Text(stringResource(R.string.any_filter)) }
+                            label = { Text(stringResource(R.string.any_category)) }
                         )
                     }
 

@@ -48,4 +48,5 @@
     <string name="income">Przychód</string>
     <string name="search">Szukaj</string>
     <string name="menu">Menu</string>
+    <string name="any_category">Dowolna</string>
 </resources>

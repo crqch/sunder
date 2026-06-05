@@ -47,4 +47,5 @@
     <string name="income">Income</string>
     <string name="search">Search</string>
     <string name="menu">Menu</string>
+    <string name="any_category">Any</string>
 </resources>
