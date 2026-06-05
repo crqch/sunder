@@ -172,13 +172,12 @@ fun EntriesScreen(
 
             Column(
                 Modifier.padding(16.dp, 8.dp),
+                Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
             ) {
-
-                Text("More options", style = MaterialTheme.typography.titleLarge)
 
                 Text(
                     stringResource(R.string.account),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -215,7 +214,7 @@ fun EntriesScreen(
                 }
                 Text(
                     stringResource(R.string.category),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )
                 LazyRow(
