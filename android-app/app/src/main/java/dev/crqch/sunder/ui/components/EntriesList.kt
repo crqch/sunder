@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -18,6 +19,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.crqch.sunder.data.local.EntryWithDetails
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
 @Composable
@@ -28,22 +33,65 @@ fun EntriesList(
     filteredAccountId: String? = null,
     filteredCategoryId: String? = null
 ) {
+    val groupedEntries = remember(entries) {
+        entries.groupBy {
+            Instant.ofEpochMilli(it.entry.date)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+        }.toSortedMap(compareByDescending { it })
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(
-            items = entries,
-            key = { it.entry.id }
-        ) { entryWithDetails ->
-            EntryCard(
-                modifier = Modifier.animateItem(),
-                entryWithDetails = entryWithDetails,
-                onClick = { onEntrySelect(entryWithDetails.entry.id) },
-                filteredAccountId = filteredAccountId,
-                filteredCategoryId = filteredCategoryId
+
+        groupedEntries.forEach { (date, dateEntries) ->
+            stickyHeader(key = date.toString()) {
+                DateSeparator(date)
+            }
+
+            items(
+                items = dateEntries,
+                key = { it.entry.id }
+            ) { entryWithDetails ->
+                EntryCard(
+                    modifier = Modifier.animateItem(),
+                    entryWithDetails = entryWithDetails,
+                    onClick = { onEntrySelect(entryWithDetails.entry.id) },
+                    filteredAccountId = filteredAccountId,
+                    filteredCategoryId = filteredCategoryId
+                )
+            }
+        }
+
+
+    }
+}
+
+@Composable
+fun DateSeparator(date: LocalDate, modifier: Modifier = Modifier) {
+    val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HorizontalDivider(modifier = Modifier.weight(1f))
+            Text(
+                text = date.format(formatter),
+                modifier = Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline,
+                fontWeight = FontWeight.Bold
             )
+            HorizontalDivider(modifier = Modifier.weight(1f))
         }
     }
 }
@@ -61,6 +109,7 @@ fun EntryCard(
     val amountPrefix = if (isNegative) "-" else "+"
     val amountColor =
         if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val hourFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
 
     ElevatedCard(
         modifier = modifier
@@ -78,6 +127,13 @@ fun EntryCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                Text(
+                    text = Instant.ofEpochMilli(entry.date)
+                        .atZone(ZoneId.systemDefault())
+                        .format(hourFormatter),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
                 Text(
                     text = entry.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -155,6 +211,7 @@ fun CompressedEntryCard(
     val amountPrefix = if (isNegative) "-" else "+"
     val amountColor =
         if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm") }
 
 
     Row(
@@ -169,6 +226,13 @@ fun CompressedEntryCard(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            Text(
+                text = Instant.ofEpochMilli(entry.date)
+                    .atZone(ZoneId.systemDefault())
+                    .format(dateFormatter),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
             Text(
                 text = entry.title,
                 style = MaterialTheme.typography.bodyMedium,
