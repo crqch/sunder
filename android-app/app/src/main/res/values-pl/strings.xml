@@ -46,4 +46,6 @@
     <string name="no_accounts">Brak kont</string>
     <string name="expense">Wydatek</string>
     <string name="income">Przychód</string>
+    <string name="search">Szukaj</string>
+    <string name="menu">Menu</string>
 </resources>

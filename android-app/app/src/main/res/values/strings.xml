@@ -45,4 +45,6 @@
     <string name="no_accounts">No accounts yet</string>
     <string name="expense">Expense</string>
     <string name="income">Income</string>
+    <string name="search">Search</string>
+    <string name="menu">Menu</string>
 </resources>

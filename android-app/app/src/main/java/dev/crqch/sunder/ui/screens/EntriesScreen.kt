@@ -104,10 +104,10 @@ fun EntriesScreen(
                                     viewModel.updateQuery(null)
                                 }
                             },
-                            placeholder = { Text("Search") },
+                            placeholder = { Text(stringResource(R.string.search)) },
                             trailingIcon = {
                                 IconButton(onClick = { showFilterModal = true }) {
-                                    Icon(Icons.Filled.Menu, "Menu")
+                                    Icon(Icons.Filled.Menu, stringResource(R.string.menu))
                                 }
                             }
                         )
