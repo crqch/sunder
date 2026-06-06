@@ -7,15 +7,18 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AccountDao {
-    @Query("SELECT * from accounts")
+    @Query("SELECT * from accounts where deletedAt is null")
     fun getAccounts(): Flow<List<AccountEntity>>
 
-    @Query("""
+    @Query(
+        """
         SELECT accounts.*, TOTAL(entries.amount) as balance
         FROM accounts
         LEFT JOIN entries ON accounts.id = entries.accountId AND entries.deletedAt IS NULL
+        where accounts.deletedAt is null
         GROUP BY accounts.id
-    """)
+    """
+    )
     fun getAccountsWithBalance(): Flow<List<AccountWithBalance>>
 
     @Insert

@@ -25,4 +25,6 @@ class CategoryRepository @Inject constructor(private val categoryDao: CategoryDa
         )
         categoryDao.insert(category)
     }
+
+    suspend fun getCategory(id: String): Flow<CategoryEntity?> = categoryDao.getCategory(id)
 }
