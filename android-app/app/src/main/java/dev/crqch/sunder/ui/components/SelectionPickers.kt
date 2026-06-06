@@ -103,10 +103,9 @@ fun SelectionItem(
             }
         } else null,
         modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 2.dp)
-            .clip(MaterialTheme.shapes.medium)
+            .fillMaxWidth()
             .clickable(onClick = onClick)
-            .fillMaxWidth(),
+            .padding(horizontal = 12.dp, vertical = 2.dp),
         colors = ListItemDefaults.colors(
             containerColor = containerColor
         )
