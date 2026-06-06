@@ -30,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.accounts.AccountsScreen
 import dev.crqch.sunder.ui.accounts.CreateAccountScreen
+import dev.crqch.sunder.ui.categories.CategoryScreen
 import dev.crqch.sunder.ui.categories.CreateCategoryScreen
 import dev.crqch.sunder.ui.entries.CreateEntryScreen
 import dev.crqch.sunder.ui.entries.EntriesScreen
@@ -54,6 +55,9 @@ sealed interface SubRoute {
     data class Entry(val entryId: String) : SubRoute {
 
     }
+
+    @Serializable
+    data class Category(val categoryId: String) : SubRoute
 }
 
 sealed class TopLevelDestination {
@@ -208,10 +212,20 @@ fun AppNavHost(
                     navController.navigate(SubRoute.CreateAccount)
                 },
                 visitCategory = {
-
+                    navController.navigate(SubRoute.Category(it))
                 },
                 visitAccount = {}
             )
+        }
+
+        composable<SubRoute.Category> {
+            CategoryScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onEntryClick = { entryId ->
+                    navController.navigate(SubRoute.Entry(entryId))
+                })
         }
     }
 }
