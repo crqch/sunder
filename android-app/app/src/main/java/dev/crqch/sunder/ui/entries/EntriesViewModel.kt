@@ -26,25 +26,6 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import javax.inject.Inject
 
-data class EntryFormState(
-    val title: String = "",
-    val date: Long = Instant.now().toEpochMilli(),
-    val location: String = "",
-    val amount: Float = 0.00f,
-    val accountId: String = "",
-    val categoryId: String = "",
-    val description: String = "",
-    val isExpense: Boolean = true,
-) {
-    fun isFilled(): Boolean {
-        if (title.isBlank()) return false
-        if (accountId.isBlank() || categoryId.isBlank()) return false
-        return amount > 0
-    }
-}
-
-enum class SelectionType { NONE, ACCOUNT, CATEGORY }
-
 @HiltViewModel
 class EntriesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -121,16 +102,7 @@ class EntriesViewModel @Inject constructor(
 
     fun createEntry(entryFormState: EntryFormState, onComplete: () -> Unit) {
         viewModelScope.launch {
-            val finalAmount =
-                if (entryFormState.isExpense) -entryFormState.amount else entryFormState.amount
-            entryRepository.createEntry(
-                entryFormState.title,
-                entryFormState.description,
-                finalAmount,
-                entryFormState.accountId,
-                entryFormState.categoryId,
-                entryFormState.date
-            )
+            entryRepository.saveEntry(entryFormState)
             onComplete()
         }
     }
