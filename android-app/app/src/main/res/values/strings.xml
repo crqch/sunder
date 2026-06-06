@@ -48,4 +48,7 @@
     <string name="search">Search</string>
     <string name="menu">Menu</string>
     <string name="any_category">Any</string>
+    <string name="edit">Edit</string>
+    <string name="save">Save</string>
+    <string name="delete_entry">Delete entry</string>
 </resources>

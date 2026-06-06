@@ -199,7 +199,19 @@ fun AppNavHost(
         }
 
         composable<SubRoute.Entry> {
-            EntryScreen()
+            EntryScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onAddCategory = { navController.navigate(SubRoute.CreateCategory) },
+                onAddAccount = {
+                    navController.navigate(SubRoute.CreateAccount)
+                },
+                visitCategory = {
+
+                },
+                visitAccount = {}
+            )
         }
     }
 }
