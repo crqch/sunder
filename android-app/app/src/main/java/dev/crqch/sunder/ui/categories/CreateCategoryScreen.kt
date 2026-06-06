@@ -1,4 +1,4 @@
-package dev.crqch.sunder.ui.screens
+package dev.crqch.sunder.ui.categories
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

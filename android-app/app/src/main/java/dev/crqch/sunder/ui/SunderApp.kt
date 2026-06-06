@@ -15,11 +15,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import dev.crqch.sunder.AuthViewModel
+import dev.crqch.sunder.ui.auth.AuthViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.data.local.User
-import dev.crqch.sunder.ui.screens.auth.SignInScreen
-import dev.crqch.sunder.ui.screens.auth.SignUpScreen
+import dev.crqch.sunder.ui.auth.SignInScreen
+import dev.crqch.sunder.ui.auth.SignUpScreen
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 

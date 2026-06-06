@@ -16,11 +16,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -30,14 +28,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.R
-import dev.crqch.sunder.ui.screens.AccountsScreen
-import dev.crqch.sunder.ui.screens.CreateAccountScreen
-import dev.crqch.sunder.ui.screens.CreateCategoryScreen
-import dev.crqch.sunder.ui.screens.CreateEntryScreen
-import dev.crqch.sunder.ui.screens.EntriesScreen
-import dev.crqch.sunder.ui.screens.HomeScreen
+import dev.crqch.sunder.ui.accounts.AccountsScreen
+import dev.crqch.sunder.ui.accounts.CreateAccountScreen
+import dev.crqch.sunder.ui.categories.CreateCategoryScreen
+import dev.crqch.sunder.ui.entries.CreateEntryScreen
+import dev.crqch.sunder.ui.entries.EntriesScreen
+import dev.crqch.sunder.ui.entries.EntryScreen
+import dev.crqch.sunder.ui.common.HomeScreen
 import kotlinx.serialization.Serializable
-import kotlin.reflect.KClass
 
 sealed interface SubRoute {
     @Serializable
@@ -198,6 +196,10 @@ fun AppNavHost(
             CreateCategoryScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
+        }
+
+        composable<SubRoute.Entry> {
+            EntryScreen()
         }
     }
 }

@@ -1,6 +1,5 @@
-package dev.crqch.sunder.ui.screens
+package dev.crqch.sunder.ui.entries
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -24,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
+import dev.crqch.sunder.ui.components.SelectionItem
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -440,60 +439,3 @@ fun SelectorField(
     }
 }
 
-@Composable
-fun SelectionItem(
-    label: String,
-    isSelected: Boolean = false,
-    icon: ImageVector? = null,
-    onClick: () -> Unit,
-    isHighlight: Boolean = false
-) {
-    val containerColor = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer
-        isHighlight -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-        else -> Color.Transparent
-    }
-
-    val contentColor = when {
-        isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-        isHighlight -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    ListItem(
-        headlineContent = {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isSelected || isHighlight) FontWeight.Bold else FontWeight.Normal,
-                color = contentColor
-            )
-        },
-        leadingContent = icon?.let {
-            {
-                Icon(
-                    it,
-                    contentDescription = null,
-                    tint = if (isSelected) contentColor else if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        trailingContent = if (isSelected) {
-            {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = stringResource(R.string.selected),
-                    tint = contentColor
-                )
-            }
-        } else null,
-        modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 2.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick)
-            .fillMaxWidth(),
-        colors = ListItemDefaults.colors(
-            containerColor = containerColor
-        )
-    )
-}

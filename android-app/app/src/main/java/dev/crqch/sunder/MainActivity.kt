@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.ui.SunderApp
+import dev.crqch.sunder.ui.auth.AuthViewModel
 import dev.crqch.sunder.ui.theme.SunderTheme
 
 @AndroidEntryPoint

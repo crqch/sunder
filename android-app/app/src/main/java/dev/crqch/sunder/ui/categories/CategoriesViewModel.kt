@@ -1,4 +1,4 @@
-package dev.crqch.sunder.ui.screens
+package dev.crqch.sunder.ui.categories
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

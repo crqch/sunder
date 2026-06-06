@@ -1,4 +1,4 @@
-package dev.crqch.sunder
+package dev.crqch.sunder.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,7 +7,6 @@ import dev.crqch.sunder.api.DefaultApi
 import dev.crqch.sunder.data.repositories.AuthRepository
 import dev.crqch.sunder.data.repositories.UserRepository
 import dev.crqch.sunder.models.AuthLoginTHN4OMARequest
-import dev.crqch.sunder.ui.screens.auth.SignInFormFields
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

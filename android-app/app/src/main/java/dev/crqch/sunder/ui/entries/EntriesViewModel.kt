@@ -1,4 +1,4 @@
-package dev.crqch.sunder.ui.screens
+package dev.crqch.sunder.ui.entries
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.AccountWithBalance
-import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.data.repositories.AccountRepository
 import dev.crqch.sunder.data.repositories.CategoryRepository
