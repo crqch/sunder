@@ -14,9 +14,7 @@ plugins {
 
 android {
     namespace = "dev.crqch.sunder"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.crqch.sunder"
