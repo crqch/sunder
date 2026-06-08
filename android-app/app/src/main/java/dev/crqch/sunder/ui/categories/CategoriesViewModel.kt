@@ -14,10 +14,8 @@ class CategoriesViewModel @Inject constructor(private val categoryRepository: Ca
 
     fun createCategory(formState: CategoryFormState, onComplete: () -> Unit) {
         viewModelScope.launch {
-            categoryRepository.createCategory(
-                formState.name,
-                formState.description,
-                formState.color
+            categoryRepository.saveCategory(
+                formState, null
             )
             onComplete()
         }

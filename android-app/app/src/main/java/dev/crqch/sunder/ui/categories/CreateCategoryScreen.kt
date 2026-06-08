@@ -33,12 +33,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
+import dev.crqch.sunder.data.local.EntryEntity
+import dev.crqch.sunder.ui.entries.EntryFormState
+import kotlin.math.abs
 
-data class CategoryFormState(
-    val name: String = "",
-    val description: String = "",
-    val color: String = "#f3f3f3"
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +72,7 @@ fun CreateCategoryScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    enabled = formState.name.isNotBlank()
+                    enabled = formState.title.isNotBlank()
                 ) {
                     Text(stringResource(R.string.submit))
                 }
@@ -96,8 +94,8 @@ fun CreateCategoryScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             OutlinedTextField(
-                value = formState.name,
-                onValueChange = { formState = formState.copy(name = it) },
+                value = formState.title,
+                onValueChange = { formState = formState.copy(title = it) },
                 label = { Text(stringResource(R.string.category_name)) },
                 modifier = Modifier.fillMaxWidth()
             )
