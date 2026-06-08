@@ -33,9 +33,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
-import dev.crqch.sunder.data.local.EntryEntity
-import dev.crqch.sunder.ui.entries.EntryFormState
-import kotlin.math.abs
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,7 +93,7 @@ fun CreateCategoryScreen(
             OutlinedTextField(
                 value = formState.title,
                 onValueChange = { formState = formState.copy(title = it) },
-                label = { Text(stringResource(R.string.category_name)) },
+                label = { Text(stringResource(R.string.category_title)) },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(

@@ -33,7 +33,7 @@
     <string name="create_category">Create Category</string>
     <string name="submit">Submit</string>
     <string name="category_description">A category is used to group entries by the purpose.</string>
-    <string name="category_name">Category Name</string>
+    <string name="category_title">Category Title</string>
     <string name="add_account">Add Account</string>
     <string name="add_category">Add category</string>
     <string name="loading">Loading…</string>

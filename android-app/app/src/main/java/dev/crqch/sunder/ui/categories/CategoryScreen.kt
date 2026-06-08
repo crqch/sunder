@@ -189,7 +189,7 @@ fun CategoryScreen(
                     }
                 } else {
                     Text(
-                        "Entries",
+                        stringResource(R.string.entries),
                         Modifier.padding(horizontal = 24.dp),
                         style = MaterialTheme.typography.titleLarge
                     )

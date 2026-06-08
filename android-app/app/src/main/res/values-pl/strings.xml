@@ -34,7 +34,7 @@
     <string name="create_category">Utwórz kategorię</string>
     <string name="submit">Wyślij</string>
     <string name="category_description">Kategoria jest używana do grupowania wpisów po celu.</string>
-    <string name="category_name">Nazwa kategorii</string>
+    <string name="category_title">Tytuł kategorii</string>
     <string name="add_account">Dodaj konto</string>
     <string name="add_category">Dodaj kategorię</string>
     <string name="loading">Ładowanie…</string>
@@ -49,4 +49,8 @@
     <string name="search">Szukaj</string>
     <string name="menu">Menu</string>
     <string name="any_category">Dowolna</string>
+    <string name="edit">Edytuj</string>
+    <string name="save">Zapisz</string>
+    <string name="delete_entry">Usuń wpis</string>
+    <string name="delete_category">Usuń kategorię</string>
 </resources>
