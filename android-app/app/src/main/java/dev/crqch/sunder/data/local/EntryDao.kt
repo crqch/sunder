@@ -33,7 +33,7 @@ interface EntryDao {
     @Query("select * from entries where deletedAt is null and id = :id")
     fun getEntryById(id: String): Flow<EntryEntity?>
 
-    @Query("select * from entries where id = :id")
+    @Query("select * from entries where deletedAt is null and id = :id")
     suspend fun getEntryByIdDirect(id: String): EntryEntity?
 
     @Transaction
