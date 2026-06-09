@@ -28,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.R
+import dev.crqch.sunder.ui.accounts.AccountScreen
 import dev.crqch.sunder.ui.accounts.AccountsScreen
 import dev.crqch.sunder.ui.accounts.CreateAccountScreen
 import dev.crqch.sunder.ui.categories.CategoryScreen
@@ -58,6 +59,9 @@ sealed interface SubRoute {
 
     @Serializable
     data class Category(val categoryId: String) : SubRoute
+
+    @Serializable
+    data class Account(val accountId: String) : SubRoute
 }
 
 sealed class TopLevelDestination {
@@ -178,6 +182,9 @@ fun AppNavHost(
             AccountsScreen(
                 onAddAccount = {
                     navController.navigate(SubRoute.CreateAccount)
+                },
+                visitAccount = {
+                    navController.navigate(SubRoute.Account(it))
                 }
             )
         }
@@ -214,12 +221,24 @@ fun AppNavHost(
                 visitCategory = {
                     navController.navigate(SubRoute.Category(it))
                 },
-                visitAccount = {}
+                visitAccount = {
+                    navController.navigate(SubRoute.Account(it))
+                }
             )
         }
 
         composable<SubRoute.Category> {
             CategoryScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onEntryClick = { entryId ->
+                    navController.navigate(SubRoute.Entry(entryId))
+                })
+        }
+
+        composable<SubRoute.Account> {
+            AccountScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 },

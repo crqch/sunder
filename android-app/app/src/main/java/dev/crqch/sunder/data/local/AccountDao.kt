@@ -3,24 +3,38 @@ package dev.crqch.sunder.data.local
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AccountDao {
-    @Query("SELECT * from accounts where deletedAt is null")
+    @Query("select * from accounts where deletedAt is null")
     fun getAccounts(): Flow<List<AccountEntity>>
 
     @Query(
         """
-        SELECT accounts.*, TOTAL(entries.amount) as balance
-        FROM accounts
-        LEFT JOIN entries ON accounts.id = entries.accountId AND entries.deletedAt IS NULL
+        select accounts.*, TOTAL(entries.amount) as balance
+        from accounts
+        left join entries on accounts.id = entries.accountId and entries.deletedAt is null
         where accounts.deletedAt is null
-        GROUP BY accounts.id
+        group by accounts.id
     """
     )
     fun getAccountsWithBalance(): Flow<List<AccountWithBalance>>
 
     @Insert
-    suspend fun insertAccount(accountEntity: AccountEntity)
+    suspend fun insert(accountEntity: AccountEntity)
+
+    @Upsert
+    suspend fun upsert(accountEntity: AccountEntity)
+
+    @Query("select * from accounts where deletedAt is null and id = :id")
+    suspend fun getAccountById(id: String): AccountEntity?
+
+    @Query("select * from accounts where deletedAt is null and id = :id")
+    fun getAccount(id: String): Flow<AccountEntity?>
+
+
+    @Query("update accounts set deletedAt = :timestamp, updatedAt = :timestamp where id = :id")
+    suspend fun softDelete(id: String, timestamp: Long = System.currentTimeMillis())
 }

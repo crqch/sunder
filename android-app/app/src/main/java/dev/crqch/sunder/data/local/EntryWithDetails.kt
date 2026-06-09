@@ -7,7 +7,7 @@ data class EntryWithDetails(
     @Embedded val entry: EntryEntity,
     @Relation(
         parentColumn = "accountId",
-        entityColumn = "id"
+        entityColumn = "id",
     )
     val account: AccountEntity,
     @Relation(
