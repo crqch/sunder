@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,8 +26,8 @@ import dev.crqch.sunder.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    onNavigateSettings: () -> Unit,
+fun SettingsScreen(
+    onNavigateBack: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
 
@@ -37,12 +38,17 @@ fun HomeScreen(
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        stringResource(R.string.welcome, currentUser?.username ?: "User")
+                        "Settings"
                     )
                 },
-                actions = {
-                    IconButton(onNavigateSettings) {
-                        Icon(Icons.Filled.Settings, "Settings")
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(
+                                R.string.back
+                            )
+                        )
                     }
                 }
             )
@@ -57,9 +63,8 @@ fun HomeScreen(
                 8.dp
             )
         ) {
-            currentUser?.let { currentUser ->
-                
-            }
+            
+
         }
     }
 }

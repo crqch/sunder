@@ -37,6 +37,7 @@ import dev.crqch.sunder.ui.entries.CreateEntryScreen
 import dev.crqch.sunder.ui.entries.EntriesScreen
 import dev.crqch.sunder.ui.entries.EntryScreen
 import dev.crqch.sunder.ui.common.HomeScreen
+import dev.crqch.sunder.ui.common.SettingsScreen
 import kotlinx.serialization.Serializable
 
 sealed interface SubRoute {
@@ -62,6 +63,9 @@ sealed interface SubRoute {
 
     @Serializable
     data class Account(val accountId: String) : SubRoute
+
+    @Serializable
+    object Settings : SubRoute
 }
 
 sealed class TopLevelDestination {
@@ -175,7 +179,15 @@ fun AppNavHost(
         }
 
         composable<TopLevelDestination.Home> {
-            HomeScreen()
+            HomeScreen(onNavigateSettings = {
+                navController.navigate(SubRoute.Settings)
+            })
+        }
+
+        composable<SubRoute.Settings> {
+            SettingsScreen(onNavigateBack = {
+                navController.popBackStack()
+            })
         }
 
         composable<TopLevelDestination.Accounts> {
