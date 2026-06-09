@@ -59,7 +59,7 @@ fun SettingsScreen(
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        "Settings"
+                        stringResource(R.string.settings)
                     )
                 },
                 navigationIcon = {
@@ -99,7 +99,7 @@ fun SettingsScreen(
                     modifier = Modifier.size(ButtonDefaults.IconSize)
                 )
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text("Logout")
+                Text(stringResource(R.string.logout))
             }
         }
     }

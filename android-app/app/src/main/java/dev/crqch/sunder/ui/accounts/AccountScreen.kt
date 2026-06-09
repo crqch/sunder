@@ -133,7 +133,10 @@ fun AccountScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
-                        Text("Actions", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            stringResource(R.string.actions),
+                            style = MaterialTheme.typography.titleLarge
+                        )
 
                         if (viewModel.accountId != null) {
                             TextButton(
@@ -150,7 +153,7 @@ fun AccountScreen(
                                     modifier = Modifier.size(ButtonDefaults.IconSize)
                                 )
                                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                                Text("Delete account")
+                                Text(stringResource(R.string.delete_account))
                             }
                         }
                     }

@@ -48,7 +48,7 @@ fun CategoriesScreen(
             FloatingActionButton(onClick = onAddCategory) {
                 Icon(
                     Icons.Default.Add,
-                    contentDescription = "Add category"
+                    contentDescription = stringResource(R.string.add_category)
                 )
             }
         }

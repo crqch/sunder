@@ -45,7 +45,7 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(onNavigateSettings) {
-                        Icon(Icons.Filled.Settings, "Settings")
+                        Icon(Icons.Filled.Settings, stringResource(R.string.settings))
                     }
                 }
             )
@@ -66,7 +66,7 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Manage categories",
+                    text = stringResource(R.string.manage_categories),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(16.dp)
                 )

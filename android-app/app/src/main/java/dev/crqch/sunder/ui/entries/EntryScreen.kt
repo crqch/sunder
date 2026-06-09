@@ -110,7 +110,7 @@ fun EntryScreen(
                     ),
                     title = {
                         Text(
-                            if (viewModel.isEditMode) "Edit entry" else entryFormState.title
+                            if (viewModel.isEditMode) stringResource(R.string.edit_entry) else entryFormState.title
                         )
                     },
                     navigationIcon = {

@@ -166,7 +166,10 @@ fun CategoryScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
-                        Text("Actions", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            stringResource(R.string.actions),
+                            style = MaterialTheme.typography.titleLarge
+                        )
 
                         if (viewModel.categoryId != null) {
                             TextButton(

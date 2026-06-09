@@ -117,7 +117,7 @@ fun SunderApp(authViewModel: AuthViewModel, user: User?) {
                         if (res.success) {
                             Toast.makeText(
                                 context,
-                                "Account creation successful! You can now sign in",
+                                context.getString(R.string.account_created),
                                 Toast.LENGTH_SHORT
                             ).show()
                             navController.navigate(SignIn) {

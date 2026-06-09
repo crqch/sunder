@@ -124,7 +124,7 @@ fun SignUpScreen(
             TextField(
                 value = input.inviteCode,
                 onValueChange = { input = input.copy(inviteCode = it) },
-                label = { Text("Invite code") },
+                label = { Text(stringResource(R.string.invite_code)) },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions()
             )

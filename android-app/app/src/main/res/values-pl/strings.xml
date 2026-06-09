@@ -53,4 +53,13 @@
     <string name="save">Zapisz</string>
     <string name="delete_entry">Usuń wpis</string>
     <string name="delete_category">Usuń kategorię</string>
+    <string name="sign_up_failed">Rejestracja się nie powiodła</string>
+    <string name="account_created">Pomyślnie utworzono konto! Możesz się zalogować</string>
+    <string name="actions">Akcje</string>
+    <string name="delete_account">Usuń konto</string>
+    <string name="invite_code">Kod zaproszenia</string>
+    <string name="edit_entry">Edytuj wpis</string>
+    <string name="settings">Ustawienia</string>
+    <string name="logout">Wyloguj się</string>
+    <string name="manage_categories">Zarządzaj kategoriami</string>
 </resources>
