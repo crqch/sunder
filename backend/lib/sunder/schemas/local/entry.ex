@@ -10,6 +10,9 @@ defmodule Sunder.Eco.Entry do
              :title,
              :description,
              :location,
+             :account_id,
+             :category_id,
+             :eco_user_id,
              :deleted_at,
              :inserted_at,
              :updated_at
@@ -50,8 +53,6 @@ defmodule Sunder.Eco.Entry do
       :date,
       :amount,
       :title,
-      :description,
-      :location,
       :account_id,
       :category_id,
       :eco_user_id

@@ -4,7 +4,7 @@ defmodule Sunder.Eco.Category do
   import Ecto.Changeset
 
   @derive {Jason.Encoder,
-           only: [:id, :title, :description, :color, :deleted_at, :inserted_at, :updated_at]}
+           only: [:id, :eco_user_id, :title, :description, :color, :deleted_at, :inserted_at, :updated_at]}
 
   schema "entry_categories" do
     field(:description, :string)
@@ -20,7 +20,7 @@ defmodule Sunder.Eco.Category do
   @doc false
   def changeset(category, attrs) do
     category
-    |> cast(attrs, [:id, :title, :description, :color, :deleted_at, :updated_at])
-    |> validate_required([:title, :description, :color])
+    |> cast(attrs, [:id, :eco_user_id, :title, :description, :color, :deleted_at, :updated_at])
+    |> validate_required([:eco_user_id, :title, :color])
   end
 end

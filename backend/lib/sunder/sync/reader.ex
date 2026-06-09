@@ -42,12 +42,19 @@ defmodule SunderWeb.Sync.Reader do
   defp process_domain(repo, eco_user, txs, timestamp, schema_module, conflicts) do
     ids = Enum.map(txs, fn tx -> tx["id"] end)
 
-    entries =
-      repo.all(
-        from(s in schema_module,
-          where: s.id not in ^ids and s.eco_user_id == ^eco_user.id and s.updated_at > ^timestamp
-        )
+    query =
+      from(s in schema_module,
+        where: s.id not in ^ids and s.eco_user_id == ^eco_user.id
       )
+
+    query =
+      if timestamp do
+        from(s in query, where: s.updated_at > ^timestamp)
+      else
+        query
+      end
+
+    entries = repo.all(query)
 
     entries ++ conflicts
   end

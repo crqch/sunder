@@ -2,7 +2,7 @@ defmodule Sunder.Eco.Account do
   use Sunder.Schema
   import Ecto.Changeset
 
-  @derive {Jason.Encoder, only: [:id, :name, :deleted_at, :inserted_at, :updated_at]}
+  @derive {Jason.Encoder, only: [:id, :eco_user_id, :name, :deleted_at, :inserted_at, :updated_at]}
 
   schema "accounts" do
     field(:name, :string)
