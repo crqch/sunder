@@ -10,6 +10,7 @@ import dev.crqch.sunder.data.local.AccountDao
 import dev.crqch.sunder.data.local.CategoryDao
 import dev.crqch.sunder.data.local.EntryDao
 import dev.crqch.sunder.data.local.SunderDatabase
+import dev.crqch.sunder.data.local.SyncMetadataDao
 import javax.inject.Singleton
 
 @Module
@@ -35,5 +36,10 @@ object DatabaseModule {
     @Provides
     fun provideCategoryDao(database: SunderDatabase): CategoryDao {
         return database.categoryDao()
+    }
+
+    @Provides
+    fun provideSyncMetadataDao(database: SunderDatabase): SyncMetadataDao {
+        return database.syncMetadataDao()
     }
 }

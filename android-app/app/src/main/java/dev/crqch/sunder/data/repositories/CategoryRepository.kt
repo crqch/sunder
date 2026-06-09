@@ -6,13 +6,17 @@ import dev.crqch.sunder.data.local.CategoryEntity
 import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.ui.categories.CategoryFormState
 import dev.crqch.sunder.utils.Cuid2
+import dev.crqch.sunder.data.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 
 @Singleton
-class CategoryRepository @Inject constructor(private val categoryDao: CategoryDao) {
+class CategoryRepository @Inject constructor(
+    private val categoryDao: CategoryDao,
+    private val syncManager: SyncManager
+) {
 
     val allCategories: Flow<List<CategoryEntity>> = categoryDao.getCategories()
 
@@ -39,9 +43,11 @@ class CategoryRepository @Inject constructor(private val categoryDao: CategoryDa
             )
             categoryDao.upsert(updated)
         }
+        syncManager.triggerSync()
     }
 
     suspend fun deleteCategory(id: String) {
         categoryDao.softDelete(id)
+        syncManager.triggerSync()
     }
 }

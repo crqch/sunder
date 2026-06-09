@@ -7,13 +7,17 @@ import dev.crqch.sunder.data.local.CategoryEntity
 import dev.crqch.sunder.ui.accounts.AccountFormState
 import dev.crqch.sunder.ui.categories.CategoryFormState
 import dev.crqch.sunder.utils.Cuid2
+import dev.crqch.sunder.data.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 
 @Singleton
-class AccountRepository @Inject constructor(private val accountDao: AccountDao) {
+class AccountRepository @Inject constructor(
+    private val accountDao: AccountDao,
+    private val syncManager: SyncManager
+) {
     val allAccounts: Flow<List<AccountEntity>> = accountDao.getAccounts()
 
     val accountsWithBalance: Flow<List<AccountWithBalance>> = accountDao.getAccountsWithBalance()
@@ -29,6 +33,7 @@ class AccountRepository @Inject constructor(private val accountDao: AccountDao) 
             updatedAt = now
         )
         accountDao.insert(account)
+        syncManager.triggerSync()
     }
 
 
@@ -51,9 +56,11 @@ class AccountRepository @Inject constructor(private val accountDao: AccountDao) 
             )
             accountDao.upsert(updated)
         }
+        syncManager.triggerSync()
     }
 
     suspend fun deleteAccount(id: String) {
         accountDao.softDelete(id)
+        syncManager.triggerSync()
     }
 }

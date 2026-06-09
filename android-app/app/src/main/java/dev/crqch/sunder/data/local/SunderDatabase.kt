@@ -6,12 +6,16 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import kotlin.jvm.java
 
-@Database(entities = [EntryEntity::class, CategoryEntity::class, AccountEntity::class], version = 2)
+@Database(
+    entities = [EntryEntity::class, CategoryEntity::class, AccountEntity::class, SyncMetadataEntity::class],
+    version = 3
+)
 abstract class SunderDatabase : RoomDatabase() {
     abstract fun entryDao(): EntryDao
     abstract fun categoryDao(): CategoryDao
 
     abstract fun accountDao(): AccountDao
+    abstract fun syncMetadataDao(): SyncMetadataDao
 
     companion object {
         @Volatile

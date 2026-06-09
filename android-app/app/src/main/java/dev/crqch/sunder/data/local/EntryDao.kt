@@ -85,4 +85,7 @@ interface EntryDao {
 
     @Query("update entries set deletedAt = :timestamp, updatedAt = :timestamp where id = :id")
     suspend fun softDelete(id: String, timestamp: Long = System.currentTimeMillis())
+
+    @Query("select * from entries where updatedAt > :timestamp")
+    suspend fun getModifiedSince(timestamp: Long): List<EntryEntity>
 }

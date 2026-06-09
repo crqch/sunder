@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.crqch.sunder.api.DefaultApi
 import dev.crqch.sunder.data.local.User
+import dev.crqch.sunder.data.sync.SyncManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,6 +25,8 @@ private val Context.userDataStore by preferencesDataStore(name = "user_prefs")
 class UserRepository @Inject constructor(
     private val authRepository: AuthRepository,
     private val api: DefaultApi,
+    private val syncManager: SyncManager,
+    private val syncRepository: SyncRepository,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -60,11 +63,18 @@ class UserRepository @Inject constructor(
                     flags = body.flags ?: emptyList()
                 )
                 saveUserLocal(user)
+                syncManager.triggerSync()
+                syncManager.schedulePeriodicSync()
             } else if (res.code() == 401 || res.code() == 403) {
                 clearUserLocal()
             }
         } catch (e: Exception) {
             // Keep existing data on network error or other exceptions
+            // If we have local user, trigger sync anyway
+            if (currentUser.value != null) {
+                syncManager.triggerSync()
+                syncManager.schedulePeriodicSync()
+            }
         }
     }
 
@@ -83,5 +93,6 @@ class UserRepository @Inject constructor(
     suspend fun logout() {
         authRepository.clearTokens()
         clearUserLocal()
+        syncRepository.resetSync()
     }
 }

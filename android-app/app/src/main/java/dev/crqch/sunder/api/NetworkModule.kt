@@ -48,4 +48,10 @@ object NetworkModule {
     fun provideApi(retrofit: Retrofit): DefaultApi {
         return retrofit.create(DefaultApi::class.java)
     }
-}
+
+    @Provides
+    @Singleton
+    fun provideSyncApi(retrofit: Retrofit): SyncApi {
+        return retrofit.create(SyncApi::class.java)
+    }
+    }

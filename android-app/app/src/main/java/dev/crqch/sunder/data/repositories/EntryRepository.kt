@@ -5,13 +5,17 @@ import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.ui.entries.EntryFormState
 import dev.crqch.sunder.utils.Cuid2
+import dev.crqch.sunder.data.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class EntryRepository @Inject constructor(private val entryDao: EntryDao) {
+class EntryRepository @Inject constructor(
+    private val entryDao: EntryDao,
+    private val syncManager: SyncManager
+) {
     val allEntries: Flow<List<EntryWithDetails>> = entryDao.getAllEntries(null)
 
     fun getEntries(
@@ -59,6 +63,7 @@ class EntryRepository @Inject constructor(private val entryDao: EntryDao) {
                 amount, accountId, categoryId, description, createdAt = now, updatedAt = now
             )
         )
+        syncManager.triggerSync()
     }
 
     suspend fun saveEntry(state: EntryFormState, id: String? = null) {
@@ -80,15 +85,18 @@ class EntryRepository @Inject constructor(private val entryDao: EntryDao) {
             )
             entryDao.upsert(updated)
         }
+        syncManager.triggerSync()
     }
 
     suspend fun updateEntry(
         entry: EntryEntity
     ) {
         entryDao.upsert(entry.copy(updatedAt = System.currentTimeMillis()))
+        syncManager.triggerSync()
     }
 
     suspend fun deleteEntry(id: String) {
         entryDao.softDelete(id)
+        syncManager.triggerSync()
     }
 }

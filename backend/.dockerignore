@@ -1,0 +1,23 @@
+# Build artifacts
+/_build
+/deps
+/*.ez
+
+# Static assets
+/priv/static
+
+# Logs
+/*.log
+
+# Environment variables
+.env
+.env.*
+
+# Tests and documentation
+/test
+/doc
+
+# Other
+.git
+.elixir_ls
+.formatter.exs
