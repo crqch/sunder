@@ -16,8 +16,8 @@ defmodule Sunder.Contexts.Users do
     |> Ecto.Multi.run(:invite, fn repo, _changes ->
       case repo.get_by(Invite, token: params["invite"]) do
         nil -> {:error, :invalid_invite}
-        %{used: true} -> {:error, :invite_already_used}
-        invite -> {:ok, invite}
+        %{used_by: nil} = invite -> {:ok, invite}
+        %{used_by: _} -> {:error, :invite_already_used}
       end
     end)
     |> Ecto.Multi.insert(:user, fn _changes ->
@@ -31,8 +31,8 @@ defmodule Sunder.Contexts.Users do
         params
       )
     end)
-    |> Ecto.Multi.update(:mark_invite_used, fn %{invite: invite} ->
-      Ecto.Changeset.change(invite, used: true)
+    |> Ecto.Multi.update(:mark_invite_used, fn %{invite: invite, user: user} ->
+      Ecto.Changeset.change(invite, used_by: user.id)
     end)
     |> Repo.transact()
   end

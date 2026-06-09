@@ -14,7 +14,7 @@ defmodule Sunder.Accounts.Invite do
   @doc false
   def changeset(invite, attrs) do
     invite
-    |> cast(attrs, [:token, :used_by])
-    |> validate_required([:token, :used_by])
+    |> cast(attrs, [:token])
+    |> validate_required([:token])
   end
 end
