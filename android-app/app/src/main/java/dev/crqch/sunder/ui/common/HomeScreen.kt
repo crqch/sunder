@@ -3,9 +3,11 @@ package dev.crqch.sunder.ui.common
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,6 +29,7 @@ import dev.crqch.sunder.R
 @Composable
 fun HomeScreen(
     onNavigateSettings: () -> Unit,
+    onNavigateCategories: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
 
@@ -52,13 +55,21 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(vertical = 24.dp, horizontal = 16.dp),
+                .padding(vertical = 12.dp, horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(
                 8.dp
             )
         ) {
-            currentUser?.let { currentUser ->
-                
+
+            Card(
+                onClick = onNavigateCategories,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Manage categories",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
         }
     }

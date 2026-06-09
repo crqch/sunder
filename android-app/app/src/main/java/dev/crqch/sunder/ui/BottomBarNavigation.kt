@@ -31,6 +31,7 @@ import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.accounts.AccountScreen
 import dev.crqch.sunder.ui.accounts.AccountsScreen
 import dev.crqch.sunder.ui.accounts.CreateAccountScreen
+import dev.crqch.sunder.ui.categories.CategoriesScreen
 import dev.crqch.sunder.ui.categories.CategoryScreen
 import dev.crqch.sunder.ui.categories.CreateCategoryScreen
 import dev.crqch.sunder.ui.entries.CreateEntryScreen
@@ -66,6 +67,9 @@ sealed interface SubRoute {
 
     @Serializable
     object Settings : SubRoute
+
+    @Serializable
+    object Categories : SubRoute
 }
 
 sealed class TopLevelDestination {
@@ -179,9 +183,13 @@ fun AppNavHost(
         }
 
         composable<TopLevelDestination.Home> {
-            HomeScreen(onNavigateSettings = {
-                navController.navigate(SubRoute.Settings)
-            })
+            HomeScreen(
+                onNavigateSettings = {
+                    navController.navigate(SubRoute.Settings)
+                },
+                onNavigateCategories = {
+                    navController.navigate(SubRoute.Categories)
+                })
         }
 
         composable<SubRoute.Settings> {
@@ -218,6 +226,17 @@ fun AppNavHost(
         composable<SubRoute.CreateCategory> {
             CreateCategoryScreen(
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable<SubRoute.Categories> {
+            CategoriesScreen(
+                onAddCategory = {
+                    navController.navigate(SubRoute.CreateCategory)
+                },
+                visitCategory = { id ->
+                    navController.navigate(SubRoute.Category(id))
+                }
             )
         }
 
