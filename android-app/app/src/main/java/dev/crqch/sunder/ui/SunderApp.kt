@@ -108,13 +108,32 @@ fun SunderApp(authViewModel: AuthViewModel, user: User?) {
             )
         }
         composable<SignUp> {
+            val scope = rememberCoroutineScope()
+            val context = LocalContext.current
             SignUpScreen(
                 {
-                    navController.navigate(Main) {
-                        popUpTo(SignUp) {
-                            inclusive = true
+                    scope.launch {
+                        val res = authViewModel.signUp(it)
+                        if (res.success) {
+                            Toast.makeText(
+                                context,
+                                "Account creation successful! You can now sign in",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            navController.navigate(SignIn) {
+                                popUpTo(SignUp) {
+                                    inclusive = true
+                                }
+                            }
+                        } else {
+                            Toast.makeText(
+                                context,
+                                res.errorMessage ?: context.getString(R.string.sign_up_failed),
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
+
                 },
                 {
                     navController.navigate(SignIn) {

@@ -79,4 +79,11 @@ class SyncRepository @Inject constructor(
     suspend fun resetSync() {
         syncMetadataDao.saveMetadata(SyncMetadataEntity(lastSyncedAt = null))
     }
+
+    suspend fun hasUnsyncedData(): Boolean {
+        val lastSyncedAt = syncMetadataDao.getLastSyncedAt() ?: 0L
+        return accountDao.getModifiedSince(lastSyncedAt).isNotEmpty() ||
+                categoryDao.getModifiedSince(lastSyncedAt).isNotEmpty() ||
+                entryDao.getModifiedSince(lastSyncedAt).isNotEmpty()
+    }
 }

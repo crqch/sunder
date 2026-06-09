@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import dev.crqch.sunder.R
@@ -39,7 +40,7 @@ data class SignUpFormData(
     val inviteCode: String = ""
 ) : Parcelable {
     fun isFilled(): Boolean {
-        return !email.isEmpty() && !username.isEmpty() && !password.isEmpty() && inviteCode.length == 8
+        return !email.isEmpty() && !username.isEmpty() && !password.isEmpty() && !inviteCode.isEmpty()
     }
 }
 
@@ -119,6 +120,13 @@ fun SignUpScreen(
                 onValueChange = { input = input.copy(password = it) },
                 label = { Text(stringResource(R.string.password)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+            )
+            TextField(
+                value = input.inviteCode,
+                onValueChange = { input = input.copy(inviteCode = it) },
+                label = { Text("Invite code") },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions()
             )
         }
     }
