@@ -111,7 +111,6 @@ fun EntryCard(
     val amountPrefix = if (isNegative) "-" else "+"
     val amountColor =
         if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    val hourFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
 
     ElevatedCard(
         modifier = modifier
@@ -129,13 +128,6 @@ fun EntryCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = Instant.ofEpochMilli(entry.date)
-                        .atZone(ZoneId.systemDefault())
-                        .format(hourFormatter),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
                 Text(
                     text = entry.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -213,7 +205,7 @@ fun CompressedEntryCard(
     val amountPrefix = if (isNegative) "-" else "+"
     val amountColor =
         if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm") }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 
 
     Row(
