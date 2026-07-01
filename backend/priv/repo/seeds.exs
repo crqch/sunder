@@ -11,7 +11,7 @@
 # and so on) as they will fail if something goes wrong.
 
 
-alias Sunder.Accounts.{User}
+alias Sunder.Accounts.{User, Invite}
 alias Sunder.Eco.{EcoUser}
 
 case Sunder.Repo.insert(%User{
@@ -23,3 +23,11 @@ case Sunder.Repo.insert(%User{
   {:ok, user} -> Sunder.Repo.insert(%EcoUser{user_id: user.id})
   nil -> false
 end
+
+Sunder.Repo.insert(%Invite{
+  token: "0"
+})
+
+Sunder.Repo.insert(%Invite{
+  token: "1"
+})
