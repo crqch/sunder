@@ -72,7 +72,17 @@ defmodule Sunder.Contexts.Users do
 
       case repo.one(query) do
         %RefreshToken{} = existing_token ->
-          {:ok, existing_token}
+          if(Timex.before?(existing_token.expires_at, DateTime.utc_now())) do
+            %RefreshToken{}
+            |> RefreshToken.changeset(%{
+              user_id: user.id,
+              token: Sunder.Tokens.generate_token(),
+              expires_at: Timex.shift(DateTime.utc_now(), days: 30)
+            })
+            |> repo.insert()
+          else
+            {:ok, existing_token}
+          end
 
         nil ->
           %RefreshToken{}

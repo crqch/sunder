@@ -202,6 +202,14 @@ defmodule SunderWeb.AuthController do
           errors: Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
         })
 
+      {:error, :find_refresh_token, :token_expired, _token} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{
+          error_code: "REFRESH_TOKEN_EXPIRED",
+          message: "Refresh token has expired. Log in again"
+        })
+
       {:error, :user, _changes} ->
         conn
         |> put_status(:bad_request)
