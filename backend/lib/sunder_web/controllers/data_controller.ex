@@ -49,16 +49,20 @@ defmodule SunderWeb.DataController do
 
   authed_operation(:import,
     summary: "Import Sunder JSON data",
-    request_body: {
-      "multipart/form-data",
-      %{
-        type: :object,
-        properties: %{
-          file: %{type: :string, format: :binary}
+    request_body: [
+      description: "Sunder JSON file",
+      required: true,
+      content: %{
+        "multipart/form-data" => %{
+          schema: %{
+            type: :object,
+            properties: %{
+              file: %{type: :string, format: :binary}
+            }
+          }
         }
-      },
-      [required: true, description: "Sunder JSON file"]
-    },
+      }
+    ],
     responses: [
       ok: {
         %{
@@ -97,16 +101,20 @@ defmodule SunderWeb.DataController do
 
   authed_operation(:import_bagels,
     summary: "Import Bagels SQLite data",
-    request_body: {
-      "multipart/form-data",
-      %{
-        type: :object,
-        properties: %{
-          file: %{type: :string, format: :binary}
+    request_body: [
+      description: "Bagels SQLite database file",
+      required: true,
+      content: %{
+        "multipart/form-data" => %{
+          schema: %{
+            type: :object,
+            properties: %{
+              file: %{type: :string, format: :binary}
+            }
+          }
         }
-      },
-      [required: true, description: "Bagels SQLite database file"]
-    },
+      }
+    ],
     responses: [
       ok: {
         %{
