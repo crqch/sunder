@@ -45,13 +45,6 @@
   $effect(() => {
     let unregs = [
       keybinds.register({
-        id: 'app.go_accounts',
-        name: 'Go to Accounts',
-        keys: ['alt+a'],
-        global: false,
-        action: () => goto('/accounts')
-      }),
-      keybinds.register({
         id: 'app.new_account',
         name: 'New Account',
         keys: ['alt+n', 'a'],
@@ -107,7 +100,7 @@
       }),
       keybinds.register({
         id: 'app.tab_entries_alt',
-        name: 'Entries Tab (Alt)',
+        name: 'Entries Tab',
         keys: ['alt+e'],
         global: false,
         action: () => goto(navItems[1].href)
@@ -120,9 +113,23 @@
         action: () => goto(navItems[2].href)
       }),
       keybinds.register({
+        id: 'app.tab_accounts_alt',
+        name: 'Accounts Tab',
+        keys: ['alt+a'],
+        global: false,
+        action: () => goto(navItems[2].href)
+      }),
+      keybinds.register({
         id: 'app.tab4',
         name: 'Categories Tab',
         keys: ['alt+4'],
+        global: false,
+        action: () => goto(navItems[3].href)
+      }),
+      keybinds.register({
+        id: 'app.tab_categories_alt',
+        name: 'Categories Tab',
+        keys: ['alt+c'],
         global: false,
         action: () => goto(navItems[3].href)
       }),
