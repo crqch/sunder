@@ -53,7 +53,12 @@ defmodule SunderWeb.Endpoint do
 
   plug(Plug.MethodOverride)
   plug(Plug.Head)
-  plug CORSPlug, origin: Application.compile_env(:sunder, SunderWeb.Endpoint)[:cors_origins]
+
+  plug(CORSPlug,
+    origin: ["http://localhost:5173", "https://sunder.crqch.dev"],
+    credentials: true
+  )
+
   plug(Plug.Session, @session_options)
   plug(SunderWeb.Router)
 end
