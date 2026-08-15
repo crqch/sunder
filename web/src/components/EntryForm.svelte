@@ -127,7 +127,7 @@
       location: location.trim() || null,
       amount,
       deleted_at: null,
-      created_at: entryDate,
+      created_at: createdAt,
       updated_at: now
     };
 
