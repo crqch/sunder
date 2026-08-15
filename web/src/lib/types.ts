@@ -30,6 +30,7 @@ export type AccountEntry = {
   description: string | null;
   location: string | null;
   amount: number;
+  date: string;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;

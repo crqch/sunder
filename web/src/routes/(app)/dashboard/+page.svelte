@@ -18,7 +18,7 @@
       db.account_entries
         .filter((e) => !e.deleted_at)
         .reverse()
-        .sortBy('created_at')
+        .sortBy('date')
     ).subscribe({ next: (v) => (entries = v) });
     const subCategories = liveQuery(() =>
       db.entry_categories.filter((c) => !c.deleted_at).toArray()

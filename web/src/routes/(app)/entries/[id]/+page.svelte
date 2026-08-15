@@ -8,6 +8,7 @@
   import { toast } from 'svelte-sonner';
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
+  import DatePicker from '$components/DatePicker.svelte';
 
   let id = $derived($page.params.id);
 
@@ -21,7 +22,7 @@
   let editIsIncome = $state(false);
   let editAccountId = $state(0);
   let editCategoryId = $state(0);
-  let editDate = $state('');
+  let editDateObj = $state<Date | null>(null);
   let editLocation = $state('');
   let editDescription = $state('');
 
@@ -38,11 +39,7 @@
             editIsIncome = entry.amount >= 0;
             editAccountId = entry.account_id;
             editCategoryId = entry.category_id;
-            // Format to datetime-local
-            const d = new Date(entry.created_at);
-            const localOffset = d.getTimezoneOffset() * 60000;
-            const localTime = new Date(d.getTime() - localOffset);
-            editDate = localTime.toISOString().slice(0, 16);
+            editDateObj = new Date(entry.date || entry.created_at);
             editLocation = entry.location || '';
             editDescription = entry.description || '';
           }
@@ -113,7 +110,7 @@
       amount,
       account_id: editAccountId,
       category_id: editCategoryId,
-      created_at: new Date(editDate).toISOString(),
+      date: editDateObj ? editDateObj.toISOString() : new Date().toISOString(),
       location: editLocation.trim() || null,
       description: editDescription.trim() || null,
       updated_at: new Date().toISOString()
@@ -218,13 +215,9 @@
           </div>
         </div>
 
-        <div class="space-y-1.5">
+        <div class="space-y-1.5 pt-2">
           <label class="text-foreground block text-sm font-medium">Date</label>
-          <input
-            type="datetime-local"
-            bind:value={editDate}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-          />
+          <DatePicker bind:startDate={editDateObj} mode="single" />
         </div>
 
         <div class="space-y-1.5">
@@ -261,7 +254,7 @@
       <div class="bg-card border-border/50 rounded-xl border p-6 shadow-sm">
         <div class="border-border/50 mb-8 border-b pb-8 text-center">
           <p class="text-muted-foreground mb-4 text-sm font-medium">
-            {new Date(entry.created_at).toLocaleString()}
+            {new Date(entry.date || entry.created_at).toLocaleDateString()}
           </p>
           <h2 class="mb-2 text-2xl font-semibold tracking-tight">{entry.title}</h2>
           <p

@@ -7,9 +7,9 @@ export const db = new Dexie('sunder-db') as Dexie & {
   account_entries: EntityTable<AccountEntry, 'id'>;
 };
 
-db.version(1).stores({
+db.version(2).stores({
   accounts: 'id, name, deleted_at, created_at, updated_at',
   entry_categories: 'id, title, description, color, deleted_at, created_at, updated_at',
   account_entries:
-    'id, account_id, category_id, title, description, location, amount, deleted_at, created_at, updated_at'
+    'id, account_id, category_id, title, description, location, amount, date, deleted_at, created_at, updated_at'
 });

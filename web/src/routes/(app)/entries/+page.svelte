@@ -42,11 +42,11 @@
   let endDate = $state<Date | null>(null);
 
   // Sorting state
-  let sortField = $state<'created_at' | 'amount' | 'title'>('created_at');
+  let sortField = $state<'date' | 'amount' | 'title'>('date');
   let sortDirection = $state<'desc' | 'asc'>('desc');
 
   const sortOptions = [
-    { value: 'created_at', label: 'Date' },
+    { value: 'date', label: 'Date' },
     { value: 'amount', label: 'Amount' },
     { value: 'title', label: 'Title' }
   ];
@@ -71,7 +71,7 @@
 
       // Date
       if (startDate || endDate) {
-        let entryDate = new Date(e.created_at);
+        let entryDate = new Date(e.date || e.created_at);
         entryDate.setHours(0, 0, 0, 0);
 
         if (startDate) {
@@ -92,8 +92,9 @@
     // Sorting
     result.sort((a, b) => {
       let cmp = 0;
-      if (sortField === 'created_at')
-        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sortField === 'date')
+        cmp =
+          new Date(a.date || a.created_at).getTime() - new Date(b.date || b.created_at).getTime();
       else if (sortField === 'amount') cmp = Math.abs(a.amount) - Math.abs(b.amount);
       else if (sortField === 'title') cmp = a.title.localeCompare(b.title);
 
@@ -286,7 +287,7 @@
                   >
                   <span class="text-border text-xs">•</span>
                   <span class="text-muted-foreground text-xs"
-                    >{new Date(entry.created_at).toLocaleDateString()}</span
+                    >{new Date(entry.date || entry.created_at).toLocaleDateString()}</span
                   >
                 </div>
               </div>

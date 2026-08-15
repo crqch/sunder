@@ -24,7 +24,11 @@ export async function syncAll() {
     // We still sync to fetch potential server-side changes
   }
 
-  const payload = { accounts, categories, entries };
+  const payload = {
+    accounts,
+    categories,
+    entries: entries.map((e) => ({ ...e, date: e.date || e.created_at }))
+  };
 
   const res = await authenticatedFetch(`/dashboard/eco/sync?last=${encodeURIComponent(lastSync)}`, {
     method: 'POST',

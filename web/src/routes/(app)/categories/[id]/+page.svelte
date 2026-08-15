@@ -43,7 +43,7 @@
         .equals(id)
         .filter((e) => !e.deleted_at)
         .reverse()
-        .sortBy('created_at')
+        .sortBy('date')
     ).subscribe({ next: (v) => (entries = v) });
     const subAcc = liveQuery(() => db.accounts.toArray()).subscribe({
       next: (v) => (accounts = v)
@@ -205,7 +205,7 @@
                     {entry.amount > 0 ? '+' : ''}{entry.amount.toFixed(2)}
                   </p>
                   <p class="text-muted-foreground mt-0.5 text-xs">
-                    {new Date(entry.created_at).toLocaleDateString()}
+                    {new Date(entry.date || entry.created_at).toLocaleDateString()}
                   </p>
                 </div>
               </div>

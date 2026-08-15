@@ -116,7 +116,7 @@
     }
 
     const now = new Date().toISOString();
-    const createdAt = entryDateObj ? entryDateObj.toISOString() : new Date().toISOString();
+    const transactionDate = entryDateObj ? entryDateObj.toISOString() : new Date().toISOString();
     const id = createId();
     const newEntry = {
       id,
@@ -126,8 +126,9 @@
       description: description.trim() || null,
       location: location.trim() || null,
       amount,
+      date: transactionDate,
       deleted_at: null,
-      created_at: createdAt,
+      created_at: now,
       updated_at: now
     };
 
