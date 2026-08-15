@@ -1,8 +1,16 @@
 <script lang="ts">
   import '../layout.css';
   import favicon from '$lib/assets/favicon.svg';
+  import { authStore } from '$lib/auth';
+  import { goto } from '$app/navigation';
 
   let { children } = $props();
+
+  $effect(() => {
+    if ($authStore.isAuthenticated) {
+      goto('/dashboard');
+    }
+  });
 </script>
 
 <div class="flex min-h-screen flex-col items-center justify-center p-4">

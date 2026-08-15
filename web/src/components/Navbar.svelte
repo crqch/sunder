@@ -1,6 +1,7 @@
 <script lang="ts">
   import ThemeButton from '$components/ThemeButton.svelte';
   import favicon from '$lib/assets/favicon.svg';
+  import { authStore } from '$lib/auth';
 </script>
 
 <div
@@ -18,16 +19,20 @@
       </a>
 
       <nav class="text-muted-foreground hidden items-center gap-6 text-sm font-medium md:flex">
-        <a href="#features" class="hover:text-foreground transition-colors">Features</a>
-        <a href="#demo" class="hover:text-foreground transition-colors">Interactive Demo</a>
-        <a href="#experience" class="hover:text-foreground transition-colors">Apps & Platform</a>
+        <a href="/#features" class="hover:text-foreground transition-colors">Features</a>
+        <a href="/#demo" class="hover:text-foreground transition-colors">Interactive Demo</a>
+        <a href="/#experience" class="hover:text-foreground transition-colors">Apps & Platform</a>
       </nav>
     </div>
 
     <div class="flex items-center gap-3">
       <ThemeButton />
-      <a href="/auth/sign-in" class="btn btn-outline btn-sm hidden sm:inline-flex">Sign in</a>
-      <a href="/auth/sign-up" class="btn btn-sm">Get started</a>
+      {#if $authStore.isAuthenticated && $authStore.user}
+        <a href="/dashboard" class="btn btn-sm">{$authStore.user.username}</a>
+      {:else}
+        <a href="/auth/sign-in" class="btn btn-outline btn-sm hidden sm:inline-flex">Sign in</a>
+        <a href="/auth/sign-up" class="btn btn-sm">Get started</a>
+      {/if}
     </div>
   </div>
 </div>

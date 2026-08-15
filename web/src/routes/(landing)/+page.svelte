@@ -20,6 +20,7 @@
     Check,
     Laptop
   } from '@lucide/svelte';
+  import { authStore } from '$lib/auth';
 
   // State for interactive demo tab on landing page
   let activeTab = $state<'ledger' | 'accounts' | 'sync'>('ledger');
@@ -122,17 +123,27 @@
 
     <!-- Action Buttons -->
     <div class="flex flex-wrap items-center justify-center gap-4 pt-2">
-      <a
-        class="btn hover:shadow-primary/25 px-6 py-3 text-base font-semibold shadow-lg transition-all"
-        href="/auth/sign-in"
-      >
-        <span>Get Started Free</span>
-        <ArrowRight class="ml-2 size-4" />
-      </a>
-      <a class="btn btn-outline px-6 py-3 text-base font-semibold" href="/auth/sign-up">
-        <Key class="text-muted-foreground mr-2 size-4" />
-        <span>Redeem Invite Code</span>
-      </a>
+      {#if $authStore.isAuthenticated}
+        <a
+          class="btn hover:shadow-primary/25 px-6 py-3 text-base font-semibold shadow-lg transition-all"
+          href="/dashboard"
+        >
+          <span>Go to Dashboard</span>
+          <ArrowRight class="ml-2 size-4" />
+        </a>
+      {:else}
+        <a
+          class="btn hover:shadow-primary/25 px-6 py-3 text-base font-semibold shadow-lg transition-all"
+          href="/auth/sign-in"
+        >
+          <span>Get Started Free</span>
+          <ArrowRight class="ml-2 size-4" />
+        </a>
+        <a class="btn btn-outline px-6 py-3 text-base font-semibold" href="/auth/sign-up">
+          <Key class="text-muted-foreground mr-2 size-4" />
+          <span>Redeem Invite Code</span>
+        </a>
+      {/if}
     </div>
 
     <!-- Hero Visual Preview Card -->
@@ -625,16 +636,26 @@
     </div>
 
     <div class="flex flex-wrap items-center justify-center gap-4">
-      <a
-        class="btn hover:shadow-primary/30 px-8 py-3 text-base font-semibold shadow-lg"
-        href="/auth/sign-in"
-      >
-        <span>Sign In to Dashboard</span>
-        <ArrowRight class="ml-2 size-4" />
-      </a>
-      <a class="btn btn-outline px-8 py-3 text-base font-semibold" href="/auth/sign-up">
-        <span>Sign Up with Invite</span>
-      </a>
+      {#if $authStore.isAuthenticated}
+        <a
+          class="btn hover:shadow-primary/30 px-8 py-3 text-base font-semibold shadow-lg"
+          href="/dashboard"
+        >
+          <span>Go to Dashboard</span>
+          <ArrowRight class="ml-2 size-4" />
+        </a>
+      {:else}
+        <a
+          class="btn hover:shadow-primary/30 px-8 py-3 text-base font-semibold shadow-lg"
+          href="/auth/sign-in"
+        >
+          <span>Sign In to Dashboard</span>
+          <ArrowRight class="ml-2 size-4" />
+        </a>
+        <a class="btn btn-outline px-8 py-3 text-base font-semibold" href="/auth/sign-up">
+          <span>Sign Up with Invite</span>
+        </a>
+      {/if}
     </div>
   </section>
 </div>
