@@ -1,13 +1,14 @@
 <script lang="ts">
   import { db } from '$lib/db';
   import { Save } from '@lucide/svelte';
+  import { createId } from '@paralleldrive/cuid2';
 
   let {
     onsuccess,
     oncancel,
     isDirty = $bindable(false)
   } = $props<{
-    onsuccess: (id: number) => void;
+    onsuccess: (id: string) => void;
     oncancel?: () => void;
     isDirty?: boolean;
   }>();
@@ -23,7 +24,7 @@
     if (!name.trim()) return;
 
     const now = new Date().toISOString();
-    const id = Date.now();
+    const id = createId();
     const newAccount = {
       id,
       name,

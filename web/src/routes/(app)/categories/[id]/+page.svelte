@@ -7,7 +7,7 @@
   import { Trash2, Pencil, Check, X, ArrowLeft } from '@lucide/svelte';
   import { toast } from 'svelte-sonner';
 
-  let id = $derived(Number($page.params.id));
+  let id = $derived($page.params.id);
 
   let category = $state<EntryCategory | null>(null);
   let entries = $state<AccountEntry[]>([]);

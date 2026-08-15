@@ -7,16 +7,19 @@
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
   import DatePicker from '$components/DatePicker.svelte';
+  import { createId } from '@paralleldrive/cuid2';
 
   let {
     onsuccess,
     oncancel,
-    initialAccountId = 0,
+    initialAccountId,
+    initialCategoryId,
     isDirty = $bindable(false)
   } = $props<{
-    onsuccess: (id: number) => void;
+    onsuccess: (id: string) => void;
     oncancel?: () => void;
-    initialAccountId?: number;
+    initialAccountId?: string;
+    initialCategoryId?: string;
     isDirty?: boolean;
   }>();
 
@@ -37,8 +40,8 @@
   let categories = $state<EntryCategory[]>([]);
 
   let isIncome = $state(false);
-  let account_id = $state(0);
-  let category_id = $state(0);
+  let account_id = $state<string>(initialAccountId || '');
+  let category_id = $state<string>(initialCategoryId || '');
 
   let entryDateObj = $state<Date | null>(new Date());
 
@@ -60,7 +63,10 @@
       next: (v) => {
         categories = v;
         if (!category_id && v.length > 0) {
-          category_id = v[0].id;
+          category_id =
+            initialCategoryId && v.find((c) => c.id === initialCategoryId)
+              ? initialCategoryId
+              : v[0].id;
         }
       }
     });
@@ -110,14 +116,8 @@
     }
 
     const now = new Date().toISOString();
-    let ed = entryDateObj ? new Date(entryDateObj) : new Date();
-    // Maintain the current time if the user picks today, or set to some default time
-    if (ed.toDateString() === new Date().toDateString()) {
-      ed = new Date(); // Keep precise time if today
-    }
-    const entryDate = ed.toISOString();
-
-    const id = Date.now();
+    const createdAt = entryDateObj ? entryDateObj.toISOString() : new Date().toISOString();
+    const id = createId();
     const newEntry = {
       id,
       account_id,

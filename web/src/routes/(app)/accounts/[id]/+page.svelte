@@ -8,7 +8,7 @@
   import Modal from '$components/Modal.svelte';
   import EntryForm from '$components/EntryForm.svelte';
 
-  let id = $derived(Number($page.params.id));
+  let id = $derived($page.params.id);
 
   let account = $state<Account | null>(null);
   let entries = $state<AccountEntry[]>([]);

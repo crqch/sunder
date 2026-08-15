@@ -2,20 +2,24 @@ import { db } from '$lib/db';
 import { authenticatedFetch } from '$lib/auth';
 
 const LAST_SYNC_KEY = 'sunder_last_sync_timestamp';
+const EPOCH = '1970-01-01T00:00:00.000Z';
 
 export async function syncAll() {
-  const lastSync = localStorage.getItem(LAST_SYNC_KEY) || '0';
+  let lastSync = localStorage.getItem(LAST_SYNC_KEY);
+  if (!lastSync || lastSync === '0') {
+    lastSync = EPOCH;
+  }
 
   // Gather local changes since lastSync
-  const accounts = await db.accounts.filter((a) => a.updated_at > lastSync).toArray();
-  const categories = await db.entry_categories.filter((c) => c.updated_at > lastSync).toArray();
-  const entries = await db.account_entries.filter((e) => e.updated_at > lastSync).toArray();
+  const accounts = await db.accounts.filter((a) => a.updated_at > lastSync!).toArray();
+  const categories = await db.entry_categories.filter((c) => c.updated_at > lastSync!).toArray();
+  const entries = await db.account_entries.filter((e) => e.updated_at > lastSync!).toArray();
 
   if (
     accounts.length === 0 &&
     categories.length === 0 &&
     entries.length === 0 &&
-    lastSync !== '0'
+    lastSync !== EPOCH
   ) {
     // We still sync to fetch potential server-side changes
   }

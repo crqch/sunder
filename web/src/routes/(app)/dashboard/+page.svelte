@@ -39,7 +39,7 @@
   let recentEntries = $derived(entries.slice(0, 10));
 
   let categorySpending = $derived.by(() => {
-    let spending: Record<number, number> = {};
+    let spending: Record<string, number> = {};
     entries.forEach((e) => {
       if (e.amount < 0) {
         spending[e.category_id] = (spending[e.category_id] || 0) + Math.abs(e.amount);
@@ -47,17 +47,17 @@
     });
     return Object.entries(spending)
       .map(([id, amount]) => ({
-        category: categories.find((c) => c.id === Number(id)),
+        category: categories.find((c) => c.id === id),
         amount
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
   });
 
-  function getCategoryColor(id: number) {
+  function getCategoryColor(id: string) {
     return categories.find((c) => c.id === id)?.color || '#cccccc';
   }
-  function getCategoryName(id: number) {
+  function getCategoryName(id: string) {
     return categories.find((c) => c.id === id)?.name || 'Unknown';
   }
 </script>

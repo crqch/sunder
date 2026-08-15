@@ -5,7 +5,7 @@ export type User = {
 };
 
 export type Account = {
-  id: number;
+  id: string;
   name: string;
   deleted_at: string | null;
   created_at: string;
@@ -13,7 +13,7 @@ export type Account = {
 };
 
 export type EntryCategory = {
-  id: number;
+  id: string;
   name: string;
   description: string | null;
   color: string;
@@ -23,9 +23,9 @@ export type EntryCategory = {
 };
 
 export type AccountEntry = {
-  id: number;
-  account_id: number;
-  category_id: number;
+  id: string;
+  account_id: string;
+  category_id: string;
   title: string;
   description: string | null;
   location: string | null;

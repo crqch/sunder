@@ -9,7 +9,7 @@
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
 
-  let id = $derived(Number($page.params.id));
+  let id = $derived($page.params.id);
 
   let entry = $state<AccountEntry | null>(null);
   let accounts = $state<Account[]>([]);
@@ -121,13 +121,13 @@
     editing = false;
   }
 
-  function getAccountName(accId: number) {
-    return accounts.find((a) => a.id === accId)?.name || 'Unknown Account';
+  function getAccountName(accId: string) {
+    return accounts.find((a) => a.id === accId)?.name || 'Unknown';
   }
-  function getCategoryName(catId: number) {
-    return categories.find((c) => c.id === catId)?.name || 'Unknown Category';
+  function getCategoryName(catId: string) {
+    return categories.find((c) => c.id === catId)?.name || 'Unknown';
   }
-  function getCategoryColor(catId: number) {
+  function getCategoryColor(catId: string) {
     return categories.find((c) => c.id === catId)?.color || '#cccccc';
   }
 </script>
