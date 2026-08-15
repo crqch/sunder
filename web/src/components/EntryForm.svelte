@@ -6,6 +6,7 @@
   import { toast } from 'svelte-sonner';
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
+  import DatePicker from '$components/DatePicker.svelte';
 
   let {
     onsuccess,
@@ -39,8 +40,7 @@
   let account_id = $state(0);
   let category_id = $state(0);
 
-  // Format: YYYY-MM-DDTHH:mm for datetime-local input
-  let date = $state(new Date().toISOString().slice(0, 16));
+  let entryDateObj = $state<Date | null>(new Date());
 
   $effect(() => {
     const subAcc = liveQuery(() => db.accounts.filter((a) => !a.deleted_at).toArray()).subscribe({
@@ -110,7 +110,12 @@
     }
 
     const now = new Date().toISOString();
-    const entryDate = new Date(date).toISOString();
+    let ed = entryDateObj ? new Date(entryDateObj) : new Date();
+    // Maintain the current time if the user picks today, or set to some default time
+    if (ed.toDateString() === new Date().toDateString()) {
+      ed = new Date(); // Keep precise time if today
+    }
+    const entryDate = ed.toISOString();
 
     const id = Date.now();
     const newEntry = {
@@ -199,15 +204,9 @@
     </div>
   </div>
 
-  <div class="space-y-1.5 pt-2">
-    <label for="date" class="text-foreground block text-sm font-medium">Date & Time</label>
-    <input
-      id="date"
-      type="datetime-local"
-      bind:value={date}
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
-      required
-    />
+  <div class="relative z-10 space-y-1.5 pt-2">
+    <label for="date" class="text-foreground block text-sm font-medium">Date</label>
+    <DatePicker bind:startDate={entryDateObj} mode="single" />
   </div>
 
   <div class="space-y-1.5">

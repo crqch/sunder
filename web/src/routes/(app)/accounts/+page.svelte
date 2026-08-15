@@ -22,21 +22,37 @@
     };
   });
 
+  let searchQuery = $state('');
+  let filteredAccounts = $derived(
+    accounts.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
   function getBalance(accountId: number) {
     return entries.filter((e) => e.account_id === accountId).reduce((sum, e) => sum + e.amount, 0);
   }
 </script>
 
 <div class="space-y-8 font-sans">
-  <div class="border-border/50 flex items-center justify-between border-b pb-4">
-    <h1 class="text-2xl font-semibold tracking-tight">Accounts</h1>
-    <button
-      use:tooltip={{ text: 'New Account', keys: ['Alt', 'N', 'A'] }}
-      onclick={() => (modals.createAccount = true)}
-      class="btn gap-2 text-sm"
-    >
-      <Plus size={16} /> Add
-    </button>
+  <div class="border-border/50 flex flex-col gap-4 border-b pb-4">
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-semibold tracking-tight">Accounts</h1>
+      <button
+        use:tooltip={{ text: 'New Account', keys: ['Alt', 'N', 'A'] }}
+        onclick={() => (modals.createAccount = true)}
+        class="btn shrink-0 gap-2 text-sm"
+      >
+        <Plus size={16} /> Add
+      </button>
+    </div>
+
+    <div class="relative w-full">
+      <input
+        type="text"
+        bind:value={searchQuery}
+        placeholder="Search accounts..."
+        class="input h-10 w-full"
+      />
+    </div>
   </div>
 
   {#if accounts.length === 0}
@@ -45,9 +61,15 @@
     >
       No accounts found. Create your first account!
     </div>
+  {:else if filteredAccounts.length === 0}
+    <div
+      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
+    >
+      No accounts match your search.
+    </div>
   {:else}
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-      {#each accounts as account}
+      {#each filteredAccounts as account}
         {@const balance = getBalance(account.id)}
         <a
           href="/accounts/{account.id}"

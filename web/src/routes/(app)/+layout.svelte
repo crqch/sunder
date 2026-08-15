@@ -3,7 +3,7 @@
   import { authStore } from '$lib/auth';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { Home, Wallet, Tags, Settings } from '@lucide/svelte';
+  import { Home, Wallet, Tags, Settings, List } from '@lucide/svelte';
   import favicon from '$lib/assets/favicon.svg';
   import ThemeButton from '$components/ThemeButton.svelte';
   import { Toaster } from 'svelte-sonner';
@@ -20,6 +20,7 @@
 
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
+    { name: 'Entries', href: '/entries', icon: List },
     { name: 'Accounts', href: '/accounts', icon: Wallet },
     { name: 'Categories', href: '/categories', icon: Tags },
     { name: 'Settings', href: '/settings', icon: Settings }
@@ -97,24 +98,38 @@
       }),
       keybinds.register({
         id: 'app.tab2',
-        name: 'Accounts Tab',
+        name: 'Entries Tab',
         keys: ['alt+2'],
         global: false,
         action: () => goto(navItems[1].href)
       }),
       keybinds.register({
+        id: 'app.tab_entries_alt',
+        name: 'Entries Tab (Alt)',
+        keys: ['alt+e'],
+        global: false,
+        action: () => goto(navItems[1].href)
+      }),
+      keybinds.register({
         id: 'app.tab3',
-        name: 'Categories Tab',
+        name: 'Accounts Tab',
         keys: ['alt+3'],
         global: false,
         action: () => goto(navItems[2].href)
       }),
       keybinds.register({
         id: 'app.tab4',
-        name: 'Settings Tab',
+        name: 'Categories Tab',
         keys: ['alt+4'],
         global: false,
         action: () => goto(navItems[3].href)
+      }),
+      keybinds.register({
+        id: 'app.tab5',
+        name: 'Settings Tab',
+        keys: ['alt+5'],
+        global: false,
+        action: () => goto(navItems[4].href)
       })
     ];
     return () => unregs.forEach((u) => u());
