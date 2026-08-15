@@ -1,0 +1,3 @@
+#bun test
+export PATH="$HOME/.bun/bin:$PATH"
+cd web && bunx lint-staged

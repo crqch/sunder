@@ -1,0 +1,52 @@
+<script lang="ts">
+  import { liveQuery } from 'dexie';
+  import { db } from '$lib/db';
+  import type { EntryCategory } from '$lib/types';
+  import { Plus, ChevronRight } from '@lucide/svelte';
+
+  let categories = $state<EntryCategory[]>([]);
+
+  $effect(() => {
+    const sub = liveQuery(() =>
+      db.entry_categories.filter((c) => !c.deleted_at).toArray()
+    ).subscribe({ next: (v) => (categories = v) });
+    return () => sub.unsubscribe();
+  });
+</script>
+
+<div class="space-y-8 font-sans">
+  <div class="border-border/50 flex items-center justify-between border-b pb-4">
+    <h1 class="text-2xl font-semibold tracking-tight">Categories</h1>
+    <a href="/categories/create" class="btn gap-2 text-sm">
+      <Plus size={16} /> Add
+    </a>
+  </div>
+
+  {#if categories.length === 0}
+    <div
+      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
+    >
+      No categories found. Create your first category!
+    </div>
+  {:else}
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+      {#each categories as category}
+        <a
+          href="/categories/{category.id}"
+          class="bg-card border-border/50 hover:border-border group block rounded-xl border p-5 shadow-sm transition-all hover:shadow-md"
+        >
+          <div class="mb-2 flex items-center gap-3">
+            <div
+              class="h-4 w-4 rounded-full shadow-sm"
+              style="background-color: {category.color}"
+            ></div>
+            <h2 class="truncate text-lg font-medium tracking-tight">{category.name}</h2>
+          </div>
+          {#if category.description}
+            <p class="text-muted-foreground line-clamp-2 text-sm">{category.description}</p>
+          {/if}
+        </a>
+      {/each}
+    </div>
+  {/if}
+</div>

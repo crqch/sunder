@@ -48,7 +48,8 @@ defmodule Sunder.MixProject do
       {:argon2_elixir, "~> 4.0"},
       {:ex_cuid2, "~> 0.10.1"},
       {:timex, "~> 3.7"},
-      {:oaskit, "~> 0.12.0"}
+      {:oaskit, "~> 0.12.0"},
+      {:cors_plug, "~> 2.0"}
     ]
   end
 
