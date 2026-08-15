@@ -57,7 +57,12 @@ defmodule SunderWeb.DataController do
           schema: %{
             type: :object,
             properties: %{
-              file: %{type: :string, format: :binary}
+              file: %{
+                anyOf: [
+                  %{type: :string, format: :binary},
+                  %{type: :object}
+                ]
+              }
             }
           }
         }
@@ -109,7 +114,12 @@ defmodule SunderWeb.DataController do
           schema: %{
             type: :object,
             properties: %{
-              file: %{type: :string, format: :binary}
+              file: %{
+                anyOf: [
+                  %{type: :string, format: :binary},
+                  %{type: :object}
+                ]
+              }
             }
           }
         }
