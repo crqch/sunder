@@ -187,7 +187,7 @@
   }
 </script>
 
-<div class="relative w-full" bind:this={containerRef}>
+<div class="relative w-full {open ? 'z-50' : ''}" bind:this={containerRef}>
   <button
     type="button"
     onclick={() => (open = !open)}

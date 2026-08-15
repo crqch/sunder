@@ -192,7 +192,7 @@
     />
   </div>
 
-  <div class="relative z-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
     <div class="space-y-1.5">
       <label class="text-foreground block text-sm font-medium">Account</label>
       <AccountSelect bind:value={account_id} {accounts} />
@@ -204,7 +204,7 @@
     </div>
   </div>
 
-  <div class="relative z-10 space-y-1.5 pt-2">
+  <div class="space-y-1.5 pt-2">
     <label for="date" class="text-foreground block text-sm font-medium">Date</label>
     <DatePicker bind:startDate={entryDateObj} mode="single" />
   </div>

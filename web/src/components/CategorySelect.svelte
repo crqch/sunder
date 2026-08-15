@@ -54,7 +54,7 @@
 </script>
 
 <div
-  class="relative"
+  class="relative {open ? 'z-50' : ''}"
   bind:this={containerRef}
   onkeydown={handleKeydown}
   role="combobox"
