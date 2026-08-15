@@ -3,7 +3,7 @@
   import { authStore } from '$lib/auth';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { Home, Wallet, Tags, Settings, List, Menu, X } from '@lucide/svelte';
+  import { Home, Wallet, Tags, Settings, List, Menu, X, ShieldCheck } from '@lucide/svelte';
   import favicon from '$lib/assets/favicon.svg';
   import ThemeButton from '$components/ThemeButton.svelte';
   import SyncIndicator from '$components/SyncIndicator.svelte';
@@ -20,13 +20,19 @@
 
   let currentPath = $derived($page.url.pathname);
 
-  const navItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Entries', href: '/entries', icon: List },
-    { name: 'Accounts', href: '/accounts', icon: Wallet },
-    { name: 'Categories', href: '/categories', icon: Tags },
-    { name: 'Settings', href: '/settings', icon: Settings }
-  ];
+  let navItems = $derived.by(() => {
+    const items = [
+      { name: 'Dashboard', href: '/dashboard', icon: Home },
+      { name: 'Entries', href: '/entries', icon: List },
+      { name: 'Accounts', href: '/accounts', icon: Wallet },
+      { name: 'Categories', href: '/categories', icon: Tags },
+      { name: 'Settings', href: '/settings', icon: Settings }
+    ];
+    if ($authStore.user?.flags?.includes('is_admin')) {
+      items.push({ name: 'Admin', href: '/admin', icon: ShieldCheck });
+    }
+    return items;
+  });
 
   let lastLogoClickTime = 0;
 

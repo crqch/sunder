@@ -46,6 +46,20 @@ defmodule SunderWeb.Router do
     post("/sync", SyncController, :sync)
   end
 
+  scope "/admin", SunderWeb do
+    pipe_through(:api)
+    pipe_through(SunderWeb.Plugs.AuthPlug)
+    pipe_through(SunderWeb.Plugs.AdminPlug)
+
+    get("/users", AdminController, :list_users)
+    delete("/users/:id", AdminController, :delete_user)
+    put("/users/:id", AdminController, :update_user)
+    
+    get("/invites", AdminController, :list_invites)
+    post("/invites", AdminController, :create_invite)
+    delete("/invites/:id", AdminController, :delete_invite)
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", SunderWeb do
   #   pipe_through :api

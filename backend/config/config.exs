@@ -18,9 +18,7 @@ config :sunder, SunderWeb.Endpoint,
   secret_key_base: "ZAAn2DV5odejNJkR0QjHk3EVBbIYv3rzZw5BVzebypfSb2IkjElP8iqn0ZwdKueG",
   render_errors: [view: SunderWeb.ErrorView, accepts: ~w(html json), layout: false],
   pubsub_server: Sunder.PubSub,
-  live_view: [signing_salt: "EYslyk0K"],
-  cors_origins: ["*"]
-
+  live_view: [signing_salt: "EYslyk0K"]
 
 # Configures Elixir's Logger
 config :logger, :console,
