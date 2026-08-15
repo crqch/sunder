@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { authStore, logout } from '$lib/auth';
+  import { authStore, logout, authenticatedFetch } from '$lib/auth';
   import { syncAll, getUnsyncedChanges, clearLocalDatabase } from '$lib/sync';
   import { syncState } from '$lib/syncState.svelte';
-  import { LogOut, RefreshCw } from '@lucide/svelte';
+  import { LogOut, RefreshCw, Download, Upload, Database } from '@lucide/svelte';
   import { toast } from 'svelte-sonner';
   import Modal from '$components/Modal.svelte';
 
@@ -72,6 +72,64 @@
     const val = parseInt((e.target as HTMLSelectElement).value);
     syncState.autoSyncInterval = val;
     localStorage.setItem('sunder_auto_sync_interval', val.toString());
+  }
+
+  let fileInputSunder: HTMLInputElement;
+  let fileInputBagels: HTMLInputElement;
+
+  async function downloadSunderBackup() {
+    try {
+      const res = await authenticatedFetch('/dashboard/eco/data/export');
+      if (!res.ok) throw new Error('Failed to export data');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sunder_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error('Failed to download backup');
+    }
+  }
+
+  async function uploadFile(file: File, type: 'sunder' | 'bagels') {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      toast.loading(`Importing ${type === 'sunder' ? 'Sunder' : 'Bagels'} data...`);
+      const res = await authenticatedFetch(`/dashboard/eco/data/import/${type}`, {
+        method: 'POST',
+        body: formData
+      });
+      toast.dismiss();
+      if (!res.ok) throw new Error('Import failed');
+      const data = await res.json();
+
+      toast.loading('Syncing to device...');
+      await syncAll();
+      toast.dismiss();
+
+      const counts = data.stats || {};
+      toast.success(
+        `Successfully imported ${counts.accounts || 0} accounts, ${counts.categories || 0} categories, and ${counts.entries || 0} entries!`
+      );
+    } catch (e) {
+      toast.dismiss();
+      toast.error(`Failed to import ${type} data`);
+    }
+  }
+
+  function handleSunderImport(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file) uploadFile(file, 'sunder');
+  }
+
+  function handleBagelsImport(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file) uploadFile(file, 'bagels');
   }
 </script>
 
@@ -150,6 +208,62 @@
         <RefreshCw size={14} class={syncing ? 'animate-spin' : ''} />
         {syncing ? 'Syncing...' : 'Sync Now'}
       </button>
+    </div>
+  </div>
+
+  <div class="bg-card border-border/50 space-y-6 rounded-xl border p-6 shadow-sm">
+    <h2 class="border-border/50 border-b pb-2 text-lg font-semibold tracking-tight">
+      Data Management
+    </h2>
+
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="font-medium">Export Data</h3>
+          <p class="text-muted-foreground text-sm">
+            Download your pure data as a Sunder JSON file.
+          </p>
+        </div>
+        <button onclick={downloadSunderBackup} class="btn btn-outline btn-sm gap-2">
+          <Download size={14} /> Download Backup
+        </button>
+      </div>
+
+      <div class="border-border/50 flex items-center justify-between border-t pt-4">
+        <div>
+          <h3 class="font-medium">Import Sunder Backup</h3>
+          <p class="text-muted-foreground text-sm">Restore from a previous Sunder JSON backup.</p>
+        </div>
+        <input
+          type="file"
+          accept=".json"
+          class="hidden"
+          bind:this={fileInputSunder}
+          onchange={handleSunderImport}
+        />
+        <button onclick={() => fileInputSunder.click()} class="btn btn-outline btn-sm gap-2">
+          <Upload size={14} /> Import Sunder JSON
+        </button>
+      </div>
+
+      <div class="border-border/50 flex items-center justify-between border-t pt-4">
+        <div>
+          <h3 class="font-medium">Import Bagels DB</h3>
+          <p class="text-muted-foreground text-sm">
+            Migrate your data from a Bagels SQLite database file.
+          </p>
+        </div>
+        <input
+          type="file"
+          accept=".db,.sqlite,.sqlite3"
+          class="hidden"
+          bind:this={fileInputBagels}
+          onchange={handleBagelsImport}
+        />
+        <button onclick={() => fileInputBagels.click()} class="btn btn-outline btn-sm gap-2">
+          <Database size={14} /> Import Bagels DB
+        </button>
+      </div>
     </div>
   </div>
 

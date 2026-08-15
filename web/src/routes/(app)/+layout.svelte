@@ -239,7 +239,7 @@
       </header>
 
       <main class="bg-background/50 relative h-full overflow-y-auto">
-        <div class="mx-auto h-full max-w-7xl p-4 pb-20 md:p-8 md:pb-24">
+        <div class="mx-auto min-h-full max-w-7xl p-4 pb-32 md:p-8 md:pb-40">
           {@render children()}
         </div>
       </main>

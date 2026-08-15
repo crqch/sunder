@@ -2,7 +2,7 @@
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
   import type { AccountEntry, Account, EntryCategory } from '$lib/types';
-  import { Plus, Filter, SortDesc, SortAsc, Search, X } from '@lucide/svelte';
+  import { Plus, Filter, SortDesc, SortAsc, Search, X, Trash2, Check } from '@lucide/svelte';
   import { modals } from '$lib/modals.svelte';
   import { tooltip } from '$lib/tooltip';
 
@@ -31,6 +31,7 @@
   import MultiSelect from '$components/MultiSelect.svelte';
   import Select from '$components/Select.svelte';
   import DatePicker from '$components/DatePicker.svelte';
+  import Modal from '$components/Modal.svelte';
 
   // Filters state
   let searchQuery = $state('');
@@ -122,6 +123,45 @@
     maxAmount = null;
     startDate = null;
     endDate = null;
+  }
+
+  let selectedIds = $state<string[]>([]);
+  let allSelected = $derived(
+    filteredEntries.length > 0 && selectedIds.length === filteredEntries.length
+  );
+  let deleteModalOpen = $state(false);
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      selectedIds = [];
+    } else {
+      selectedIds = filteredEntries.map((e) => e.id);
+    }
+  }
+
+  function handleCardClick(e: MouseEvent, id: string) {
+    if (selectedIds.length > 0) {
+      e.preventDefault();
+      if (selectedIds.includes(id)) {
+        selectedIds = selectedIds.filter((x) => x !== id);
+      } else {
+        selectedIds = [...selectedIds, id];
+      }
+    }
+  }
+
+  function confirmDelete() {
+    deleteModalOpen = true;
+  }
+
+  async function executeDelete() {
+    const now = new Date().toISOString();
+    await db.account_entries
+      .where('id')
+      .anyOf(selectedIds)
+      .modify({ deleted_at: now, updated_at: now });
+    selectedIds = [];
+    deleteModalOpen = false;
   }
 </script>
 
@@ -261,18 +301,59 @@
     </div>
   {:else}
     <div class="flex flex-col gap-3">
-      <div class="text-muted-foreground flex justify-between px-2 text-xs font-medium">
-        <span>Showing {filteredEntries.length} entries</span>
+      <div class="text-muted-foreground flex items-center justify-between px-2 text-xs font-medium">
+        <label class="group flex cursor-pointer items-center gap-2.5 text-sm font-medium">
+          <div
+            class="relative flex h-5 w-5 items-center justify-center rounded border-2 transition-all {allSelected
+              ? 'bg-primary border-primary text-primary-foreground'
+              : 'border-border/60 bg-background group-hover:border-primary/50 text-transparent'}"
+          >
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onchange={toggleSelectAll}
+              class="sr-only"
+            />
+            <Check size={12} strokeWidth={3} class={allSelected ? 'opacity-100' : 'opacity-0'} />
+          </div>
+          Select All ({filteredEntries.length})
+        </label>
+
+        {#if selectedIds.length > 0}
+          <button
+            onclick={confirmDelete}
+            class="btn btn-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 gap-1.5"
+          >
+            <Trash2 size={14} /> Delete Selected ({selectedIds.length})
+          </button>
+        {/if}
       </div>
       {#each filteredEntries as entry}
         <a
           href="/entries/{entry.id}"
-          class="group bg-card border-border/50 hover:border-border rounded-xl border p-4 shadow-sm transition-all hover:shadow-md"
+          onclick={(e) => handleCardClick(e, entry.id)}
+          class="group bg-card border-border/50 hover:border-border has-[:checked]:border-primary has-[:checked]:ring-primary/50 has-[:checked]:bg-primary/5 relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md has-[:checked]:ring-1"
         >
           <div class="flex items-center justify-between sm:items-start">
             <div class="flex items-center gap-4">
+              <label
+                class="-m-1 flex cursor-pointer items-center p-1"
+                onclick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  value={entry.id}
+                  bind:group={selectedIds}
+                  class="peer sr-only"
+                />
+                <div
+                  class="peer-checked:bg-primary peer-checked:border-primary peer-checked:text-primary-foreground border-border/60 bg-background hover:border-primary/50 flex h-5 w-5 items-center justify-center rounded-full border-2 text-transparent transition-all peer-checked:scale-110 [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
+                >
+                  <Check size={12} strokeWidth={3} />
+                </div>
+              </label>
               <div
-                class="h-10 w-3 rounded-full"
+                class="h-10 w-3 shrink-0 rounded-full"
                 style="background-color: {getCategoryColor(entry.category_id)}"
               ></div>
               <div class="flex flex-col">
@@ -305,5 +386,26 @@
         </a>
       {/each}
     </div>
+
+    <Modal bind:open={deleteModalOpen} title="Delete Entries">
+      <div class="space-y-4">
+        <p class="text-sm">
+          Are you sure you want to delete <strong class="text-foreground font-semibold"
+            >{selectedIds.length}</strong
+          > entries?
+        </p>
+        <div class="flex flex-col gap-2 pt-2 sm:flex-row">
+          <button
+            onclick={executeDelete}
+            class="btn bg-destructive text-destructive-foreground hover:bg-destructive/90 flex-1"
+          >
+            Delete
+          </button>
+          <button onclick={() => (deleteModalOpen = false)} class="btn-outline flex-1">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </Modal>
   {/if}
 </div>

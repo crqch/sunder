@@ -46,6 +46,16 @@ defmodule SunderWeb.Router do
     post("/sync", SyncController, :sync)
   end
 
+  scope "/dashboard/eco/data", SunderWeb do
+    pipe_through(:api)
+    pipe_through(SunderWeb.Plugs.AuthPlug)
+    pipe_through(SunderWeb.Plugs.EcoUserPlug)
+
+    get("/export", DataController, :export)
+    post("/import/sunder", DataController, :import)
+    post("/import/bagels", DataController, :import_bagels)
+  end
+
   scope "/admin", SunderWeb do
     pipe_through(:api)
     pipe_through(SunderWeb.Plugs.AuthPlug)

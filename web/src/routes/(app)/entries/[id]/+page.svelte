@@ -87,9 +87,10 @@
   async function handleDelete() {
     if (!entry) return;
     if (confirm('Are you sure you want to delete this entry?')) {
+      const now = new Date().toISOString();
       await db.account_entries.update(id, {
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        deleted_at: now,
+        updated_at: now
       });
       goto(`/accounts/${entry.account_id}`);
     }

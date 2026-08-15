@@ -65,9 +65,10 @@
     }
 
     if (confirm('Are you sure you want to delete this category?')) {
+      const now = new Date().toISOString();
       await db.entry_categories.update(id, {
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        deleted_at: now,
+        updated_at: now
       });
       goto('/categories');
     }
