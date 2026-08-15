@@ -126,7 +126,7 @@
       <div class="border-border/50 mb-4 flex items-center justify-between border-b pb-2">
         <h2 class="text-lg font-semibold tracking-tight">Recent Transactions</h2>
         <a
-          href="/accounts"
+          href="/entries"
           class="text-primary hover:text-primary/80 flex items-center gap-1 text-sm font-medium transition-colors"
           >View All <ArrowRight size={14} /></a
         >
