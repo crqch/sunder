@@ -161,16 +161,12 @@
   <div class="space-y-1.5">
     <label class="text-foreground block text-sm font-medium">Amount</label>
     <div class="relative">
-      <span
-        class="text-muted-foreground absolute top-1/2 left-4 -translate-y-1/2 text-xl font-medium"
-        >$</span
-      >
       <input
         type="text"
         inputmode="decimal"
         bind:value={amountStr}
         oninput={handleAmountInput}
-        class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 pl-9 text-2xl font-medium transition-all focus:ring-2 focus:outline-none {isIncome
+        class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-2xl font-medium transition-all focus:ring-2 focus:outline-none {isIncome
           ? 'text-emerald-500'
           : 'text-destructive'}"
         placeholder="0.00"

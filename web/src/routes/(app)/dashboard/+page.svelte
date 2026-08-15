@@ -78,7 +78,7 @@
           ? 'text-emerald-500'
           : 'text-destructive'}"
       >
-        {totalBalance >= 0 ? '' : '-'}${Math.abs(totalBalance).toFixed(2)}
+        {totalBalance >= 0 ? '' : '-'}{Math.abs(totalBalance).toFixed(2)}
       </p>
     </div>
 
@@ -88,7 +88,7 @@
       <div class="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl"></div>
       <h2 class="text-muted-foreground mb-1 text-sm font-medium">Total Income</h2>
       <p class="text-3xl font-bold tracking-tight text-emerald-500">
-        +${income.toFixed(2)}
+        +{income.toFixed(2)}
       </p>
     </div>
 
@@ -98,7 +98,7 @@
       <div class="bg-destructive/10 absolute -top-6 -right-6 h-24 w-24 rounded-full blur-2xl"></div>
       <h2 class="text-muted-foreground mb-1 text-sm font-medium">Total Expenses</h2>
       <p class="text-destructive text-3xl font-bold tracking-tight">
-        -${expenses.toFixed(2)}
+        -{expenses.toFixed(2)}
       </p>
     </div>
   </div>
@@ -184,7 +184,7 @@
               <div>
                 <div class="mb-1.5 flex justify-between text-sm font-medium">
                   <span class="text-foreground">{item.category?.title || 'Unknown'}</span>
-                  <span class="text-muted-foreground">${item.amount.toFixed(2)}</span>
+                  <span class="text-muted-foreground">{item.amount.toFixed(2)}</span>
                 </div>
                 <div class="bg-muted h-2 w-full overflow-hidden rounded-full">
                   <div

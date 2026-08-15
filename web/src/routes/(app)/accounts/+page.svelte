@@ -89,7 +89,7 @@
                 ? 'text-emerald-500'
                 : 'text-destructive'}"
             >
-              ${Math.abs(balance).toFixed(2)}
+              {Math.abs(balance).toFixed(2)}
             </p>
           </div>
         </a>

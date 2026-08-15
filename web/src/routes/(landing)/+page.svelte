@@ -237,7 +237,7 @@
                     ? 'text-emerald-500'
                     : 'text-foreground'}"
                 >
-                  {entry.amount > 0 ? '+' : ''}${Math.abs(entry.amount).toFixed(2)}
+                  {entry.amount > 0 ? '+' : ''}{Math.abs(entry.amount).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -440,7 +440,7 @@
                       ? 'text-emerald-500'
                       : 'text-foreground'}"
                   >
-                    {entry.amount > 0 ? '+' : ''}${Math.abs(entry.amount).toFixed(2)}
+                    {entry.amount > 0 ? '+' : ''}{Math.abs(entry.amount).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -467,7 +467,7 @@
                 <div class="flex flex-col gap-1">
                   <h5 class="text-foreground text-lg font-extrabold">{acc.name}</h5>
                   <span class="text-foreground font-mono text-2xl font-black"
-                    >${acc.balance.toFixed(2)}</span
+                    >{acc.balance.toFixed(2)}</span
                   >
                 </div>
                 <div
