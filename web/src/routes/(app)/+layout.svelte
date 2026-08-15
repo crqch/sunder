@@ -3,9 +3,10 @@
   import { authStore } from '$lib/auth';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { Home, Wallet, Tags, Settings, List } from '@lucide/svelte';
+  import { Home, Wallet, Tags, Settings, List, Menu, X } from '@lucide/svelte';
   import favicon from '$lib/assets/favicon.svg';
   import ThemeButton from '$components/ThemeButton.svelte';
+  import { themeStore } from '$lib/themeStore';
   import { Toaster } from 'svelte-sonner';
 
   let { children } = $props();
@@ -39,6 +40,7 @@
   let accountDirty = $state(false);
   let categoryDirty = $state(false);
   let entryDirty = $state(false);
+  let sidebarOpen = $state(false);
 
   $effect(() => {
     let unregs = [
@@ -141,59 +143,85 @@
   <link rel="icon" href={favicon} />
 </svelte:head>
 
-<Toaster richColors position="top-right" />
+<Toaster richColors position="top-right" theme={$themeStore} />
 
 {#if $authStore.loading || !$authStore.isAuthenticated}
   <div class="bg-background text-foreground flex min-h-screen items-center justify-center">
     <p class="animate-pulse font-bold tracking-widest uppercase">Loading...</p>
   </div>
 {:else}
-  <div class="bg-background text-foreground flex h-screen overflow-hidden font-sans">
+  <div class="bg-background text-foreground relative flex h-screen overflow-hidden font-sans">
     <aside
-      class="border-border bg-card flex w-16 flex-col border-r transition-all duration-300 md:w-64"
+      class="border-border bg-card fixed inset-y-0 left-0 z-50 flex
+             w-full flex-col border-r transition-all duration-300 md:relative md:w-64
+             {sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}"
     >
-      <a
-        href="/dashboard"
-        onclick={(e) => {
-          const now = Date.now();
-          if (now - lastLogoClickTime < 3000) {
-            e.preventDefault();
-            goto('/');
-          }
-          lastLogoClickTime = now;
-        }}
-        class="border-border group flex h-16 items-center justify-center border-b md:justify-start md:px-6"
-      >
-        <img
-          src={favicon}
-          alt="Sunder"
-          class="size-6 transition-transform duration-500 group-hover:rotate-180 dark:invert"
-        />
-        <span class="ml-3 hidden text-lg font-semibold tracking-tight md:block">Sunder</span>
-      </a>
-      <nav class="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-4 md:px-3">
+      <div class="border-border flex h-16 items-center justify-between border-b px-6">
+        <a
+          href="/dashboard"
+          onclick={(e) => {
+            const now = Date.now();
+            if (now - lastLogoClickTime < 3000) {
+              e.preventDefault();
+              goto('/');
+            }
+            lastLogoClickTime = now;
+            sidebarOpen = false;
+          }}
+          class="group flex items-center"
+        >
+          <img
+            src={favicon}
+            alt="Sunder"
+            class="size-6 transition-transform duration-500 group-hover:rotate-180 dark:invert"
+          />
+          <span class="ml-3 text-lg font-semibold tracking-tight">Sunder</span>
+        </a>
+        <button
+          class="text-muted-foreground hover:text-foreground -mr-2 p-2 md:hidden"
+          onclick={() => (sidebarOpen = false)}
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <nav class="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-6 md:gap-1 md:px-3 md:py-4">
         {#each navItems as item, i}
           <a
             href={item.href}
+            onclick={() => (sidebarOpen = false)}
             use:tooltip={{ text: item.name, keys: ['Alt', String(i + 1)] }}
-            class="flex items-center justify-center gap-3 rounded-md border p-3 transition-all md:justify-start md:px-3 md:py-2 {currentPath.startsWith(
+            class="flex items-center justify-start gap-4 rounded-md border px-4 py-3 transition-all md:gap-3 md:px-3 md:py-2 {currentPath.startsWith(
               item.href
             )
               ? 'bg-primary/10 text-primary border-primary/20'
               : 'text-muted-foreground hover:bg-muted hover:border-border hover:text-foreground border-transparent'}"
           >
-            <svelte:component this={item.icon} size={18} class="shrink-0" />
-            <span class="hidden text-sm font-medium md:block">{item.name}</span>
+            <svelte:component this={item.icon} size={20} class="shrink-0 md:h-[18px] md:w-[18px]" />
+            <span class="text-base font-medium md:text-sm">{item.name}</span>
           </a>
         {/each}
       </nav>
-      <div class="border-border flex justify-center border-t p-3 md:justify-start">
-        <ThemeButton class="flex w-full items-center justify-center gap-4" />
+      <div class="border-border flex justify-start border-t p-4 md:p-3">
+        <ThemeButton class="flex w-full items-center justify-center gap-3 py-2" showText={true} />
       </div>
     </aside>
 
-    <main class="bg-background flex-1 overflow-y-auto">
-      <div class="mx-auto max-w-5xl p-6 md:p-10">
+    <main class="bg-background relative flex flex-1 flex-col overflow-y-auto">
+      <!-- Mobile Header -->
+      <div
+        class="border-border/50 bg-card sticky top-0 z-30 flex items-center gap-3 border-b p-3 md:hidden"
+      >
+        <button
+          onclick={() => (sidebarOpen = true)}
+          class="text-muted-foreground hover:bg-muted rounded-md p-1 transition-colors"
+        >
+          <Menu size={18} />
+        </button>
+        <span class="text-base font-semibold tracking-tight">Sunder</span>
+      </div>
+
+      <div class="mx-auto w-full max-w-5xl p-6 md:p-10">
         {@render children()}
       </div>
     </main>

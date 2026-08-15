@@ -26,12 +26,15 @@
     </div>
 
     <div class="flex items-center gap-3">
-      <ThemeButton />
+      <ThemeButton responsiveText={true} class="btn-sm" />
       {#if $authStore.isAuthenticated && $authStore.user}
-        <a href="/dashboard" class="btn btn-sm">{$authStore.user.username}</a>
+        <a href="/dashboard" class="btn btn-sm max-w-[120px] truncate">{$authStore.user.username}</a
+        >
       {:else}
-        <a href="/auth/sign-in" class="btn btn-outline btn-sm hidden sm:inline-flex">Sign in</a>
-        <a href="/auth/sign-up" class="btn btn-sm">Get started</a>
+        <a href="/auth/sign-in" class="btn btn-outline btn-sm hidden truncate sm:inline-flex"
+          >Sign in</a
+        >
+        <a href="/auth/sign-up" class="btn btn-sm truncate">Get started</a>
       {/if}
     </div>
   </div>
