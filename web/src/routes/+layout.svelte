@@ -15,7 +15,18 @@
       keys: ['alt+t'],
       global: true,
       action: () => {
-        themeStore.set($themeStore === 'dark' ? 'light' : 'dark');
+        const btn =
+          document.getElementById('theme-toggle-btn') ||
+          document.getElementById('theme-toggle-btn-mobile');
+        if (btn) {
+          const rect = btn.getBoundingClientRect();
+          themeStore.toggle({
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2
+          } as MouseEvent);
+        } else {
+          themeStore.toggle();
+        }
       }
     });
 

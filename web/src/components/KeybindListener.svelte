@@ -34,7 +34,7 @@
     if (bufferTimer) clearTimeout(bufferTimer);
     bufferTimer = setTimeout(() => {
       buffer = [];
-    }, 1500);
+    }, 500);
 
     // try matching commands
     let matched = false;

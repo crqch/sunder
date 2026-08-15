@@ -172,3 +172,13 @@
     @apply border-border/50 text-destructive hover:bg-destructive/10 hover:border-destructive/30 inline-flex aspect-square cursor-pointer items-center justify-center rounded-none border bg-transparent p-2 transition-colors;
   }
 }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+:root.theme-transitioning * {
+  transition: none !important;
+}
