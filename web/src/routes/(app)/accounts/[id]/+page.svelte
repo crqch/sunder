@@ -92,7 +92,13 @@
       </a>
 
       {#if editing}
-        <div class="flex flex-1 gap-2">
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            handleSaveEdit();
+          }}
+          class="flex flex-1 items-center gap-2"
+        >
           <input
             type="text"
             bind:value={editName}
@@ -100,21 +106,22 @@
             autofocus
           />
           <button
-            onclick={handleSaveEdit}
-            class="btn-icon border-transparent bg-emerald-500 text-white hover:opacity-90"
+            type="submit"
+            class="btn-icon text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-600"
           >
             <Check size={20} />
           </button>
           <button
+            type="button"
             onclick={() => {
               editing = false;
               editName = account!.name;
             }}
-            class="btn-icon bg-destructive border-transparent text-white hover:opacity-90"
+            class="btn-icon text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <X size={20} />
           </button>
-        </div>
+        </form>
       {:else}
         <h1 class="flex-1 text-2xl font-semibold tracking-tight">{account.name}</h1>
         <div class="flex gap-2">

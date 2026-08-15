@@ -159,7 +159,13 @@
     </div>
 
     {#if editing}
-      <div class="bg-card border-border/50 space-y-5 rounded-xl border p-6 shadow-sm">
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          handleSaveEdit();
+        }}
+        class="bg-card border-border/50 space-y-5 rounded-xl border p-6 shadow-sm"
+      >
         <div class="flex gap-3">
           <button
             type="button"
@@ -240,10 +246,9 @@
         </div>
 
         <div class="flex gap-4 pt-4">
-          <button onclick={handleSaveEdit} class="btn flex-1 gap-2 py-3"
-            ><Check size={16} /> Save</button
-          >
+          <button type="submit" class="btn flex-1 gap-2 py-3"><Check size={16} /> Save</button>
           <button
+            type="button"
             onclick={() => {
               editing = false;
             }}
@@ -251,7 +256,7 @@
             ><X size={16} /> Cancel</button
           >
         </div>
-      </div>
+      </form>
     {:else}
       <div class="bg-card border-border/50 rounded-xl border p-6 shadow-sm">
         <div class="border-border/50 mb-8 border-b pb-8 text-center">

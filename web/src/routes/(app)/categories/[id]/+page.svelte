@@ -103,7 +103,11 @@
       </a>
 
       {#if editing}
-        <div
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            handleSaveEdit();
+          }}
           class="bg-card border-border/50 flex flex-1 flex-col gap-4 rounded-xl border p-4 shadow-sm"
         >
           <input
@@ -111,6 +115,7 @@
             bind:value={editName}
             class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
             placeholder="Name"
+            autofocus
           />
           <textarea
             bind:value={editDescription}
@@ -123,12 +128,9 @@
               class="h-10 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
             />
             <div class="ml-auto flex gap-2">
+              <button type="submit" class="btn btn-sm">Save</button>
               <button
-                onclick={handleSaveEdit}
-                class="btn btn-sm bg-primary text-primary-foreground hover:bg-primary/90"
-                >Save</button
-              >
-              <button
+                type="button"
                 onclick={() => {
                   editing = false;
                   editName = category!.title;
@@ -139,7 +141,7 @@
               >
             </div>
           </div>
-        </div>
+        </form>
       {:else}
         <div
           class="h-8 w-8 shrink-0 rounded-full shadow-sm"
