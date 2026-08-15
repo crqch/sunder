@@ -1,8 +1,9 @@
 <script lang="ts">
   import { authStore, logout } from '$lib/auth';
-  import { syncAll } from '$lib/sync';
+  import { syncAll, getUnsyncedChanges, clearLocalDatabase } from '$lib/sync';
   import { LogOut, RefreshCw } from '@lucide/svelte';
   import { toast } from 'svelte-sonner';
+  import Modal from '$components/Modal.svelte';
 
   let lastSync = $state(
     typeof window !== 'undefined'
@@ -10,6 +11,37 @@
       : 'Never'
   );
   let syncing = $state(false);
+
+  let logoutModalOpen = $state(false);
+  let unsyncedCount = $state(0);
+
+  async function handleLogoutClick() {
+    try {
+      const unsynced = await getUnsyncedChanges();
+      unsyncedCount =
+        unsynced.accounts.length + unsynced.categories.length + unsynced.entries.length;
+
+      if (unsyncedCount > 0) {
+        logoutModalOpen = true;
+      } else {
+        await executeLogout();
+      }
+    } catch (err) {
+      console.error('Failed to check sync status', err);
+      // Fallback: just try to logout anyway if something is catastrophically broken
+      await executeLogout();
+    }
+  }
+
+  async function executeLogout() {
+    await clearLocalDatabase();
+    logout();
+  }
+
+  async function handleLogoutAndSync() {
+    await handleSync();
+    await executeLogout();
+  }
 
   async function handleSync() {
     syncing = true;
@@ -47,7 +79,7 @@
     </div>
 
     <div class="pt-4">
-      <button onclick={logout} class="btn btn-destructive btn-sm gap-2">
+      <button onclick={handleLogoutClick} class="btn btn-destructive btn-sm gap-2">
         <LogOut size={14} /> Logout
       </button>
     </div>
@@ -69,3 +101,35 @@
     <p>Sunder v1.0.0</p>
   </div>
 </div>
+
+<Modal bind:open={logoutModalOpen} title="Unsynced Changes Detected">
+  <div class="space-y-4">
+    <p class="text-sm">
+      You have <strong class="text-foreground font-semibold"
+        >{unsyncedCount} unsynced changes</strong
+      >. If you log out now without syncing, these changes will be permanently lost from your
+      device.
+    </p>
+    <div class="flex flex-col gap-2 pt-2 sm:flex-row">
+      <button onclick={handleLogoutAndSync} disabled={syncing} class="btn flex-1 gap-2">
+        {#if syncing}
+          <RefreshCw size={14} class="animate-spin" /> Syncing...
+        {:else}
+          <RefreshCw size={14} /> Sync & Logout
+        {/if}
+      </button>
+      <button
+        onclick={executeLogout}
+        class="btn-outline border-destructive/50 hover:bg-destructive/10 text-destructive flex-1"
+      >
+        Discard & Logout
+      </button>
+    </div>
+    <button
+      onclick={() => (logoutModalOpen = false)}
+      class="btn-outline text-muted-foreground w-full"
+    >
+      Cancel
+    </button>
+  </div>
+</Modal>

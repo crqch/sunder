@@ -54,3 +54,25 @@ export async function syncAll() {
   localStorage.setItem(LAST_SYNC_KEY, now);
   return serverData;
 }
+
+export async function getUnsyncedChanges() {
+  let lastSync = localStorage.getItem(LAST_SYNC_KEY);
+  if (!lastSync || lastSync === '0') {
+    lastSync = EPOCH;
+  }
+
+  const accounts = await db.accounts.filter((a) => a.updated_at > lastSync!).toArray();
+  const categories = await db.entry_categories.filter((c) => c.updated_at > lastSync!).toArray();
+  const entries = await db.account_entries.filter((e) => e.updated_at > lastSync!).toArray();
+
+  return { accounts, categories, entries };
+}
+
+export async function clearLocalDatabase() {
+  await db.transaction('rw', db.accounts, db.entry_categories, db.account_entries, async () => {
+    await db.accounts.clear();
+    await db.entry_categories.clear();
+    await db.account_entries.clear();
+  });
+  localStorage.removeItem(LAST_SYNC_KEY);
+}
