@@ -1,5 +1,6 @@
 <script lang="ts">
   import { login } from '$lib/auth';
+  import { syncAll } from '$lib/sync';
   import { goto } from '$app/navigation';
 
   let loginField = $state('');
@@ -20,6 +21,11 @@
 
     try {
       await login(loginField, password);
+      try {
+        await syncAll();
+      } catch (syncErr) {
+        console.error('Initial sync after login failed:', syncErr);
+      }
       goto('/dashboard');
     } catch (err: any) {
       error = err.message || 'Login failed. Please try again.';
