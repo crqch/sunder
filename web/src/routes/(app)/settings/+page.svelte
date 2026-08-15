@@ -1,6 +1,7 @@
 <script lang="ts">
   import { authStore, logout } from '$lib/auth';
   import { syncAll, getUnsyncedChanges, clearLocalDatabase } from '$lib/sync';
+  import { syncState } from '$lib/syncState.svelte';
   import { LogOut, RefreshCw } from '@lucide/svelte';
   import { toast } from 'svelte-sonner';
   import Modal from '$components/Modal.svelte';
@@ -60,6 +61,18 @@
       syncing = false;
     }
   }
+
+  function handleAutoSyncToggle(e: Event) {
+    const checked = (e.target as HTMLInputElement).checked;
+    syncState.autoSyncEnabled = checked;
+    localStorage.setItem('sunder_auto_sync', checked.toString());
+  }
+
+  function handleIntervalChange(e: Event) {
+    const val = parseInt((e.target as HTMLSelectElement).value);
+    syncState.autoSyncInterval = val;
+    localStorage.setItem('sunder_auto_sync_interval', val.toString());
+  }
 </script>
 
 <div class="space-y-8 font-sans">
@@ -89,16 +102,55 @@
     </div>
   </div>
 
-  <div class="bg-card border-border/50 space-y-4 rounded-xl border p-6 shadow-sm">
-    <h2 class="border-border/50 mb-4 border-b pb-2 text-lg font-semibold tracking-tight">
-      Data & Sync
-    </h2>
-    <p class="text-muted-foreground mb-4 text-sm font-medium">Last synced: {lastSync}</p>
+  <div class="bg-card border-border/50 space-y-6 rounded-xl border p-6 shadow-sm">
+    <h2 class="border-border/50 border-b pb-2 text-lg font-semibold tracking-tight">Data & Sync</h2>
 
-    <button onclick={handleSync} disabled={syncing} class="btn btn-sm gap-2 disabled:opacity-50">
-      <RefreshCw size={14} class={syncing ? 'animate-spin' : ''} />
-      {syncing ? 'Syncing...' : 'Sync Now'}
-    </button>
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="font-medium">Background Auto-Sync</h3>
+          <p class="text-muted-foreground text-sm">Automatically back up your changes.</p>
+        </div>
+        <label class="relative inline-flex cursor-pointer items-center">
+          <input
+            type="checkbox"
+            checked={syncState.autoSyncEnabled}
+            onchange={handleAutoSyncToggle}
+            class="peer sr-only"
+          />
+          <div
+            class="peer bg-muted peer-focus:ring-primary/50 peer-checked:bg-primary h-6 w-11 rounded-full peer-focus:ring-2 peer-focus:outline-none after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"
+          ></div>
+        </label>
+      </div>
+
+      {#if syncState.autoSyncEnabled}
+        <div class="flex items-center justify-between">
+          <label for="sync-interval" class="text-muted-foreground text-sm font-medium"
+            >Sync Interval</label
+          >
+          <select
+            id="sync-interval"
+            value={syncState.autoSyncInterval}
+            onchange={handleIntervalChange}
+            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary rounded-md border p-1 text-sm focus:ring-2 focus:outline-none"
+          >
+            <option value={1}>Every 1 minute</option>
+            <option value={5}>Every 5 minutes</option>
+            <option value={15}>Every 15 minutes</option>
+            <option value={60}>Every 1 hour</option>
+          </select>
+        </div>
+      {/if}
+    </div>
+
+    <div class="border-border/50 border-t pt-4">
+      <p class="text-muted-foreground mb-4 text-sm font-medium">Last synced: {lastSync}</p>
+      <button onclick={handleSync} disabled={syncing} class="btn btn-sm gap-2 disabled:opacity-50">
+        <RefreshCw size={14} class={syncing ? 'animate-spin' : ''} />
+        {syncing ? 'Syncing...' : 'Sync Now'}
+      </button>
+    </div>
   </div>
 
   <div class="text-muted-foreground mt-12 text-center text-xs font-medium">

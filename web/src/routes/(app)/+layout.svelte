@@ -6,6 +6,7 @@
   import { Home, Wallet, Tags, Settings, List, Menu, X } from '@lucide/svelte';
   import favicon from '$lib/assets/favicon.svg';
   import ThemeButton from '$components/ThemeButton.svelte';
+  import SyncIndicator from '$components/SyncIndicator.svelte';
   import { themeStore } from '$lib/themeStore';
   import { Toaster } from 'svelte-sonner';
 
@@ -192,47 +193,54 @@
         </button>
       </div>
 
-      <nav class="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-6 md:gap-1 md:px-3 md:py-4">
+      <nav class="flex-1 space-y-1.5 overflow-y-auto px-4 py-4 md:px-3">
         {#each navItems as item, i}
           <a
             href={item.href}
-            onclick={() => (sidebarOpen = false)}
-            use:tooltip={{ text: item.name, keys: ['Alt', String(i + 1)] }}
-            class="flex items-center justify-start gap-4 rounded-md border px-4 py-3 transition-all md:gap-3 md:px-3 md:py-2 {currentPath.startsWith(
+            class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all {currentPath.startsWith(
               item.href
             )
-              ? 'bg-primary/10 text-primary border-primary/20'
-              : 'text-muted-foreground hover:bg-muted hover:border-border hover:text-foreground border-transparent'}"
+              ? 'bg-primary/10 text-primary font-semibold'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground font-medium'}"
+            use:tooltip={{ text: item.name, keys: ['Alt', String(i + 1)] }}
+            onclick={() => (sidebarOpen = false)}
           >
             <svelte:component this={item.icon} size={20} class="shrink-0 md:h-[18px] md:w-[18px]" />
             <span class="text-base font-medium md:text-sm">{item.name}</span>
           </a>
         {/each}
       </nav>
-      <div class="border-border flex justify-start border-t p-4 md:p-3">
+      <div class="border-border flex flex-col justify-start border-t p-4 md:p-3">
+        <SyncIndicator mode="sidebar" />
         <ThemeButton class="flex w-full items-center justify-center gap-3 py-2" showText={true} />
       </div>
     </aside>
 
-    <main class="bg-background relative flex flex-1 flex-col overflow-y-auto">
-      <!-- Mobile Header -->
-      <div
-        class="border-border/50 bg-card sticky top-0 z-30 flex items-center gap-3 border-b p-3 md:hidden"
+    <div class="relative flex-1 overflow-hidden">
+      <header
+        class="bg-card border-border flex items-center justify-between border-b px-4 py-3 md:hidden"
       >
+        <div class="flex items-center gap-3">
+          <img src={favicon} alt="Sunder Logo" class="h-8 w-8" />
+          <span class="text-xl font-bold tracking-tight">Sunder</span>
+        </div>
         <button
           onclick={() => (sidebarOpen = true)}
-          class="text-muted-foreground hover:bg-muted rounded-md p-1 transition-colors"
+          class="text-muted-foreground hover:bg-muted rounded-md p-1"
         >
-          <Menu size={18} />
+          <Menu size={24} />
         </button>
-        <span class="text-base font-semibold tracking-tight">Sunder</span>
-      </div>
+      </header>
 
-      <div class="mx-auto w-full max-w-5xl p-6 md:p-10">
-        {@render children()}
-      </div>
-    </main>
+      <main class="bg-background/50 relative h-full overflow-y-auto">
+        <div class="mx-auto h-full max-w-7xl p-4 pb-20 md:p-8 md:pb-24">
+          {@render children()}
+        </div>
+      </main>
+    </div>
   </div>
+
+  <SyncIndicator />
 
   <Modal bind:open={modals.createAccount} isDirty={accountDirty} title="Create New Account">
     <AccountForm
