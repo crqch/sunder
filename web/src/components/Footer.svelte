@@ -18,8 +18,8 @@
           <span class="text-foreground text-xl font-black tracking-widest">SUNDER</span>
         </a>
         <p class="text-muted-foreground max-w-sm text-sm leading-relaxed">
-          Local-first personal finance and expense tracking. Total control over your data
-          with instant offline responsiveness and multi-device sync.
+          Local-first personal finance and expense tracking. Total control over your data with
+          instant offline responsiveness and multi-device sync.
         </p>
       </div>
 
@@ -59,7 +59,7 @@
           </li>
           <li>
             <a
-              href="https://github.com"
+              href="https://github.com/crqch/sunder"
               target="_blank"
               rel="noopener noreferrer"
               class="hover:text-foreground flex items-center gap-1 transition-colors"
@@ -79,15 +79,6 @@
       <p>© {new Date().getFullYear()} Sunder. Open source under MIT.</p>
       <div class="flex items-center gap-6">
         <a href="#privacy" class="hover:text-foreground transition-colors">Privacy</a>
-        <a
-          href="https://github.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="hover:text-foreground flex items-center gap-1 transition-colors"
-        >
-          <SiGithub class="size-4" />
-          <span>GitHub</span>
-        </a>
       </div>
     </div>
   </div>
