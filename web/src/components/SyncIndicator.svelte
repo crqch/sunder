@@ -222,7 +222,7 @@
             </button>
           </div>
           <div class="space-y-3">
-            {#snippet changeItem(item: any, labelField: string)}
+            {#snippet changeItem(item: any, labelField: string, baseHref: string)}
               {@const isDeleted = !!item.deleted_at}
               {@const lastSync = localStorage.getItem('sunder_last_sync_timestamp') || '1970-01-01'}
               {@const isCreated = item.created_at > lastSync}
@@ -233,18 +233,27 @@
                     >Deleted</span
                   >
                   <span class="text-muted-foreground line-through">{item[labelField]}</span>
-                {:else if isCreated}
-                  <span
-                    class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-emerald-500 uppercase"
-                    >Created</span
-                  >
-                  <span>{item[labelField]}</span>
                 {:else}
-                  <span
-                    class="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-amber-500 uppercase"
-                    >Updated</span
+                  {#if isCreated}
+                    <span
+                      class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-emerald-500 uppercase"
+                      >Created</span
+                    >
+                  {:else}
+                    <span
+                      class="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-amber-500 uppercase"
+                      >Updated</span
+                    >
+                  {/if}
+                  <a
+                    href="{baseHref}/{item.id}"
+                    class="hover:text-primary cursor-pointer transition-colors hover:underline"
+                    onclick={() => {
+                      showDetails = false;
+                    }}
                   >
-                  <span>{item[labelField]}</span>
+                    {item[labelField]}
+                  </a>
                 {/if}
               </li>
             {/snippet}
@@ -256,7 +265,7 @@
                 </p>
                 <ul class="space-y-1.5 text-sm">
                   {#each unsyncedData.accounts as item}
-                    {@render changeItem(item, 'name')}
+                    {@render changeItem(item, 'name', '/accounts')}
                   {/each}
                 </ul>
               </div>
@@ -268,7 +277,7 @@
                 </p>
                 <ul class="space-y-1.5 text-sm">
                   {#each unsyncedData.categories as item}
-                    {@render changeItem(item, 'title')}
+                    {@render changeItem(item, 'title', '/categories')}
                   {/each}
                 </ul>
               </div>
@@ -280,7 +289,7 @@
                 </p>
                 <ul class="space-y-1.5 text-sm">
                   {#each unsyncedData.entries as item}
-                    {@render changeItem(item, 'title')}
+                    {@render changeItem(item, 'title', '/entries')}
                   {/each}
                 </ul>
               </div>
