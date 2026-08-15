@@ -1,6 +1,5 @@
 // Use VITE_ prefix so the env var is available in the browser via import.meta.env
-export const API_BASE_URL =
-  typeof window !== 'undefined' ? '/api' : import.meta.env.VITE_API_URL || 'http://localhost:4000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
