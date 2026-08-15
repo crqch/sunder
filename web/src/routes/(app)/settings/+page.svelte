@@ -39,8 +39,10 @@
   }
 
   async function handleLogoutAndSync() {
-    await handleSync();
-    await executeLogout();
+    const success = await handleSync();
+    if (success) {
+      await executeLogout();
+    }
   }
 
   async function handleSync() {
@@ -49,9 +51,11 @@
       await syncAll();
       lastSync = localStorage.getItem('sunder_last_sync_timestamp') || new Date().toISOString();
       toast.success('Sync completed successfully!');
+      return true;
     } catch (err) {
       console.error('Sync failed', err);
       toast.error('Sync failed. Please try again.');
+      return false;
     } finally {
       syncing = false;
     }
