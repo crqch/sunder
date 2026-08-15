@@ -6,6 +6,7 @@
   import { Home, Wallet, Tags, Settings } from '@lucide/svelte';
   import favicon from '$lib/assets/favicon.svg';
   import ThemeButton from '$components/ThemeButton.svelte';
+  import { Toaster } from 'svelte-sonner';
 
   let { children } = $props();
 
@@ -23,12 +24,16 @@
     { name: 'Categories', href: '/categories', icon: Tags },
     { name: 'Settings', href: '/settings', icon: Settings }
   ];
+
+  let lastLogoClickTime = 0;
 </script>
 
 <svelte:head>
   <title>Sunder</title>
   <link rel="icon" href={favicon} />
 </svelte:head>
+
+<Toaster richColors position="top-right" />
 
 {#if $authStore.loading || !$authStore.isAuthenticated}
   <div class="bg-background text-foreground flex min-h-screen items-center justify-center">
@@ -41,6 +46,14 @@
     >
       <a
         href="/dashboard"
+        onclick={(e) => {
+          const now = Date.now();
+          if (now - lastLogoClickTime < 3000) {
+            e.preventDefault();
+            goto('/');
+          }
+          lastLogoClickTime = now;
+        }}
         class="border-border group flex h-16 items-center justify-center border-b md:justify-start md:px-6"
       >
         <img

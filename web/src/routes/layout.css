@@ -138,26 +138,37 @@
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+  button {
+    @apply cursor-pointer;
+  }
 }
 
 @layer components {
   .btn {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90 border-primary-foreground/40 inline-flex w-fit items-center justify-center self-center rounded-none border px-4 py-2 shadow-sm transition-all hover:shadow-md;
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 border-primary-foreground/40 inline-flex w-fit cursor-pointer items-center justify-center self-center rounded-none border px-4 py-2 shadow-sm transition-all hover:shadow-md;
   }
 
   .btn-outline {
-    @apply border-border text-foreground hover:bg-muted rounded-none border bg-transparent shadow-sm transition-colors;
+    @apply border-border text-foreground hover:bg-muted cursor-pointer rounded-none border bg-transparent shadow-sm transition-colors;
   }
 
   .btn-ghost {
-    @apply text-foreground hover:bg-muted rounded-none bg-transparent transition-colors;
+    @apply text-foreground hover:bg-muted cursor-pointer rounded-none bg-transparent transition-colors;
   }
 
   .btn-destructive {
-    @apply bg-destructive text-destructive-foreground border-destructive-foreground/20 hover:bg-destructive/90 inline-flex w-fit items-center justify-center self-center rounded-none border px-4 py-2 shadow-sm transition-all hover:shadow-md;
+    @apply bg-destructive text-destructive-foreground border-destructive-foreground/20 hover:bg-destructive/90 inline-flex w-fit cursor-pointer items-center justify-center self-center rounded-none border px-4 py-2 shadow-sm transition-all hover:shadow-md;
   }
 
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
+  }
+
+  .btn-icon {
+    @apply border-border/50 text-foreground hover:bg-muted inline-flex aspect-square cursor-pointer items-center justify-center rounded-none border bg-transparent p-2 transition-colors;
+  }
+
+  .btn-icon-destructive {
+    @apply border-border/50 text-destructive hover:bg-destructive/10 hover:border-destructive/30 inline-flex aspect-square cursor-pointer items-center justify-center rounded-none border bg-transparent p-2 transition-colors;
   }
 }
