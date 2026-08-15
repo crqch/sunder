@@ -9,7 +9,7 @@ export const db = new Dexie('sunder-db') as Dexie & {
 
 db.version(1).stores({
   accounts: 'id, name, deleted_at, created_at, updated_at',
-  entry_categories: 'id, name, description, color, deleted_at, created_at, updated_at',
+  entry_categories: 'id, title, description, color, deleted_at, created_at, updated_at',
   account_entries:
     'id, account_id, category_id, title, description, location, amount, deleted_at, created_at, updated_at'
 });

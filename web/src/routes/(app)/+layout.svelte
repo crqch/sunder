@@ -252,6 +252,8 @@
   <Modal bind:open={modals.createEntry} isDirty={entryDirty} title="Create New Entry">
     <EntryForm
       bind:isDirty={entryDirty}
+      initialAccountId={$page.route.id === '/(app)/accounts/[id]' ? $page.params.id : undefined}
+      initialCategoryId={$page.route.id === '/(app)/categories/[id]' ? $page.params.id : undefined}
       onsuccess={(id) => {
         modals.createEntry = false;
         goto(`/entries/${id}`);

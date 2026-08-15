@@ -16,7 +16,7 @@
   });
   let searchQuery = $state('');
   let filteredCategories = $derived(
-    categories.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    categories.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 </script>
 
@@ -66,7 +66,7 @@
               class="h-4 w-4 rounded-full shadow-sm"
               style="background-color: {category.color}"
             ></div>
-            <h2 class="truncate text-lg font-medium tracking-tight">{category.name}</h2>
+            <h2 class="truncate text-lg font-medium tracking-tight">{category.title}</h2>
           </div>
           {#if category.description}
             <p class="text-muted-foreground line-clamp-2 text-sm">{category.description}</p>

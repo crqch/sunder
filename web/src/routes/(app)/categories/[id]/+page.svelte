@@ -4,8 +4,10 @@
   import { db } from '$lib/db';
   import type { EntryCategory, AccountEntry, Account } from '$lib/types';
   import { goto } from '$app/navigation';
-  import { Trash2, Pencil, Check, X, ArrowLeft } from '@lucide/svelte';
+  import { Trash2, Pencil, Check, X, ArrowLeft, Plus } from '@lucide/svelte';
   import { toast } from 'svelte-sonner';
+  import Modal from '$components/Modal.svelte';
+  import EntryForm from '$components/EntryForm.svelte';
 
   let id = $derived($page.params.id);
 
@@ -18,6 +20,8 @@
   let editDescription = $state('');
   let editColor = $state('');
 
+  let createEntryModalOpen = $state(false);
+
   $effect(() => {
     const subCat = liveQuery(() => db.entry_categories.get(id)).subscribe({
       next: (v) => {
@@ -26,7 +30,7 @@
         } else {
           category = v || null;
           if (category && !editing) {
-            editName = category.name;
+            editName = category.title;
             editDescription = category.description || '';
             editColor = category.color;
           }
@@ -72,7 +76,7 @@
   async function handleSaveEdit() {
     if (!category || !editName.trim()) return;
     await db.entry_categories.update(id, {
-      name: editName,
+      title: editName,
       description: editDescription.trim() || null,
       color: editColor,
       updated_at: new Date().toISOString()
@@ -127,7 +131,7 @@
               <button
                 onclick={() => {
                   editing = false;
-                  editName = category!.name;
+                  editName = category!.title;
                   editDescription = category!.description || '';
                   editColor = category!.color;
                 }}
@@ -142,7 +146,7 @@
           style="background-color: {category.color}"
         ></div>
         <div class="flex-1">
-          <h1 class="text-2xl font-semibold tracking-tight">{category.name}</h1>
+          <h1 class="text-2xl font-semibold tracking-tight">{category.title}</h1>
           {#if category.description}
             <p class="text-muted-foreground mt-0.5 text-sm">{category.description}</p>
           {/if}
@@ -160,14 +164,17 @@
 
     <div class="pt-4">
       <div class="border-border/50 mb-4 flex items-center justify-between border-b pb-2">
-        <h2 class="text-lg font-semibold tracking-tight">Entries using this category</h2>
+        <h2 class="text-lg font-semibold tracking-tight">Transactions</h2>
+        <button onclick={() => (createEntryModalOpen = true)} class="btn gap-2 text-sm">
+          <Plus size={16} /> Add Entry
+        </button>
       </div>
 
       {#if entries.length === 0}
         <div
           class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
         >
-          No entries use this category.
+          No transactions for this category yet.
         </div>
       {:else}
         <div class="space-y-2">
@@ -207,3 +214,14 @@
     </div>
   </div>
 {/if}
+
+<Modal bind:open={createEntryModalOpen} title="New Entry">
+  <EntryForm
+    initialCategoryId={id}
+    onsuccess={() => {
+      createEntryModalOpen = false;
+      toast.success('Entry created');
+    }}
+    oncancel={() => (createEntryModalOpen = false)}
+  />
+</Modal>

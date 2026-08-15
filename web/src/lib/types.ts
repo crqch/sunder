@@ -14,7 +14,7 @@ export type Account = {
 
 export type EntryCategory = {
   id: string;
-  name: string;
+  title: string;
   description: string | null;
   color: string;
   deleted_at: string | null;

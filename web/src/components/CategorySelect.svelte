@@ -70,7 +70,7 @@
     <div class="flex items-center gap-2">
       {#if selectedCat}
         <div class="h-3 w-3 rounded-full" style="background-color: {selectedCat.color}"></div>
-        <span>{selectedCat.name}</span>
+        <span>{selectedCat.title}</span>
       {:else}
         <span>Select Category...</span>
       {/if}
@@ -102,7 +102,7 @@
               : 'text-foreground'}"
           >
             <div class="h-3 w-3 rounded-full" style="background-color: {cat.color}"></div>
-            {cat.name}
+            {cat.title}
           </button>
         {/each}
         {#if categories.length === 0}

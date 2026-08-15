@@ -107,7 +107,7 @@
     return categories.find((c) => c.id === id)?.color || '#cccccc';
   }
   function getCategoryName(id: string) {
-    return categories.find((c) => c.id === id)?.name || 'Unknown';
+    return categories.find((c) => c.id === id)?.title || 'Unknown';
   }
   function getAccountName(id: string) {
     return accounts.find((a) => a.id === id)?.name || 'Unknown';

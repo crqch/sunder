@@ -13,12 +13,12 @@
     isDirty?: boolean;
   }>();
 
-  let name = $state('');
+  let title = $state('');
   let description = $state('');
   let color = $state('#ef4444');
 
   $effect(() => {
-    isDirty = name.trim() !== '' || description.trim() !== '' || color !== '#ef4444';
+    isDirty = title.trim() !== '' || description.trim() !== '' || color !== '#ef4444';
   });
 
   const PRESET_COLORS = [
@@ -41,13 +41,13 @@
 
   async function saveCategory(e: Event) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!title.trim()) return;
 
     const now = new Date().toISOString();
     const id = createId();
     const newCategory = {
       id,
-      name,
+      title,
       description: description.trim() || null,
       color,
       deleted_at: null,
@@ -62,13 +62,13 @@
 
 <form onsubmit={saveCategory} class="space-y-5">
   <div class="space-y-1.5">
-    <label for="cat-name" class="text-foreground block text-sm font-medium">Category Name</label>
+    <label for="cat-name" class="text-foreground block text-sm font-medium">Category Title</label>
     <input
       id="cat-name"
       type="text"
-      bind:value={name}
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
-      placeholder="e.g. Groceries, Rent, Salary"
+      bind:value={title}
+      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
+      placeholder="e.g., Groceries, Rent, Utilities..."
       required
       autofocus
     />

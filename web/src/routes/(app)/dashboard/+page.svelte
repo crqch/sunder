@@ -58,7 +58,7 @@
     return categories.find((c) => c.id === id)?.color || '#cccccc';
   }
   function getCategoryName(id: string) {
-    return categories.find((c) => c.id === id)?.name || 'Unknown';
+    return categories.find((c) => c.id === id)?.title || 'Unknown';
   }
 </script>
 
@@ -183,7 +183,7 @@
             {#each categorySpending as item}
               <div>
                 <div class="mb-1.5 flex justify-between text-sm font-medium">
-                  <span class="text-foreground">{item.category?.name || 'Unknown'}</span>
+                  <span class="text-foreground">{item.category?.title || 'Unknown'}</span>
                   <span class="text-muted-foreground">${item.amount.toFixed(2)}</span>
                 </div>
                 <div class="bg-muted h-2 w-full overflow-hidden rounded-full">
