@@ -2,6 +2,7 @@
   import { authStore, logout } from '$lib/auth';
   import { syncAll } from '$lib/sync';
   import { LogOut, RefreshCw } from '@lucide/svelte';
+  import { toast } from 'svelte-sonner';
 
   let lastSync = $state(
     typeof window !== 'undefined'
@@ -15,9 +16,10 @@
     try {
       await syncAll();
       lastSync = localStorage.getItem('sunder_last_sync_timestamp') || new Date().toISOString();
+      toast.success('Sync completed successfully!');
     } catch (err) {
       console.error('Sync failed', err);
-      alert('Sync failed. Please try again.');
+      toast.error('Sync failed. Please try again.');
     } finally {
       syncing = false;
     }

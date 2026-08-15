@@ -3,8 +3,11 @@
   import { db } from '$lib/db';
   import type { EntryCategory } from '$lib/types';
   import { Plus, ChevronRight } from '@lucide/svelte';
+  import Modal from '$components/Modal.svelte';
+  import CategoryForm from '$components/CategoryForm.svelte';
 
   let categories = $state<EntryCategory[]>([]);
+  let createModalOpen = $state(false);
 
   $effect(() => {
     const sub = liveQuery(() =>
@@ -17,9 +20,9 @@
 <div class="space-y-8 font-sans">
   <div class="border-border/50 flex items-center justify-between border-b pb-4">
     <h1 class="text-2xl font-semibold tracking-tight">Categories</h1>
-    <a href="/categories/create" class="btn gap-2 text-sm">
+    <button onclick={() => (createModalOpen = true)} class="btn gap-2 text-sm">
       <Plus size={16} /> Add
-    </a>
+    </button>
   </div>
 
   {#if categories.length === 0}
@@ -50,3 +53,10 @@
     </div>
   {/if}
 </div>
+
+<Modal bind:open={createModalOpen} title="Create New Category">
+  <CategoryForm
+    onsuccess={() => (createModalOpen = false)}
+    oncancel={() => (createModalOpen = false)}
+  />
+</Modal>

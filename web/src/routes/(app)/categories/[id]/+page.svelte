@@ -5,6 +5,7 @@
   import type { EntryCategory, AccountEntry, Account } from '$lib/types';
   import { goto } from '$app/navigation';
   import { Trash2, Pencil, Check, X, ArrowLeft } from '@lucide/svelte';
+  import { toast } from 'svelte-sonner';
 
   let id = $derived(Number($page.params.id));
 
@@ -55,7 +56,7 @@
     if (!category) return;
 
     if (entries.length > 0) {
-      alert(`Cannot delete category while it has ${entries.length} active entries.`);
+      toast.error(`Cannot delete category while it has ${entries.length} active entries.`);
       return;
     }
 
@@ -88,15 +89,12 @@
   <div class="text-muted-foreground p-12 text-center font-bold tracking-widest uppercase">
     Category not found or deleted.
     <br /><br />
-    <a href="/categories" class="btn border-border inline-block border-2">Back to Categories</a>
+    <a href="/categories" class="btn btn-outline inline-block">Back to Categories</a>
   </div>
 {:else}
   <div class="space-y-8 font-sans">
     <div class="border-border/50 flex items-center gap-4 border-b pb-4">
-      <a
-        href="/categories"
-        class="border-border/50 hover:bg-muted rounded-lg border p-2 transition-colors"
-      >
+      <a href="/categories" class="btn-icon">
         <ArrowLeft size={20} />
       </a>
 
@@ -123,7 +121,7 @@
             <div class="ml-auto flex gap-2">
               <button
                 onclick={handleSaveEdit}
-                class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-sm transition-colors"
+                class="btn btn-sm bg-primary text-primary-foreground hover:bg-primary/90"
                 >Save</button
               >
               <button
@@ -133,8 +131,7 @@
                   editDescription = category!.description || '';
                   editColor = category!.color;
                 }}
-                class="bg-card border-border/50 text-foreground hover:bg-muted rounded-lg border px-4 py-2 text-sm transition-colors"
-                >Cancel</button
+                class="btn-outline btn-sm">Cancel</button
               >
             </div>
           </div>
@@ -151,18 +148,10 @@
           {/if}
         </div>
         <div class="flex gap-2">
-          <button
-            onclick={() => (editing = true)}
-            class="border-border/50 hover:bg-muted rounded-lg border p-2 transition-colors"
-            title="Edit"
-          >
+          <button onclick={() => (editing = true)} class="btn-icon" title="Edit">
             <Pencil size={18} />
           </button>
-          <button
-            onclick={handleDelete}
-            class="border-border/50 text-destructive hover:bg-destructive/10 hover:border-destructive/30 rounded-lg border p-2 transition-colors"
-            title="Delete"
-          >
+          <button onclick={handleDelete} class="btn-icon-destructive" title="Delete">
             <Trash2 size={18} />
           </button>
         </div>

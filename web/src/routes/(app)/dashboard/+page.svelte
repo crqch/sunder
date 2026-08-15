@@ -3,10 +3,15 @@
   import { db } from '$lib/db';
   import type { Account, AccountEntry, EntryCategory } from '$lib/types';
   import { Plus, Wallet, ArrowRight } from '@lucide/svelte';
+  import Modal from '$components/Modal.svelte';
+  import EntryForm from '$components/EntryForm.svelte';
+  import AccountForm from '$components/AccountForm.svelte';
 
   let accounts = $state<Account[]>([]);
   let entries = $state<AccountEntry[]>([]);
   let categories = $state<EntryCategory[]>([]);
+  let createEntryModalOpen = $state(false);
+  let createAccountModalOpen = $state(false);
 
   $effect(() => {
     const subAccounts = liveQuery(() =>
@@ -68,12 +73,12 @@
   </div>
 
   <div class="flex flex-col gap-3 sm:flex-row">
-    <a href="/entries/create" class="btn flex-1 gap-2">
+    <button onclick={() => (createEntryModalOpen = true)} class="btn flex-1 gap-2">
       <Plus size={16} /> Add Entry
-    </a>
-    <a href="/accounts/create" class="btn btn-outline flex-1 gap-2">
+    </button>
+    <button onclick={() => (createAccountModalOpen = true)} class="btn btn-outline flex-1 gap-2">
       <Wallet size={16} /> Add Account
-    </a>
+    </button>
   </div>
 
   <div class="pt-4">
@@ -126,3 +131,17 @@
     {/if}
   </div>
 </div>
+
+<Modal bind:open={createEntryModalOpen} title="Create New Entry">
+  <EntryForm
+    onsuccess={() => (createEntryModalOpen = false)}
+    oncancel={() => (createEntryModalOpen = false)}
+  />
+</Modal>
+
+<Modal bind:open={createAccountModalOpen} title="Create New Account">
+  <AccountForm
+    onsuccess={() => (createAccountModalOpen = false)}
+    oncancel={() => (createAccountModalOpen = false)}
+  />
+</Modal>

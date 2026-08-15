@@ -5,6 +5,9 @@
   import type { AccountEntry, Account, EntryCategory } from '$lib/types';
   import { goto } from '$app/navigation';
   import { Trash2, Pencil, Check, X, ArrowLeft } from '@lucide/svelte';
+  import { toast } from 'svelte-sonner';
+  import AccountSelect from '$components/AccountSelect.svelte';
+  import CategorySelect from '$components/CategorySelect.svelte';
 
   let id = $derived(Number($page.params.id));
 
@@ -60,6 +63,30 @@
     };
   });
 
+  function handleAmountInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    let val = target.value;
+
+    if (val.includes('-')) {
+      editIsIncome = false;
+      val = val.replace(/-/g, '');
+    }
+    if (val.includes('+')) {
+      editIsIncome = true;
+      val = val.replace(/\+/g, '');
+    }
+
+    // Only allow numbers and one decimal point
+    val = val.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) {
+      val = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    editAmountStr = val;
+    target.value = val;
+  }
+
   async function handleDelete() {
     if (!entry) return;
     if (confirm('Are you sure you want to delete this entry?')) {
@@ -76,7 +103,7 @@
 
     let amount = Math.abs(parseFloat(editAmountStr));
     if (isNaN(amount) || amount === 0) {
-      alert('Please enter a valid amount.');
+      toast.error('Please enter a valid amount.');
       return;
     }
     if (!editIsIncome) amount = -amount;
@@ -109,35 +136,22 @@
   <div class="text-muted-foreground p-12 text-center font-bold tracking-widest uppercase">
     Entry not found or deleted.
     <br /><br />
-    <button onclick={() => history.back()} class="btn border-border inline-block border-2"
-      >Go Back</button
-    >
+    <button onclick={() => history.back()} class="btn btn-outline inline-block">Go Back</button>
   </div>
 {:else}
   <div class="mx-auto max-w-2xl space-y-6 font-sans">
     <div class="border-border/50 flex items-center gap-4 border-b pb-4">
-      <button
-        onclick={() => history.back()}
-        class="border-border/50 hover:bg-muted rounded-lg border p-2 transition-colors"
-      >
+      <button onclick={() => history.back()} class="btn-icon">
         <ArrowLeft size={20} />
       </button>
       <h1 class="flex-1 text-2xl font-semibold tracking-tight">Entry Details</h1>
 
       {#if !editing}
         <div class="flex gap-2">
-          <button
-            onclick={() => (editing = true)}
-            class="border-border/50 hover:bg-muted rounded-lg border p-2 transition-colors"
-            title="Edit"
-          >
+          <button onclick={() => (editing = true)} class="btn-icon" title="Edit">
             <Pencil size={18} />
           </button>
-          <button
-            onclick={handleDelete}
-            class="border-border/50 text-destructive hover:bg-destructive/10 hover:border-destructive/30 rounded-lg border p-2 transition-colors"
-            title="Delete"
-          >
+          <button onclick={handleDelete} class="btn-icon-destructive" title="Delete">
             <Trash2 size={18} />
           </button>
         </div>
@@ -168,9 +182,10 @@
         <div class="space-y-1.5">
           <label class="text-foreground block text-sm font-medium">Amount</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputmode="decimal"
             bind:value={editAmountStr}
+            oninput={handleAmountInput}
             class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-xl font-medium focus:ring-2 focus:outline-none"
             placeholder="Amount"
           />
@@ -186,28 +201,14 @@
           />
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="relative z-10 grid grid-cols-2 gap-4">
           <div class="space-y-1.5">
             <label class="text-foreground block text-sm font-medium">Account</label>
-            <select
-              bind:value={editAccountId}
-              class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full cursor-pointer rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-            >
-              {#each accounts as acc}
-                <option value={acc.id}>{acc.name}</option>
-              {/each}
-            </select>
+            <AccountSelect bind:value={editAccountId} {accounts} />
           </div>
           <div class="space-y-1.5">
             <label class="text-foreground block text-sm font-medium">Category</label>
-            <select
-              bind:value={editCategoryId}
-              class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full cursor-pointer rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-            >
-              {#each categories as cat}
-                <option value={cat.id}>{cat.name}</option>
-              {/each}
-            </select>
+            <CategorySelect bind:value={editCategoryId} {categories} />
           </div>
         </div>
 
@@ -239,16 +240,14 @@
         </div>
 
         <div class="flex gap-4 pt-4">
-          <button
-            onclick={handleSaveEdit}
-            class="bg-primary text-primary-foreground hover:bg-primary/90 flex flex-1 items-center justify-center gap-2 rounded-lg py-3 text-sm transition-colors"
+          <button onclick={handleSaveEdit} class="btn flex-1 gap-2 py-3"
             ><Check size={16} /> Save</button
           >
           <button
             onclick={() => {
               editing = false;
             }}
-            class="bg-card border-border/50 text-foreground hover:bg-muted flex flex-1 items-center justify-center gap-2 rounded-lg border py-3 text-sm transition-colors"
+            class="btn-outline flex flex-1 items-center justify-center gap-2 py-3"
             ><X size={16} /> Cancel</button
           >
         </div>

@@ -5,6 +5,8 @@
   import type { Account, AccountEntry, EntryCategory } from '$lib/types';
   import { goto } from '$app/navigation';
   import { Plus, Trash2, Pencil, Check, X, ArrowLeft } from '@lucide/svelte';
+  import Modal from '$components/Modal.svelte';
+  import EntryForm from '$components/EntryForm.svelte';
 
   let id = $derived(Number($page.params.id));
 
@@ -14,6 +16,7 @@
 
   let editing = $state(false);
   let editName = $state('');
+  let createEntryModalOpen = $state(false);
 
   $effect(() => {
     const subAcc = liveQuery(() => db.accounts.get(id)).subscribe({
@@ -79,15 +82,12 @@
   <div class="text-muted-foreground p-12 text-center font-bold tracking-widest uppercase">
     Account not found or deleted.
     <br /><br />
-    <a href="/accounts" class="btn border-border inline-block border-2">Back to Accounts</a>
+    <a href="/accounts" class="btn btn-outline inline-block">Back to Accounts</a>
   </div>
 {:else}
   <div class="space-y-8 font-sans">
     <div class="border-border/50 flex items-center gap-4 border-b pb-4">
-      <a
-        href="/accounts"
-        class="border-border/50 hover:bg-muted rounded-lg border p-2 transition-colors"
-      >
+      <a href="/accounts" class="btn-icon">
         <ArrowLeft size={20} />
       </a>
 
@@ -101,7 +101,7 @@
           />
           <button
             onclick={handleSaveEdit}
-            class="rounded-lg bg-emerald-500 p-2 text-white transition-colors hover:opacity-90"
+            class="btn-icon border-transparent bg-emerald-500 text-white hover:opacity-90"
           >
             <Check size={20} />
           </button>
@@ -110,7 +110,7 @@
               editing = false;
               editName = account!.name;
             }}
-            class="bg-destructive rounded-lg p-2 text-white transition-colors hover:opacity-90"
+            class="btn-icon bg-destructive border-transparent text-white hover:opacity-90"
           >
             <X size={20} />
           </button>
@@ -118,18 +118,10 @@
       {:else}
         <h1 class="flex-1 text-2xl font-semibold tracking-tight">{account.name}</h1>
         <div class="flex gap-2">
-          <button
-            onclick={() => (editing = true)}
-            class="border-border/50 hover:bg-muted rounded-lg border p-2 transition-colors"
-            title="Edit"
-          >
+          <button onclick={() => (editing = true)} class="btn-icon" title="Edit">
             <Pencil size={18} />
           </button>
-          <button
-            onclick={handleDelete}
-            class="border-border/50 text-destructive hover:bg-destructive/10 hover:border-destructive/30 rounded-lg border p-2 transition-colors"
-            title="Delete"
-          >
+          <button onclick={handleDelete} class="btn-icon-destructive" title="Delete">
             <Trash2 size={18} />
           </button>
         </div>
@@ -150,9 +142,9 @@
     <div class="pt-4">
       <div class="border-border/50 mb-4 flex items-center justify-between border-b pb-2">
         <h2 class="text-lg font-semibold tracking-tight">Transactions</h2>
-        <a href="/entries/create?account_id={account.id}" class="btn gap-2 text-sm">
+        <button onclick={() => (createEntryModalOpen = true)} class="btn gap-2 text-sm">
           <Plus size={16} /> Add Entry
-        </a>
+        </button>
       </div>
 
       {#if entries.length === 0}
@@ -204,4 +196,12 @@
       {/if}
     </div>
   </div>
+
+  <Modal bind:open={createEntryModalOpen} title="Create New Entry">
+    <EntryForm
+      initialAccountId={account.id}
+      onsuccess={() => (createEntryModalOpen = false)}
+      oncancel={() => (createEntryModalOpen = false)}
+    />
+  </Modal>
 {/if}
