@@ -110,7 +110,10 @@ export async function refreshAccessToken() {
   }
 
   const profileRes = await apiFetch('/dashboard/', {
-    credentials: 'include'
+    credentials: 'include',
+    headers: {
+      Authorization: `Bearer ${data.access_token}`
+    }
   });
 
   if (!profileRes.ok) {
@@ -165,7 +168,7 @@ export async function authenticatedFetch(
   }
 
   let headers = new Headers(options.headers || {});
-  // headers.set('Authorization', `Bearer ${state.accessToken}`);
+  headers.set('Authorization', `Bearer ${state.accessToken}`);
 
   if (typeof document !== 'undefined') {
     document.cookie = `authorization=${state.accessToken}; path=/`;
@@ -180,7 +183,7 @@ export async function authenticatedFetch(
   if (res.status === 401) {
     await refreshAccessToken();
     state = get(authStore);
-    // headers.set('Authorization', `Bearer ${state.accessToken}`);
+    headers.set('Authorization', `Bearer ${state.accessToken}`);
     if (typeof document !== 'undefined') {
       document.cookie = `authorization=${state.accessToken}; path=/`;
     }

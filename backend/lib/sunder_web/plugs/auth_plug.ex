@@ -7,10 +7,17 @@ defmodule SunderWeb.Plugs.AuthPlug do
 
   def init(opts), do: opts
 
+  defp get_token(conn) do
+    case get_req_header(conn, "authorization") do
+      ["Bearer " <> token] -> {:ok, token}
+      _ -> Map.fetch(conn.cookies, "authorization")
+    end
+  end
+
   def call(conn, _opts) do
     conn = fetch_cookies(conn)
 
-    with {:ok, token} <- Map.fetch(conn.cookies, "authorization"),
+    with {:ok, token} <- get_token(conn),
          %User{} = user <-
            Repo.one(
              from(u in User,
