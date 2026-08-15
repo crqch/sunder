@@ -10,23 +10,34 @@
   let {
     onsuccess,
     oncancel,
-    initialAccountId = 0
+    initialAccountId = 0,
+    isDirty = $bindable(false)
   } = $props<{
     onsuccess: (id: number) => void;
     oncancel?: () => void;
     initialAccountId?: number;
+    isDirty?: boolean;
   }>();
+
+  let title = $state('');
+  let amountStr = $state('');
+  let description = $state('');
+  let location = $state('');
+
+  $effect(() => {
+    isDirty =
+      title.trim() !== '' ||
+      amountStr !== '' ||
+      description.trim() !== '' ||
+      location.trim() !== '';
+  });
 
   let accounts = $state<Account[]>([]);
   let categories = $state<EntryCategory[]>([]);
 
-  let title = $state('');
-  let amountStr = $state('');
   let isIncome = $state(false);
   let account_id = $state(0);
   let category_id = $state(0);
-  let description = $state('');
-  let location = $state('');
 
   // Format: YYYY-MM-DDTHH:mm for datetime-local input
   let date = $state(new Date().toISOString().slice(0, 16));

@@ -1,18 +1,22 @@
 <script module lang="ts">
-  const modalStack: { close: () => void }[] = [];
+  const modalStack: { close: () => void; isDirty: () => boolean }[] = [];
 
   if (typeof window !== 'undefined') {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && modalStack.length > 0) {
+        const topModal = modalStack[modalStack.length - 1];
         const active = document.activeElement as HTMLElement;
         const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(active?.tagName);
 
-        if (isInput) {
+        if (!topModal.isDirty()) {
+          topModal.close();
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (isInput) {
           active.blur();
           e.preventDefault();
           e.stopPropagation();
         } else {
-          const topModal = modalStack[modalStack.length - 1];
           topModal.close();
           e.preventDefault();
           e.stopPropagation();
@@ -29,17 +33,20 @@
   let {
     open = $bindable(false),
     title,
+    isDirty = false,
     children
   } = $props<{
     open: boolean;
     title: string;
+    isDirty?: boolean;
     children: import('svelte').Snippet;
   }>();
 
   let modalRef = {
     close: () => {
       open = false;
-    }
+    },
+    isDirty: () => isDirty
   };
 
   $effect(() => {

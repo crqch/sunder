@@ -1,11 +1,13 @@
 <script lang="ts">
   import { themeStore } from '$lib/themeStore';
   import { Moon, Sun } from '@lucide/svelte';
+  import { tooltip } from '$lib/tooltip';
 
   let { class: className }: { class: string } = $props();
 </script>
 
 <button
+  use:tooltip={{ text: 'Toggle Theme', keys: ['Alt', 'T'] }}
   onclick={() => themeStore.set($themeStore === 'dark' ? 'light' : 'dark')}
   class={[
     'btn btn-md btn-outline flex flex-1 cursor-pointer items-center gap-3 py-2 md:hidden',
@@ -23,6 +25,7 @@
 </button>
 
 <button
+  use:tooltip={{ text: 'Toggle Theme', keys: ['Alt', 'T'] }}
   onclick={() => themeStore.set($themeStore === 'dark' ? 'light' : 'dark')}
   class={[
     'hover:text-base-content group relative flex h-6 w-26 cursor-pointer gap-2 overflow-hidden transition-colors not-md:hidden',

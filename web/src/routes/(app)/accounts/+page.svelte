@@ -3,12 +3,11 @@
   import { db } from '$lib/db';
   import type { Account, AccountEntry } from '$lib/types';
   import { Plus, ChevronRight } from '@lucide/svelte';
-  import Modal from '$components/Modal.svelte';
-  import AccountForm from '$components/AccountForm.svelte';
+  import { modals } from '$lib/modals.svelte';
+  import { tooltip } from '$lib/tooltip';
 
   let accounts = $state<Account[]>([]);
   let entries = $state<AccountEntry[]>([]);
-  let createModalOpen = $state(false);
 
   $effect(() => {
     const subAcc = liveQuery(() => db.accounts.filter((a) => !a.deleted_at).toArray()).subscribe({
@@ -31,7 +30,11 @@
 <div class="space-y-8 font-sans">
   <div class="border-border/50 flex items-center justify-between border-b pb-4">
     <h1 class="text-2xl font-semibold tracking-tight">Accounts</h1>
-    <button onclick={() => (createModalOpen = true)} class="btn gap-2 text-sm">
+    <button
+      use:tooltip={{ text: 'New Account', keys: ['Alt', 'N', 'A'] }}
+      onclick={() => (modals.createAccount = true)}
+      class="btn gap-2 text-sm"
+    >
       <Plus size={16} /> Add
     </button>
   </div>
@@ -72,10 +75,3 @@
     </div>
   {/if}
 </div>
-
-<Modal bind:open={createModalOpen} title="Create New Account">
-  <AccountForm
-    onsuccess={() => (createModalOpen = false)}
-    oncancel={() => (createModalOpen = false)}
-  />
-</Modal>

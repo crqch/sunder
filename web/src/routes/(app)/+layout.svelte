@@ -26,6 +26,99 @@
   ];
 
   let lastLogoClickTime = 0;
+
+  import AccountForm from '$components/AccountForm.svelte';
+  import CategoryForm from '$components/CategoryForm.svelte';
+  import EntryForm from '$components/EntryForm.svelte';
+  import Modal from '$components/Modal.svelte';
+  import { keybinds } from '$lib/keybinds.svelte';
+  import { tooltip } from '$lib/tooltip';
+  import { modals } from '$lib/modals.svelte';
+
+  let accountDirty = $state(false);
+  let categoryDirty = $state(false);
+  let entryDirty = $state(false);
+
+  $effect(() => {
+    let unregs = [
+      keybinds.register({
+        id: 'app.go_accounts',
+        name: 'Go to Accounts',
+        keys: ['alt+a'],
+        global: false,
+        action: () => goto('/accounts')
+      }),
+      keybinds.register({
+        id: 'app.new_account',
+        name: 'New Account',
+        keys: ['alt+n', 'a'],
+        global: false,
+        action: () => {
+          if (modals.createAccount && !accountDirty) modals.createAccount = false;
+          else modals.createAccount = true;
+        }
+      }),
+      keybinds.register({
+        id: 'app.new_category',
+        name: 'New Category',
+        keys: ['alt+n', 'c'],
+        global: false,
+        action: () => {
+          if (modals.createCategory && !categoryDirty) modals.createCategory = false;
+          else modals.createCategory = true;
+        }
+      }),
+      keybinds.register({
+        id: 'app.new_entry_space',
+        name: 'New Entry',
+        keys: ['alt+space'],
+        global: false,
+        action: () => {
+          if (modals.createEntry && !entryDirty) modals.createEntry = false;
+          else modals.createEntry = true;
+        }
+      }),
+      keybinds.register({
+        id: 'app.new_entry',
+        name: 'New Entry',
+        keys: ['alt+n', 'e'],
+        global: false,
+        action: () => {
+          if (modals.createEntry && !entryDirty) modals.createEntry = false;
+          else modals.createEntry = true;
+        }
+      }),
+      keybinds.register({
+        id: 'app.tab1',
+        name: 'Dashboard Tab',
+        keys: ['alt+1'],
+        global: false,
+        action: () => goto(navItems[0].href)
+      }),
+      keybinds.register({
+        id: 'app.tab2',
+        name: 'Accounts Tab',
+        keys: ['alt+2'],
+        global: false,
+        action: () => goto(navItems[1].href)
+      }),
+      keybinds.register({
+        id: 'app.tab3',
+        name: 'Categories Tab',
+        keys: ['alt+3'],
+        global: false,
+        action: () => goto(navItems[2].href)
+      }),
+      keybinds.register({
+        id: 'app.tab4',
+        name: 'Settings Tab',
+        keys: ['alt+4'],
+        global: false,
+        action: () => goto(navItems[3].href)
+      })
+    ];
+    return () => unregs.forEach((u) => u());
+  });
 </script>
 
 <svelte:head>
@@ -64,9 +157,10 @@
         <span class="ml-3 hidden text-lg font-semibold tracking-tight md:block">Sunder</span>
       </a>
       <nav class="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-4 md:px-3">
-        {#each navItems as item}
+        {#each navItems as item, i}
           <a
             href={item.href}
+            use:tooltip={{ text: item.name, keys: ['Alt', String(i + 1)] }}
             class="flex items-center justify-center gap-3 rounded-md border p-3 transition-all md:justify-start md:px-3 md:py-2 {currentPath.startsWith(
               item.href
             )
@@ -89,4 +183,37 @@
       </div>
     </main>
   </div>
+
+  <Modal bind:open={modals.createAccount} isDirty={accountDirty} title="Create New Account">
+    <AccountForm
+      bind:isDirty={accountDirty}
+      onsuccess={(id) => {
+        modals.createAccount = false;
+        goto(`/accounts/${id}`);
+      }}
+      oncancel={() => (modals.createAccount = false)}
+    />
+  </Modal>
+
+  <Modal bind:open={modals.createCategory} isDirty={categoryDirty} title="Create New Category">
+    <CategoryForm
+      bind:isDirty={categoryDirty}
+      onsuccess={(id) => {
+        modals.createCategory = false;
+        goto(`/categories/${id}`);
+      }}
+      oncancel={() => (modals.createCategory = false)}
+    />
+  </Modal>
+
+  <Modal bind:open={modals.createEntry} isDirty={entryDirty} title="Create New Entry">
+    <EntryForm
+      bind:isDirty={entryDirty}
+      onsuccess={(id) => {
+        modals.createEntry = false;
+        goto(`/entries/${id}`);
+      }}
+      oncancel={() => (modals.createEntry = false)}
+    />
+  </Modal>
 {/if}

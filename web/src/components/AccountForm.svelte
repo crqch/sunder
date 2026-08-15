@@ -2,12 +2,21 @@
   import { db } from '$lib/db';
   import { Save } from '@lucide/svelte';
 
-  let { onsuccess, oncancel } = $props<{
+  let {
+    onsuccess,
+    oncancel,
+    isDirty = $bindable(false)
+  } = $props<{
     onsuccess: (id: number) => void;
     oncancel?: () => void;
+    isDirty?: boolean;
   }>();
 
   let name = $state('');
+
+  $effect(() => {
+    isDirty = name.trim() !== '';
+  });
 
   async function saveAccount(e: Event) {
     e.preventDefault();

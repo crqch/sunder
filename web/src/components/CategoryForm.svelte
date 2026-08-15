@@ -2,14 +2,23 @@
   import { db } from '$lib/db';
   import { Save } from '@lucide/svelte';
 
-  let { onsuccess, oncancel } = $props<{
+  let {
+    onsuccess,
+    oncancel,
+    isDirty = $bindable(false)
+  } = $props<{
     onsuccess: (id: number) => void;
     oncancel?: () => void;
+    isDirty?: boolean;
   }>();
 
   let name = $state('');
   let description = $state('');
   let color = $state('#ef4444');
+
+  $effect(() => {
+    isDirty = name.trim() !== '' || description.trim() !== '' || color !== '#ef4444';
+  });
 
   const PRESET_COLORS = [
     '#ef4444',
