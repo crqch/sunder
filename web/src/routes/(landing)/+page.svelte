@@ -22,9 +22,6 @@
   } from '@lucide/svelte';
   import { authStore } from '$lib/auth';
 
-  // State for interactive demo tab on landing page
-  let activeTab = $state<'ledger' | 'accounts' | 'sync'>('ledger');
-
   // Demo mock data based on Sunder finance schemas
   const mockEntries = [
     {
@@ -68,37 +65,26 @@
       location: 'Artisan Cafe'
     }
   ];
-
-  const mockAccounts = [
-    {
-      name: 'Checking Account',
-      balance: 3420.5,
-      type: 'Liquid Cash',
-      entriesCount: 148,
-      change: '+12.4%'
-    },
-    {
-      name: 'Main Savings',
-      balance: 18500.0,
-      type: 'High Yield',
-      entriesCount: 24,
-      change: '+4.2%'
-    },
-    {
-      name: 'Credit Card',
-      balance: -450.25,
-      type: 'Revolving Line',
-      entriesCount: 39,
-      change: '-2.1%'
-    }
-  ];
 </script>
 
 <div
   class="mx-auto flex w-full max-w-7xl flex-col items-center gap-20 px-4 py-12 sm:px-6 lg:px-8 lg:py-16"
 >
   <!-- HERO SECTION -->
-  <section class="flex w-full flex-col items-center gap-8 pt-4 text-center">
+  <section
+    class="relative flex w-full flex-col items-center gap-8 overflow-hidden pt-12 pb-8 text-center"
+  >
+    <!-- Glowing Orbs Background -->
+    <div
+      class="pointer-events-none absolute top-1/3 left-1/2 -z-10 -translate-x-1/2 -translate-y-1/2"
+    >
+      <div
+        class="bg-primary/20 absolute top-[-10rem] left-[-20rem] h-[30rem] w-[30rem] animate-pulse rounded-full opacity-70 mix-blend-screen blur-[100px]"
+      ></div>
+      <div
+        class="absolute top-[5rem] left-[5rem] h-[25rem] w-[25rem] rounded-full bg-emerald-500/10 opacity-60 mix-blend-screen blur-[120px]"
+      ></div>
+    </div>
     <!-- Badge -->
     <div
       class="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all"
@@ -108,16 +94,13 @@
     </div>
 
     <!-- Main Headline -->
-    <div class="flex max-w-4xl flex-col items-center gap-4">
-      <h1 class="text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
-        Quit guessing where your <span
-          class="from-primary to-accent bg-gradient-to-r bg-clip-text text-transparent"
-          >money goes</span
-        >
+    <div class="relative z-10 flex max-w-4xl flex-col items-center gap-6">
+      <h1 class="text-5xl font-black tracking-tight drop-shadow-sm sm:text-6xl lg:text-7xl/tight">
+        Master your wealth at the <span class="text-primary drop-shadow-md">speed of thought</span>
       </h1>
-      <p class="text-muted-foreground max-w-2xl text-lg leading-relaxed sm:text-xl">
-        Sunder gives you instant financial clarity with zero loading delays. Manage accounts, log
-        expenses offline, and automatically sync across your web and mobile devices.
+      <p class="text-muted-foreground max-w-2xl text-lg leading-relaxed font-medium sm:text-xl">
+        Sunder delivers instant financial clarity with zero loading delays. Command your accounts,
+        log expenses offline, and experience frictionless sync across all your devices.
       </p>
     </div>
 
@@ -148,8 +131,12 @@
 
     <!-- Hero Visual Preview Card -->
     <div
-      class="border-border/80 bg-card/60 relative mt-6 w-full max-w-5xl rounded-2xl border p-4 shadow-2xl backdrop-blur-xl sm:p-6 lg:p-8"
+      class="shadow-primary/20 hover:shadow-primary/30 group relative mt-10 w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-4 shadow-2xl backdrop-blur-2xl transition-all duration-700 sm:p-6 lg:p-8"
     >
+      <!-- Glassmorphism shine effect -->
+      <div
+        class="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 transition-opacity duration-1000 group-hover:opacity-100"
+      ></div>
       <div class="flex flex-col gap-6">
         <!-- Top bar mockup -->
         <div
@@ -282,7 +269,7 @@
     <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
       <!-- Feature 1 -->
       <div
-        class="group border-border bg-card hover:border-primary/50 flex flex-col gap-4 rounded-2xl border p-6 shadow-sm transition-all hover:shadow-md"
+        class="group border-border/50 bg-card/30 hover:border-primary/50 hover:bg-card/50 flex flex-col gap-4 rounded-3xl border p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-1 hover:shadow-xl"
       >
         <div
           class="bg-primary/10 text-primary flex size-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
@@ -298,7 +285,7 @@
 
       <!-- Feature 2 -->
       <div
-        class="group border-border bg-card hover:border-primary/50 flex flex-col gap-4 rounded-2xl border p-6 shadow-sm transition-all hover:shadow-md"
+        class="group border-border/50 bg-card/30 hover:border-primary/50 hover:bg-card/50 flex flex-col gap-4 rounded-3xl border p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-1 hover:shadow-xl"
       >
         <div
           class="bg-primary/10 text-primary flex size-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
@@ -314,7 +301,7 @@
 
       <!-- Feature 3 -->
       <div
-        class="group border-border bg-card hover:border-primary/50 flex flex-col gap-4 rounded-2xl border p-6 shadow-sm transition-all hover:shadow-md"
+        class="group border-border/50 bg-card/30 hover:border-primary/50 hover:bg-card/50 flex flex-col gap-4 rounded-3xl border p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-1 hover:shadow-xl"
       >
         <div
           class="bg-primary/10 text-primary flex size-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
@@ -330,7 +317,7 @@
 
       <!-- Feature 4 -->
       <div
-        class="group border-border bg-card hover:border-primary/50 flex flex-col gap-4 rounded-2xl border p-6 shadow-sm transition-all hover:shadow-md"
+        class="group border-border/50 bg-card/30 hover:border-primary/50 hover:bg-card/50 flex flex-col gap-4 rounded-3xl border p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-1 hover:shadow-xl"
       >
         <div
           class="bg-primary/10 text-primary flex size-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
@@ -343,177 +330,6 @@
           data belongs exclusively to you—never sold or mined by advertisers.
         </p>
       </div>
-    </div>
-  </section>
-
-  <!-- INTERACTIVE DEMO / PREVIEW SECTION -->
-  <section
-    id="demo"
-    class="border-border bg-card/40 flex w-full flex-col gap-8 rounded-3xl border p-6 backdrop-blur-md sm:p-8 lg:p-12"
-  >
-    <div class="flex flex-col items-center gap-4 text-center">
-      <div
-        class="border-accent/40 bg-accent/10 text-accent-foreground inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold"
-      >
-        <Sparkles class="size-3.5" />
-        <span>Interactive Workspace Preview</span>
-      </div>
-      <h2 class="text-3xl font-black sm:text-4xl">Experience Sunder in Action</h2>
-      <p class="text-muted-foreground max-w-xl text-sm sm:text-base">
-        Explore how Sunder organizes your financial ledger, balances, and real-time synchronization.
-      </p>
-    </div>
-
-    <!-- Tabs Header -->
-    <div class="border-border/60 flex justify-center border-b">
-      <div class="flex gap-2 pb-2">
-        <button
-          onclick={() => (activeTab = 'ledger')}
-          class="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all {activeTab ===
-          'ledger'
-            ? 'bg-primary text-primary-foreground shadow'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
-        >
-          <Tag class="size-4" />
-          <span>Ledger Entries</span>
-        </button>
-
-        <button
-          onclick={() => (activeTab = 'accounts')}
-          class="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all {activeTab ===
-          'accounts'
-            ? 'bg-primary text-primary-foreground shadow'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
-        >
-          <Wallet class="size-4" />
-          <span>Accounts</span>
-        </button>
-
-        <button
-          onclick={() => (activeTab = 'sync')}
-          class="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all {activeTab ===
-          'sync'
-            ? 'bg-primary text-primary-foreground shadow'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
-        >
-          <Globe class="size-4" />
-          <span>Multi-Device Sync</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Tab Content -->
-    <div class="w-full">
-      {#if activeTab === 'ledger'}
-        <div class="flex flex-col gap-3">
-          <div class="flex items-center justify-between">
-            <h4 class="text-lg font-bold">Transaction Ledger</h4>
-            <span class="text-muted-foreground text-xs">{mockEntries.length} items logged</span>
-          </div>
-          <div class="grid gap-3">
-            {#each mockEntries as entry}
-              <div
-                class="border-border bg-background hover:border-primary/40 flex flex-col justify-between gap-4 rounded-xl border p-4 shadow-sm transition-all sm:flex-row sm:items-center"
-              >
-                <div class="flex items-center gap-3">
-                  <div
-                    class="bg-secondary text-secondary-foreground flex size-10 items-center justify-center rounded-xl font-bold"
-                  >
-                    {entry.title[0]}
-                  </div>
-                  <div class="flex flex-col">
-                    <span class="text-foreground font-bold">{entry.title}</span>
-                    <span class="text-muted-foreground text-xs"
-                      >{entry.account} • {entry.location}</span
-                    >
-                  </div>
-                </div>
-
-                <div class="flex items-center justify-between gap-4 sm:justify-end">
-                  <span
-                    class="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold {entry.color}"
-                  >
-                    {entry.category}
-                  </span>
-                  <span
-                    class="font-mono text-base font-extrabold {entry.amount > 0
-                      ? 'text-emerald-500'
-                      : 'text-foreground'}"
-                  >
-                    {entry.amount > 0 ? '+' : ''}{Math.abs(entry.amount).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </div>
-      {:else if activeTab === 'accounts'}
-        <div class="flex flex-col gap-4">
-          <div class="flex items-center justify-between">
-            <h4 class="text-lg font-bold">Managed Accounts</h4>
-            <span class="flex items-center gap-1 text-xs font-semibold text-emerald-500">
-              <CheckCircle2 class="size-3.5" /> All Accounts Active
-            </span>
-          </div>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {#each mockAccounts as acc}
-              <div
-                class="border-border bg-background flex flex-col justify-between gap-4 rounded-xl border p-5 shadow-sm"
-              >
-                <div class="flex items-center justify-between">
-                  <span class="text-muted-foreground text-sm font-semibold">{acc.type}</span>
-                  <span class="font-mono text-xs font-bold text-emerald-500">{acc.change}</span>
-                </div>
-                <div class="flex flex-col gap-1">
-                  <h5 class="text-foreground text-lg font-extrabold">{acc.name}</h5>
-                  <span class="text-foreground font-mono text-2xl font-black"
-                    >{acc.balance.toFixed(2)}</span
-                  >
-                </div>
-                <div
-                  class="border-border/60 text-muted-foreground flex justify-between border-t pt-3 text-xs"
-                >
-                  <span>{acc.entriesCount} transactions logged</span>
-                  <span>Active</span>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </div>
-      {:else}
-        <div class="flex flex-col items-center gap-6 py-6 text-center">
-          <div class="grid w-full max-w-4xl grid-cols-1 gap-6 md:grid-cols-3">
-            <!-- Box 1 -->
-            <div
-              class="border-border bg-background flex flex-col items-center gap-3 rounded-2xl border p-6"
-            >
-              <Smartphone class="text-primary size-8" />
-              <h4 class="font-bold">Mobile App</h4>
-              <p class="text-muted-foreground text-xs">
-                Capture receipts and log transactions instantly on the go.
-              </p>
-            </div>
-            <!-- Box 2 -->
-            <div
-              class="text-primary flex flex-col items-center justify-center gap-2 text-xs font-bold"
-            >
-              <RefreshCw class="text-primary size-6 animate-spin" />
-              <span>Real-Time Cloud Sync</span>
-              <span class="text-muted-foreground text-[10px]">Encrypted Background Channel</span>
-            </div>
-            <!-- Box 3 -->
-            <div
-              class="border-border bg-background flex flex-col items-center gap-3 rounded-2xl border p-6"
-            >
-              <Laptop class="text-accent-foreground size-8" />
-              <h4 class="font-bold">Web Dashboard</h4>
-              <p class="text-muted-foreground text-xs">
-                Review full budget reports, export data, and manage categories.
-              </p>
-            </div>
-          </div>
-        </div>
-      {/if}
     </div>
   </section>
 
@@ -562,100 +378,6 @@
         </p>
         <span class="text-primary mt-auto text-xs font-semibold">Cloud Sync Engine</span>
       </div>
-    </div>
-  </section>
-
-  <!-- HOW IT WORKS STEP-BY-STEP -->
-  <section class="flex w-full flex-col gap-12 pt-4">
-    <div class="flex flex-col items-center gap-4 text-center">
-      <h2 class="text-3xl font-black tracking-tight sm:text-4xl">How Sunder Works</h2>
-      <p class="text-muted-foreground max-w-xl text-base">
-        Get started in under 2 minutes with complete data clarity.
-      </p>
-    </div>
-
-    <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
-      <div
-        class="border-border bg-card/60 flex flex-col items-center gap-4 rounded-2xl border p-6 text-center"
-      >
-        <div
-          class="bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-full text-lg font-black shadow"
-        >
-          1
-        </div>
-        <h3 class="text-lg font-bold">Sign In or Redeem Invite</h3>
-        <p class="text-muted-foreground text-sm">
-          Log in to your account or enter your exclusive pass code to unlock your private vault.
-        </p>
-      </div>
-
-      <div
-        class="border-border bg-card/60 flex flex-col items-center gap-4 rounded-2xl border p-6 text-center"
-      >
-        <div
-          class="bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-full text-lg font-black shadow"
-        >
-          2
-        </div>
-        <h3 class="text-lg font-bold">Set Up Accounts & Categories</h3>
-        <p class="text-muted-foreground text-sm">
-          Add your checking, savings, and credit lines, and customize color-coded expense
-          categories.
-        </p>
-      </div>
-
-      <div
-        class="border-border bg-card/60 flex flex-col items-center gap-4 rounded-2xl border p-6 text-center"
-      >
-        <div
-          class="bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-full text-lg font-black shadow"
-        >
-          3
-        </div>
-        <h3 class="text-lg font-bold">Track & Sync Anywhere</h3>
-        <p class="text-muted-foreground text-sm">
-          Log spending with instant zero-lag feedback. Sunder keeps all your devices in sync
-          effortlessly.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <!-- FINAL CTA BANNER -->
-  <section
-    class="from-primary/20 via-card to-card border-primary/30 flex w-full flex-col items-center gap-8 rounded-3xl border bg-gradient-to-br p-8 text-center shadow-xl sm:p-12 lg:p-16"
-  >
-    <div class="flex max-w-2xl flex-col gap-4">
-      <h2 class="text-3xl font-extrabold sm:text-5xl">
-        Take control of your personal finances today
-      </h2>
-      <p class="text-muted-foreground text-base sm:text-lg">
-        Join Sunder to experience zero-lag speed, private invite-only security, and effortless
-        multi-account management.
-      </p>
-    </div>
-
-    <div class="flex flex-wrap items-center justify-center gap-4">
-      {#if $authStore.isAuthenticated}
-        <a
-          class="btn hover:shadow-primary/30 px-8 py-3 text-base font-semibold shadow-lg"
-          href="/dashboard"
-        >
-          <span>Go to Dashboard</span>
-          <ArrowRight class="ml-2 size-4" />
-        </a>
-      {:else}
-        <a
-          class="btn hover:shadow-primary/30 px-8 py-3 text-base font-semibold shadow-lg"
-          href="/auth/sign-in"
-        >
-          <span>Sign In to Dashboard</span>
-          <ArrowRight class="ml-2 size-4" />
-        </a>
-        <a class="btn btn-outline px-8 py-3 text-base font-semibold" href="/auth/sign-up">
-          <span>Sign Up with Invite</span>
-        </a>
-      {/if}
     </div>
   </section>
 </div>
