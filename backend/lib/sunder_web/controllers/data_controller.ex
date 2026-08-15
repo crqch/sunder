@@ -1,9 +1,19 @@
 defmodule SunderWeb.DataController do
   use SunderWeb, :controller
+  import SunderWeb.ApiMacros
   alias Sunder.Eco.{Account, Category, Entry}
   alias Sunder.Repo
   import Ecto.Query
 
+  authed_operation(:export,
+    summary: "Export all user data as JSON",
+    responses: [
+      ok: {
+        %{type: :object},
+        [description: "Sunder export data"]
+      }
+    ]
+  )
   def export(%{assigns: %{eco_user: eco_user}} = conn, _params) do
     accounts = Repo.all(from a in Account, where: a.eco_user_id == ^eco_user.id and is_nil(a.deleted_at))
     categories = Repo.all(from c in Category, where: c.eco_user_id == ^eco_user.id and is_nil(c.deleted_at))
@@ -37,6 +47,39 @@ defmodule SunderWeb.DataController do
     |> send_resp(200, Jason.encode!(data))
   end
 
+  authed_operation(:import,
+    summary: "Import Sunder JSON data",
+    request_body: {
+      "multipart/form-data",
+      %{
+        type: :object,
+        properties: %{
+          file: %{type: :string, format: :binary}
+        }
+      },
+      [required: true, description: "Sunder JSON file"]
+    },
+    responses: [
+      ok: {
+        %{
+          type: :object,
+          properties: %{
+            success: %{type: :boolean},
+            stats: %{
+              type: :object,
+              properties: %{
+                accounts: %{type: :integer},
+                categories: %{type: :integer},
+                entries: %{type: :integer}
+              }
+            }
+          }
+        },
+        [description: "Import successful"]
+      },
+      bad_request: {%{type: :object, properties: %{error: %{type: :string}}}, [description: "Invalid file"]}
+    ]
+  )
   def import(%{assigns: %{eco_user: eco_user}} = conn, %{"file" => %Plug.Upload{path: path}}) do
     case File.read(path) do
       {:ok, content} ->
@@ -52,6 +95,39 @@ defmodule SunderWeb.DataController do
     end
   end
 
+  authed_operation(:import_bagels,
+    summary: "Import Bagels SQLite data",
+    request_body: {
+      "multipart/form-data",
+      %{
+        type: :object,
+        properties: %{
+          file: %{type: :string, format: :binary}
+        }
+      },
+      [required: true, description: "Bagels SQLite database file"]
+    },
+    responses: [
+      ok: {
+        %{
+          type: :object,
+          properties: %{
+            success: %{type: :boolean},
+            stats: %{
+              type: :object,
+              properties: %{
+                accounts: %{type: :integer},
+                categories: %{type: :integer},
+                entries: %{type: :integer}
+              }
+            }
+          }
+        },
+        [description: "Import successful"]
+      },
+      internal_server_error: {%{type: :object, properties: %{error: %{type: :string}}}, [description: "Import failed"]}
+    ]
+  )
   def import_bagels(%{assigns: %{eco_user: eco_user}} = conn, %{"file" => %Plug.Upload{path: path}}) do
     case Sunder.Eco.BagelsImporter.import_db(eco_user.id, path) do
       {:ok, stats} -> json(conn, %{success: true, stats: stats})
