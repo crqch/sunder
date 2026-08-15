@@ -5,15 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
+    "build": "wrangler types && vite build",
+    "preview": "bun run build && wrangler dev",
     "prepare": "cd .. && husky ./web/.husky",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt:check": "oxfmt --check",
+    "gen": "wrangler types",
+    "deploy": "bun run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@icons-pack/svelte-simple-icons": "^7.2.0",
@@ -24,7 +27,7 @@
     "svelte-sonner": "^1.2.1"
   },
   "devDependencies": {
-    "@sveltejs/adapter-cloudflare": "^7.2.9",
+    "@sveltejs/adapter-cloudflare": "^7.2.8",
     "@sveltejs/kit": "^2.63.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.0",
@@ -36,7 +39,8 @@
     "svelte-check": "^4.6.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "wrangler": "^4.97.0"
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx,json,yaml,toml,html,css,md,vue,svelte}": "bunx oxfmt",

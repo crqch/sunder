@@ -11,6 +11,7 @@ export default defineConfig({
       typescript: {
         config: (config) => {
           config.compilerOptions.paths['$components/*'] = ['../src/components/*'];
+
           return config;
         }
       },
@@ -22,11 +23,7 @@ export default defineConfig({
       adapter: adapter()
     })
   ],
-  resolve: {
-    alias: {
-      $components: path.resolve('./src/components')
-    }
-  },
+  resolve: { alias: { $components: path.resolve('./src/components') } },
   server: {
     proxy: {
       '/api': {
