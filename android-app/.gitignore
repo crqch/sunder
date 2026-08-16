@@ -15,4 +15,4 @@ release
 .cxx
 local.properties
 secrets.properties
-openapi.json
+app/openapi.json
