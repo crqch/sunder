@@ -34,6 +34,23 @@ export default defineConfig({
         globPatterns: [
           'client/**/*.{js,css,ico,png,svg,webp,webmanifest}',
           'prerendered/**/*.{html,json}'
+        ],
+        additionalManifestEntries: [
+          { url: '/', revision: null },
+          { url: '/dashboard', revision: null }
+        ],
+        navigateFallback: '/dashboard',
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pages-cache',
+              cacheableResponse: {
+                statuses: [200]
+              }
+            }
+          }
         ]
       },
       manifest: {
