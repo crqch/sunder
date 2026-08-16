@@ -26,11 +26,24 @@ export default defineConfig({
     SvelteKitPWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
+      devOptions: {
+        enabled: true,
+        type: 'module'
+      },
+      workbox: {
+        globPatterns: [
+          'client/**/*.{js,css,ico,png,svg,webp,webmanifest}',
+          'prerendered/**/*.{html,json}'
+        ]
+      },
       manifest: {
         name: 'Sunder',
         short_name: 'Sunder',
         description: 'Sunder Application',
         theme_color: '#ffffff',
+        background_color: '#ffffff',
+        display: 'standalone',
+        start_url: '/dashboard',
         icons: [
           {
             src: 'pwa-64x64.png',
