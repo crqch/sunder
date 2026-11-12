@@ -1,0 +1,35 @@
+[package]
+name = "sunder-desktop"
+version = "0.1.0"
+edition = "2024"
+description = "A native GPUI client for Sunder"
+license = "MIT"
+publish = false
+
+[dependencies]
+anyhow = "1"
+chrono = "0.4"
+cuid2 = "0.1"
+directories = "6"
+gpui = "0.2.2"
+reqwest = { package = "zed-reqwest", version = "0.12.15-zed", default-features = false, features = ["json", "multipart", "rustls-tls-native-roots"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+unicode-segmentation = "1"
+
+[dev-dependencies]
+gpui = { version = "0.2.2", features = ["test-support"] }
+serde_json = "1"
+
+[patch.crates-io]
+# xattr 0.2.3 still references libc::ENOATTR, which was removed from libc's
+# Linux bindings. This is only pulled in by gpui's GitHub download helper,
+# but it still has to compile. The constant is an alias for ENODATA on Linux.
+xattr = { path = "vendor/xattr" }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
