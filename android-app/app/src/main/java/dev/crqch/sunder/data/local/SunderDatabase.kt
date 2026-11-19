@@ -1,12 +1,9 @@
 package dev.crqch.sunder.data.local
 
-import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import kotlin.jvm.java
 
 @Database(
     entities = [
@@ -65,23 +62,6 @@ abstract class SunderDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
-            }
-        }
-
-        @Volatile
-        private var INSTANCE: SunderDatabase? = null
-
-        fun getDatabase(context: Context): SunderDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    SunderDatabase::class.java,
-                    DATABASE_NAME
-                )
-                    .addMigrations(MIGRATION_3_4)
-                    .build()
-                INSTANCE = instance
-                instance
             }
         }
     }

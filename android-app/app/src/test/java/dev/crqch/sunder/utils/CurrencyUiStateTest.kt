@@ -55,4 +55,16 @@ class CurrencyUiStateTest {
         assertEquals("USD", state.currency(null).code)
         assertEquals("", state.currency("XXX").symbol)
     }
+
+    @Test
+    fun currency_resolvesDeactivatedCurrencyFromAllCurrencies() {
+        val plnInactive = CurrencyEntity("PLN", "Polish Zloty", "zł", true, 2, false)
+        val stateWithInactive = CurrencyUiState(
+            currencies = listOf(usd, eur),
+            allCurrencies = listOf(usd, eur, plnInactive),
+            defaultCurrencyCode = "USD"
+        )
+        assertEquals(plnInactive, stateWithInactive.currency("PLN"))
+        assertEquals("10.00 zł", stateWithInactive.format(10.0, "PLN"))
+    }
 }

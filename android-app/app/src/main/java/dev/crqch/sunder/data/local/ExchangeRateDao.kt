@@ -24,6 +24,9 @@ interface ExchangeRateDao {
     @Query("select min(rate_date) from exchange_rates")
     suspend fun getEarliestRateDate(): String?
 
+    @Query("select max(rate_date) from exchange_rates")
+    suspend fun getLatestRateDate(): String?
+
     @Insert(onConflict = REPLACE)
     suspend fun upsert(rate: ExchangeRateEntity)
 

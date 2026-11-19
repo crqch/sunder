@@ -14,7 +14,8 @@ import java.time.ZoneOffset
 data class CurrencyUiState(
     val currencies: List<CurrencyEntity> = emptyList(),
     val defaultCurrencyCode: String = CANONICAL_BASE_CURRENCY,
-    val ratesByDate: Map<String, Map<String, Double>> = emptyMap()
+    val ratesByDate: Map<String, Map<String, Double>> = emptyMap(),
+    val allCurrencies: List<CurrencyEntity> = currencies
 ) {
     val defaultCurrency: CurrencyEntity
         get() = currency(defaultCurrencyCode)
@@ -22,10 +23,11 @@ data class CurrencyUiState(
     val rateDayCount: Int
         get() = ratesByDate.size
 
-    /** Resolves cached metadata, falling back to a neutral placeholder until the catalog loads. */
+    /** Resolves cached metadata (including deactivated currencies), falling back to a neutral placeholder until the catalog loads. */
     fun currency(code: String?): CurrencyEntity {
         val normalized = normalizeCurrencyCode(code)
-        return currencies.firstOrNull { it.code.equals(normalized, ignoreCase = true) }
+        return allCurrencies.firstOrNull { it.code.equals(normalized, ignoreCase = true) }
+            ?: currencies.firstOrNull { it.code.equals(normalized, ignoreCase = true) }
             ?: fallback(normalized)
     }
 

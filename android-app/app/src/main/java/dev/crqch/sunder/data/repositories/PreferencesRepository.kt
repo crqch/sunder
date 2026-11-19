@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import dev.crqch.sunder.utils.normalizeCurrencyCode
@@ -48,6 +49,8 @@ class PreferencesRepository @Inject constructor(
         private val CURRENCY_SYMBOL = stringPreferencesKey("currency_symbol")
         private val CURRENCY_AFTER = booleanPreferencesKey("currency_after")
         private val DEFAULT_CURRENCY_CODE = stringPreferencesKey("default_currency_code")
+        private val PENDING_DEFAULT_CURRENCY_SYNC =
+            booleanPreferencesKey("pending_default_currency_sync")
         private val AUTO_SYNC_ENABLED = booleanPreferencesKey("auto_sync_enabled")
         private val AUTO_SYNC_INTERVAL = longPreferencesKey("auto_sync_interval")
     }
@@ -103,6 +106,13 @@ class PreferencesRepository @Inject constructor(
 
     suspend fun setDefaultCurrencyCode(code: String) {
         context.settingsDataStore.edit { it[DEFAULT_CURRENCY_CODE] = normalizeCurrencyCode(code) }
+    }
+
+    suspend fun hasPendingDefaultCurrencySync(): Boolean =
+        context.settingsDataStore.data.first()[PENDING_DEFAULT_CURRENCY_SYNC] ?: false
+
+    suspend fun setPendingDefaultCurrencySync(pending: Boolean) {
+        context.settingsDataStore.edit { it[PENDING_DEFAULT_CURRENCY_SYNC] = pending }
     }
 
     suspend fun setAutoSyncEnabled(enabled: Boolean) {

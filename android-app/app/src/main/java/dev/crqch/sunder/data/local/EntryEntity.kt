@@ -19,6 +19,6 @@ data class EntryEntity(
     override val updatedAt: Long,
     override val deletedAt: Long? = null,
 
-    @ColumnInfo(name = "currency_code", defaultValue = "USD")
+    @ColumnInfo(name = "currency_code", defaultValue = "'USD'")
     val currencyCode: String = "USD"
 ) : Timestamps

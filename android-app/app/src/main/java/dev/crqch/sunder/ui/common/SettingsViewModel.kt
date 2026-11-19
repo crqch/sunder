@@ -99,7 +99,7 @@ class SettingsViewModel @Inject constructor(
             val success = withContext(Dispatchers.IO) {
                 runCatching {
                     currencyRepository.refreshCurrencies()
-                    currencyRepository.refreshRates()
+                    currencyRepository.refreshRates(force = true)
                 }.isSuccess
             }
             _isRefreshingRates.value = false

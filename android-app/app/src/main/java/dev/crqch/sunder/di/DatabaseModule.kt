@@ -29,6 +29,7 @@ object DatabaseModule {
             SunderDatabase.DATABASE_NAME
         )
             .addMigrations(SunderDatabase.MIGRATION_3_4)
+            .fallbackToDestructiveMigrationFrom(1, 2)
             .build()
     }
 

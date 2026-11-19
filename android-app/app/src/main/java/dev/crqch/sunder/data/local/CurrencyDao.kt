@@ -30,6 +30,9 @@ interface CurrencyDao {
     @Insert(onConflict = REPLACE)
     suspend fun upsertAll(currencies: List<CurrencyEntity>)
 
+    @Query("update currencies set is_active = 0")
+    suspend fun deactivateAll()
+
     @Query("delete from currencies")
     suspend fun clear()
 

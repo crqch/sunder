@@ -1,8 +1,11 @@
 package dev.crqch.sunder.data.repositories
 
+import androidx.room.withTransaction
+import dev.crqch.sunder.data.local.CurrencyDao
 import dev.crqch.sunder.data.local.EntryDao
 import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.data.local.EntryWithDetails
+import dev.crqch.sunder.data.local.SunderDatabase
 import dev.crqch.sunder.ui.entries.EntryFormState
 import dev.crqch.sunder.utils.CANONICAL_BASE_CURRENCY
 import dev.crqch.sunder.utils.Cuid2
@@ -16,8 +19,14 @@ import javax.inject.Singleton
 @Singleton
 class EntryRepository @Inject constructor(
     private val entryDao: EntryDao,
+    private val currencyDao: CurrencyDao,
+    private val database: SunderDatabase,
     private val syncManager: SyncManager
 ) {
+    companion object {
+        private const val SQL_BIND_CHUNK_SIZE = 500
+    }
+
     val allEntries: Flow<List<EntryWithDetails>> = entryDao.getAllEntries(null)
 
     fun getEntries(
@@ -57,6 +66,7 @@ class EntryRepository @Inject constructor(
         date: Long,
         currencyCode: String = CANONICAL_BASE_CURRENCY
     ) {
+        val validatedCurrency = validateCurrencyCode(currencyCode)
         val now = Instant.now().toEpochMilli()
         entryDao.upsert(
             EntryEntity(
@@ -64,7 +74,7 @@ class EntryRepository @Inject constructor(
                 title, date,
                 "",
                 amount, accountId, categoryId, description, createdAt = now, updatedAt = now,
-                currencyCode = normalizeCurrencyCode(currencyCode)
+                currencyCode = validatedCurrency
             )
         )
         syncManager.triggerSync()
@@ -83,9 +93,8 @@ class EntryRepository @Inject constructor(
                 createdAt = now,
                 updatedAt = now
             )
-            entryDao.upsert(
-                entry.copy(currencyCode = normalizeCurrencyCode(currencyCode ?: entry.currencyCode))
-            )
+            val validatedCurrency = validateCurrencyCode(currencyCode ?: entry.currencyCode)
+            entryDao.upsert(entry.copy(currencyCode = validatedCurrency))
         } else {
             val existing = entryDao.getEntryByIdDirect(id)
             val updated = state.toEntry(
@@ -96,7 +105,11 @@ class EntryRepository @Inject constructor(
             val resolvedCurrency = currencyCode
                 ?: existing?.currencyCode
                 ?: updated.currencyCode
-            entryDao.upsert(updated.copy(currencyCode = normalizeCurrencyCode(resolvedCurrency)))
+            val validatedCurrency = validateCurrencyCode(
+                code = resolvedCurrency,
+                unchangedExistingCode = existing?.currencyCode
+            )
+            entryDao.upsert(updated.copy(currencyCode = validatedCurrency))
         }
         syncManager.triggerSync()
     }
@@ -104,7 +117,17 @@ class EntryRepository @Inject constructor(
     suspend fun updateEntry(
         entry: EntryEntity
     ) {
-        entryDao.upsert(entry.copy(updatedAt = System.currentTimeMillis()))
+        val existing = entryDao.getEntryByIdDirect(entry.id)
+        val validatedCurrency = validateCurrencyCode(
+            code = entry.currencyCode,
+            unchangedExistingCode = existing?.currencyCode
+        )
+        entryDao.upsert(
+            entry.copy(
+                currencyCode = validatedCurrency,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
         syncManager.triggerSync()
     }
 
@@ -115,7 +138,12 @@ class EntryRepository @Inject constructor(
 
     suspend fun deleteEntries(ids: List<String>) {
         if (ids.isEmpty()) return
-        entryDao.softDeleteAll(ids)
+        val timestamp = System.currentTimeMillis()
+        database.withTransaction {
+            ids.chunked(SQL_BIND_CHUNK_SIZE).forEach { chunk ->
+                entryDao.softDeleteAll(chunk, timestamp)
+            }
+        }
         syncManager.triggerSync()
     }
 
@@ -125,15 +153,38 @@ class EntryRepository @Inject constructor(
      */
     suspend fun updateEntriesCurrency(ids: List<String>, currencyCode: String) {
         if (ids.isEmpty()) return
-        entryDao.updateCurrency(
-            ids = ids,
-            currencyCode = normalizeCurrencyCode(currencyCode),
-            timestamp = System.currentTimeMillis()
-        )
+        val validatedCurrency = validateCurrencyCode(currencyCode)
+        val timestamp = System.currentTimeMillis()
+        database.withTransaction {
+            ids.chunked(SQL_BIND_CHUNK_SIZE).forEach { chunk ->
+                entryDao.updateCurrency(
+                    ids = chunk,
+                    currencyCode = validatedCurrency,
+                    timestamp = timestamp
+                )
+            }
+        }
         syncManager.triggerSync()
     }
 
     suspend fun countActiveByCategoryId(categoryId: String): Int {
         return entryDao.countActiveByCategoryId(categoryId)
+    }
+
+    private suspend fun validateCurrencyCode(
+        code: String,
+        unchangedExistingCode: String? = null
+    ): String {
+        val normalized = normalizeCurrencyCode(code)
+        if (unchangedExistingCode != null && normalizeCurrencyCode(unchangedExistingCode) == normalized) {
+            return normalized
+        }
+        if (currencyDao.count() > 0) {
+            val cached = currencyDao.getCurrency(normalized)
+            require(cached != null && cached.isActive) {
+                "Currency '$normalized' is not supported or is inactive."
+            }
+        }
+        return normalized
     }
 }

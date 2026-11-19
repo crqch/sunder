@@ -109,7 +109,13 @@ class SyncRepository @Inject constructor(
     private suspend fun syncCurrencyData(defaultCurrencyCode: String?) {
         runCatching { currencyRepository.refreshCurrencies() }
 
-        if (defaultCurrencyCode != null) {
+        val hasPendingLocalPreference = runCatching {
+            preferencesRepository.hasPendingDefaultCurrencySync()
+        }.getOrDefault(false)
+
+        if (hasPendingLocalPreference) {
+            runCatching { currencyRepository.pushPendingDefaultCurrency() }
+        } else if (defaultCurrencyCode != null) {
             val normalized = normalizeCurrencyCode(defaultCurrencyCode)
             runCatching {
                 preferencesRepository.setDefaultCurrencyCode(normalized)

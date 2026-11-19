@@ -75,6 +75,9 @@ class CurrencyRepository @Inject constructor(
     val activeCurrencies: Flow<List<CurrencyEntity>> = currencyDao.observeActiveCurrencies()
         .map { currencies -> currencies.ifEmpty { listOf(FALLBACK_CURRENCY) } }
 
+    val allCurrencies: Flow<List<CurrencyEntity>> = currencyDao.observeAllCurrencies()
+        .map { currencies -> currencies.ifEmpty { listOf(FALLBACK_CURRENCY) } }
+
     val exchangeRates: Flow<List<ExchangeRateEntity>> = exchangeRateDao.observeAll()
 
     val ratesByDate: Flow<Map<String, Map<String, Double>>> = exchangeRateDao.observeAll()
@@ -85,23 +88,36 @@ class CurrencyRepository @Inject constructor(
     /** Combined catalog, default currency, and rate cache consumed by every screen. */
     val uiState: Flow<CurrencyUiState> = combine(
         activeCurrencies,
+        allCurrencies,
         defaultCurrencyCode,
         ratesByDate
-    ) { currencies, defaultCode, rates ->
+    ) { active, all, defaultCode, rates ->
         CurrencyUiState(
-            currencies = currencies,
+            currencies = active,
             defaultCurrencyCode = defaultCode,
-            ratesByDate = rates
+            ratesByDate = rates,
+            allCurrencies = all
         )
     }
 
     suspend fun getCurrency(code: String?): CurrencyEntity? =
         currencyDao.getCurrency(normalizeCurrencyCode(code))
 
-    suspend fun getCurrencyOrDefault(code: String?): CurrencyEntity =
-        getCurrency(code) ?: FALLBACK_CURRENCY
+    suspend fun getCurrencyOrDefault(code: String?): CurrencyEntity {
+        val normalized = normalizeCurrencyCode(code)
+        return getCurrency(normalized)
+            ?: if (normalized == CANONICAL_BASE_CURRENCY) {
+                FALLBACK_CURRENCY
+            } else {
+                CurrencyUiState.fallback(normalized)
+            }
+    }
 
-    /** Fetches the server-allowed active currencies and replaces the local cache. */
+    /**
+     * Fetches the server-allowed active currencies and merges them into the local cache
+     * while keeping previously cached currencies marked inactive so historical entries
+     * retain their symbol, name, and decimal digits.
+     */
     suspend fun refreshCurrencies(): List<CurrencyEntity> {
         return try {
             val response = currencyApi.getCurrencies()
@@ -112,11 +128,13 @@ class CurrencyRepository @Inject constructor(
             }
 
             val currencies = body.currencies.map { it.toEntity() }
-            database.withTransaction {
-                currencyDao.clear()
-                if (currencies.isNotEmpty()) currencyDao.upsertAll(currencies)
+            if (currencies.isNotEmpty()) {
+                database.withTransaction {
+                    currencyDao.deactivateAll()
+                    currencyDao.upsertAll(currencies)
+                }
+                syncLegacyCurrencyMetadata(currencies)
             }
-            syncLegacyCurrencyMetadata(currencies)
             currencies
         } catch (e: Exception) {
             Log.w(TAG, "Currency refresh failed: ${e.message}")
@@ -126,45 +144,76 @@ class CurrencyRepository @Inject constructor(
 
     /**
      * Refreshes the latest snapshot and backfills history in chunks the server
-     * accepts (max 365 days per request). When [fromDate] is null the range starts
-     * at the earliest active entry, so historical totals can always be converted.
+     * accepts (max 365 days per request). Routine syncs (when [fromDate] and [toDate]
+     * are null and [force] is false) only fetch date ranges not already present in the
+     * local cache.
      */
-    suspend fun refreshRates(fromDate: String? = null, toDate: String? = null) {
+    suspend fun refreshRates(
+        fromDate: String? = null,
+        toDate: String? = null,
+        force: Boolean = false
+    ) {
         val today = LocalDate.now(ZoneOffset.UTC)
         val end = parseDate(toDate) ?: today
 
         refreshLatestRates()
 
+        val explicitRange = fromDate != null || toDate != null
         val start = parseDate(fromDate) ?: earliestEntryDate() ?: return
-        var cursor = if (start > end) end else start
+        val clampedStart = if (start > end) end else start
 
-        while (cursor <= end) {
-            val chunkEnd = minOf(cursor.plusDays(MAX_HISTORY_DAYS - 1), end)
-            val fetched = fetchHistory(cursor, chunkEnd)
-            if (!fetched) break
-            cursor = chunkEnd.plusDays(1)
+        if (explicitRange || force) {
+            fetchHistoryRange(clampedStart, end)
+            return
+        }
+
+        val cachedEarliest = parseDate(exchangeRateDao.getEarliestRateDate())
+        val cachedLatest = parseDate(exchangeRateDao.getLatestRateDate())
+
+        if (cachedEarliest == null || cachedLatest == null) {
+            fetchHistoryRange(clampedStart, end)
+            return
+        }
+
+        if (clampedStart.isBefore(cachedEarliest)) {
+            fetchHistoryRange(clampedStart, cachedEarliest.minusDays(1))
+        }
+        if (cachedLatest.isBefore(end)) {
+            fetchHistoryRange(cachedLatest, end)
         }
     }
 
-    suspend fun refreshAll() {
+    suspend fun refreshAll(force: Boolean = false) {
         refreshCurrencies()
-        refreshRates()
+        refreshRates(force = force)
     }
 
     /**
      * Applies the default currency locally right away, then pushes it to the
-     * server on a best-effort basis so the app keeps working offline.
+     * server on a best-effort basis so offline selections survive until the next sync.
      */
     suspend fun setDefaultCurrency(code: String) {
         val normalized = normalizeCurrencyCode(code)
         preferencesRepository.setDefaultCurrencyCode(normalized)
+        preferencesRepository.setPendingDefaultCurrencySync(true)
         getCurrency(normalized)?.let {
             preferencesRepository.setCurrencyMetadata(it.symbol, it.symbolAfter)
         }
 
-        try {
+        pushDefaultCurrencyToServer(normalized)
+    }
+
+    /** Pushes a pending offline default currency choice to the server. Returns true if synced. */
+    suspend fun pushPendingDefaultCurrency(): Boolean {
+        if (!preferencesRepository.hasPendingDefaultCurrencySync()) return false
+        val localCode = preferencesRepository.defaultCurrencyCode.first()
+        return pushDefaultCurrencyToServer(localCode)
+    }
+
+    private suspend fun pushDefaultCurrencyToServer(code: String): Boolean {
+        return try {
             val response = preferencesApi.updatePreferences(
-                UpdatePreferencesRequest(defaultCurrencyCode = normalized)
+                UpdatePreferencesRequest(defaultCurrencyCode = code)
             )
             val body = response.body()
             if (response.isSuccessful && body != null) {
@@ -172,14 +221,22 @@ class CurrencyRepository @Inject constructor(
                 body.defaultCurrency?.let {
                     preferencesRepository.setCurrencyMetadata(it.symbol, it.symbolAfter)
                 }
+                preferencesRepository.setPendingDefaultCurrencySync(false)
+                true
+            } else {
+                false
             }
         } catch (e: Exception) {
             Log.w(TAG, "Unable to persist default currency: ${e.message}")
+            false
         }
     }
 
     /** Pulls the authenticated user's preferences from the server, if reachable. */
     suspend fun refreshPreferences() {
+        if (preferencesRepository.hasPendingDefaultCurrencySync()) {
+            if (!pushPendingDefaultCurrency()) return
+        }
         try {
             val body = preferencesApi.getPreferences().body() ?: return
             preferencesRepository.setDefaultCurrencyCode(body.defaultCurrencyCode)
@@ -271,7 +328,9 @@ class CurrencyRepository @Inject constructor(
             if (!response.isSuccessful || body == null) {
                 Result.failure(IllegalStateException("Failed to sync rates (${response.code()})"))
             } else {
-                refreshRates(fromDate = body.from ?: date, toDate = body.to ?: date)
+                val from = body.from ?: body.date ?: date
+                val to = body.to ?: body.date ?: date
+                refreshRates(fromDate = from, toDate = to, force = true)
                 Result.success(
                     RateSyncSummary(
                         success = body.success,
@@ -295,10 +354,11 @@ class CurrencyRepository @Inject constructor(
         rateDate: String? = null
     ): Result<Unit> {
         return try {
+            val normalizedTarget = normalizeCurrencyCode(targetCurrencyCode)
             val response = adminApi.upsertRate(
                 UpsertRateRequest(
                     baseCurrencyCode = baseCurrencyCode,
-                    targetCurrencyCode = normalizeCurrencyCode(targetCurrencyCode),
+                    targetCurrencyCode = normalizedTarget,
                     rate = rate,
                     rateDate = rateDate
                 )
@@ -306,7 +366,16 @@ class CurrencyRepository @Inject constructor(
             if (!response.isSuccessful) {
                 Result.failure(IllegalStateException("Failed to store rate (${response.code()})"))
             } else {
-                refreshRates(fromDate = rateDate, toDate = rateDate)
+                val saved = response.body()?.rate
+                val targetDate = saved?.rateDate?.takeIf { it.isNotBlank() }
+                    ?: rateDate?.takeIf { it.isNotBlank() }
+                    ?: LocalDate.now(ZoneOffset.UTC).toString()
+                val savedRate = saved?.rate ?: rate
+                val savedBase = normalizeCurrencyCode(saved?.baseCurrencyCode ?: baseCurrencyCode)
+                if (savedBase == CANONICAL_BASE_CURRENCY && savedRate.isFinite() && savedRate > 0.0) {
+                    storeSnapshot(targetDate, mapOf(normalizedTarget to savedRate))
+                }
+                refreshRates(fromDate = targetDate, toDate = targetDate, force = true)
                 Result.success(Unit)
             }
         } catch (e: Exception) {
@@ -323,6 +392,16 @@ class CurrencyRepository @Inject constructor(
             ?: currencies.firstOrNull { it.code == CANONICAL_BASE_CURRENCY }
             ?: return
         preferencesRepository.setCurrencyMetadata(selected.symbol, selected.symbolAfter)
+    }
+
+    private suspend fun fetchHistoryRange(start: LocalDate, end: LocalDate) {
+        var cursor = start
+        while (!cursor.isAfter(end)) {
+            val chunkEnd = minOf(cursor.plusDays(MAX_HISTORY_DAYS - 1), end)
+            val fetched = fetchHistory(cursor, chunkEnd)
+            if (!fetched) break
+            cursor = chunkEnd.plusDays(1)
+        }
     }
 
     private suspend fun refreshLatestRates() {
@@ -347,7 +426,14 @@ class CurrencyRepository @Inject constructor(
             )
             val body = response.body()
             if (response.isSuccessful && body != null) {
-                body.rates.forEach { (date, rates) -> storeSnapshot(date, rates) }
+                val allEntities = buildList {
+                    body.rates.forEach { (date, rates) ->
+                        addAll(buildSnapshotEntities(date, rates))
+                    }
+                }
+                if (allEntities.isNotEmpty()) {
+                    exchangeRateDao.upsertAll(allEntities)
+                }
                 true
             } else {
                 Log.w(TAG, "Unable to refresh rate history (${response.code()})")
@@ -360,7 +446,17 @@ class CurrencyRepository @Inject constructor(
     }
 
     private suspend fun storeSnapshot(date: String, rates: Map<String, Double>) {
-        if (date.isBlank() || rates.isEmpty()) return
+        val entities = buildSnapshotEntities(date, rates)
+        if (entities.isNotEmpty()) {
+            exchangeRateDao.upsertAll(entities)
+        }
+    }
+
+    private fun buildSnapshotEntities(
+        date: String,
+        rates: Map<String, Double>
+    ): List<ExchangeRateEntity> {
+        if (date.isBlank() || rates.isEmpty()) return emptyList()
         val dateKey = CurrencyConverter.normalizeDate(date)
         val entities = rates
             .mapNotNull { (code, rate) ->
@@ -382,7 +478,7 @@ class CurrencyRepository @Inject constructor(
                 )
             )
         }
-        exchangeRateDao.upsertAll(entities)
+        return entities
     }
 
     private suspend fun earliestEntryDate(): LocalDate? =
