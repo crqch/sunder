@@ -105,8 +105,8 @@ class AccountRepository @Inject constructor(
         }
         if (currencyDao.count() > 0) {
             val cached = currencyDao.getCurrency(normalized)
-            require(cached != null && cached.isActive) {
-                "Currency '$normalized' is not supported or is inactive."
+            require(cached != null) {
+                "Currency '$normalized' is not supported."
             }
         }
         return normalized

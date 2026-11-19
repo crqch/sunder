@@ -59,6 +59,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -114,7 +115,15 @@ fun EntriesScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    val allSelected = entries.isNotEmpty() && selectedIds.size == entries.size
+    LaunchedEffect(entries) {
+        val visibleIds = entries.mapTo(HashSet(entries.size)) { it.entry.id }
+        val pruned = selectedIds.filterTo(HashSet()) { it in visibleIds }
+        if (pruned.size != selectedIds.size) {
+            selectedIds = pruned
+        }
+    }
+
+    val allSelected = entries.isNotEmpty() && entries.all { it.entry.id in selectedIds }
     val filteredNet = remember(entries, currencyState) {
         entries.sumOf { item ->
             currencyState.convertOrSame(
@@ -723,15 +732,25 @@ fun EntriesScreen(
             onSelect = { code ->
                 showCurrencyDialog = false
                 if (code != null) {
-                    val ids = selectedIds.toList()
-                    selectedIds = emptySet()
-                    viewModel.updateEntriesCurrency(ids, code) { count ->
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                context.getString(R.string.currency_updated, count)
-                            )
+                    val visibleIds = entries.mapTo(HashSet()) { it.entry.id }
+                    val ids = selectedIds.filter { it in visibleIds }
+                    viewModel.updateEntriesCurrency(
+                        ids = ids,
+                        currencyCode = code,
+                        onComplete = { count ->
+                            selectedIds = emptySet()
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.currency_updated, count)
+                                )
+                            }
+                        },
+                        onError = { message ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(message)
+                            }
                         }
-                    }
+                    )
                 }
             },
             onDismiss = { showCurrencyDialog = false }

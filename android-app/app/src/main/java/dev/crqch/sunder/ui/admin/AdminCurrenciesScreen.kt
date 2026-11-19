@@ -670,7 +670,11 @@ private fun adminStatusText(status: AdminStatus): String = when (status) {
                 .distinct()
                 .joinToString(" – ")
                 .ifBlank { "—" }
-        stringResource(R.string.rates_synced, range, summary.storedCount ?: 0)
+        if (summary.syncedDays != null) {
+            "$range (${summary.syncedDays} synced, ${summary.skippedDays ?: 0} skipped, ${summary.failedDays ?: 0} failed)"
+        } else {
+            stringResource(R.string.rates_synced, range, summary.storedCount ?: 0)
+        }
     }
 
     is AdminStatus.RateStored -> stringResource(R.string.rate_saved, status.code)

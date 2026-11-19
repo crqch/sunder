@@ -151,20 +151,24 @@ class EntryRepository @Inject constructor(
      * Re-labels entries to another currency without touching their numeric amount,
      * then queues a sync so the change reaches every other client.
      */
-    suspend fun updateEntriesCurrency(ids: List<String>, currencyCode: String) {
-        if (ids.isEmpty()) return
+    suspend fun updateEntriesCurrency(ids: List<String>, currencyCode: String): Int {
+        if (ids.isEmpty()) return 0
         val validatedCurrency = validateCurrencyCode(currencyCode)
         val timestamp = System.currentTimeMillis()
+        var updatedCount = 0
         database.withTransaction {
             ids.chunked(SQL_BIND_CHUNK_SIZE).forEach { chunk ->
-                entryDao.updateCurrency(
+                updatedCount += entryDao.updateCurrency(
                     ids = chunk,
                     currencyCode = validatedCurrency,
                     timestamp = timestamp
                 )
             }
         }
-        syncManager.triggerSync()
+        if (updatedCount > 0) {
+            syncManager.triggerSync()
+        }
+        return updatedCount
     }
 
     suspend fun countActiveByCategoryId(categoryId: String): Int {
@@ -181,8 +185,8 @@ class EntryRepository @Inject constructor(
         }
         if (currencyDao.count() > 0) {
             val cached = currencyDao.getCurrency(normalized)
-            require(cached != null && cached.isActive) {
-                "Currency '$normalized' is not supported or is inactive."
+            require(cached != null) {
+                "Currency '$normalized' is not supported."
             }
         }
         return normalized

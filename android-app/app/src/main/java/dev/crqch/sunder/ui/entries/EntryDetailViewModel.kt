@@ -136,12 +136,16 @@ class EntryDetailViewModel @Inject constructor(
     fun saveEdit() {
         if (!entryFormState.isFilled()) return
         viewModelScope.launch {
-            entryRepository.saveEntry(
-                state = entryFormState,
-                id = entryId,
-                currencyCode = entryFormState.currencyCode
-            )
-            isEditMode = false
+            val saved = runCatching {
+                entryRepository.saveEntry(
+                    state = entryFormState,
+                    id = entryId,
+                    currencyCode = entryFormState.currencyCode
+                )
+            }
+            if (saved.isSuccess) {
+                isEditMode = false
+            }
         }
     }
 

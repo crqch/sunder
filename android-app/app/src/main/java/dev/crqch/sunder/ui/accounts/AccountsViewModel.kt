@@ -85,8 +85,12 @@ class AccountsViewModel @Inject constructor(
 
     fun createAccount(name: String, currencyCode: String? = null, onComplete: () -> Unit) {
         viewModelScope.launch {
-            accountRepository.createAccount(name.trim(), currencyCode)
-            onComplete()
+            val created = runCatching {
+                accountRepository.createAccount(name.trim(), currencyCode)
+            }
+            if (created.isSuccess) {
+                onComplete()
+            }
         }
     }
 

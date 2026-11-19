@@ -327,18 +327,24 @@ class EntriesViewModel @Inject constructor(
 
     fun createEntry(entryFormState: EntryFormState, onComplete: () -> Unit) {
         viewModelScope.launch {
-            entryRepository.saveEntry(
-                entryFormState,
-                currencyCode = entryFormState.currencyCode
-            )
-            onComplete()
+            val saved = runCatching {
+                entryRepository.saveEntry(
+                    entryFormState,
+                    currencyCode = entryFormState.currencyCode
+                )
+            }
+            if (saved.isSuccess) {
+                onComplete()
+            }
         }
     }
 
     fun deleteEntries(ids: List<String>, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            entryRepository.deleteEntries(ids)
-            onComplete()
+            val deleted = runCatching { entryRepository.deleteEntries(ids) }
+            if (deleted.isSuccess) {
+                onComplete()
+            }
         }
     }
 
@@ -346,14 +352,21 @@ class EntriesViewModel @Inject constructor(
     fun updateEntriesCurrency(
         ids: List<String>,
         currencyCode: String,
-        onComplete: (count: Int) -> Unit = {}
+        onComplete: (count: Int) -> Unit = {},
+        onError: (String) -> Unit = {}
     ) {
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            entryRepository.updateEntriesCurrency(ids, currencyCode)
-            onComplete(ids.size)
-            withContext(Dispatchers.IO) {
-                runCatching { currencyRepository.refreshRates() }
+            val result = runCatching {
+                entryRepository.updateEntriesCurrency(ids, currencyCode)
+            }
+            result.onSuccess { updatedCount ->
+                onComplete(updatedCount)
+                withContext(Dispatchers.IO) {
+                    runCatching { currencyRepository.refreshRates() }
+                }
+            }.onFailure { error ->
+                onError(error.message ?: "Failed to update currency")
             }
         }
     }

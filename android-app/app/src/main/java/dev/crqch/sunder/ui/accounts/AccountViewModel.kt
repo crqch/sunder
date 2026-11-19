@@ -132,8 +132,12 @@ class AccountViewModel @Inject constructor(
     fun saveEdit() {
         if (!accountFormState.isFilled()) return
         viewModelScope.launch {
-            accountRepository.saveAccount(accountFormState, accountId, accountFormState.currencyCode)
-            isEditMode = false
+            val saved = runCatching {
+                accountRepository.saveAccount(accountFormState, accountId, accountFormState.currencyCode)
+            }
+            if (saved.isSuccess) {
+                isEditMode = false
+            }
         }
     }
 

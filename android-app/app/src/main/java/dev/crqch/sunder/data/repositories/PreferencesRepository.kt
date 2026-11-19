@@ -115,6 +115,15 @@ class PreferencesRepository @Inject constructor(
         context.settingsDataStore.edit { it[PENDING_DEFAULT_CURRENCY_SYNC] = pending }
     }
 
+    suspend fun clearUserCurrencyPreferences() {
+        context.settingsDataStore.edit { prefs ->
+            prefs.remove(DEFAULT_CURRENCY_CODE)
+            prefs.remove(PENDING_DEFAULT_CURRENCY_SYNC)
+            prefs.remove(CURRENCY_SYMBOL)
+            prefs.remove(CURRENCY_AFTER)
+        }
+    }
+
     suspend fun setAutoSyncEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[AUTO_SYNC_ENABLED] = enabled }
     }

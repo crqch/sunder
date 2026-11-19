@@ -37,7 +37,10 @@ data class RateSyncSummary(
     val from: String? = null,
     val to: String? = null,
     val source: String? = null,
-    val storedCount: Int? = null
+    val storedCount: Int? = null,
+    val syncedDays: Int? = null,
+    val skippedDays: Int? = null,
+    val failedDays: Int? = null
 )
 
 /**
@@ -146,41 +149,57 @@ class CurrencyRepository @Inject constructor(
      * Refreshes the latest snapshot and backfills history in chunks the server
      * accepts (max 365 days per request). Routine syncs (when [fromDate] and [toDate]
      * are null and [force] is false) only fetch date ranges not already present in the
-     * local cache.
+     * local cache, unless a newly needed currency symbol is missing from cached bounds.
+     *
+     * Returns true when every attempted network request succeeded.
      */
     suspend fun refreshRates(
         fromDate: String? = null,
         toDate: String? = null,
         force: Boolean = false
-    ) {
+    ): Boolean {
         val today = LocalDate.now(ZoneOffset.UTC)
         val end = parseDate(toDate) ?: today
 
-        refreshLatestRates()
+        // Snapshot existing cache bounds BEFORE refreshLatestRates() writes today's row,
+        // otherwise cachedLatest would already equal today and skip gap backfills.
+        val cachedEarliestStr = exchangeRateDao.getEarliestRateDate()
+        val cachedLatestStr = exchangeRateDao.getLatestRateDate()
+        val cachedEarliest = parseDate(cachedEarliestStr)
+        val cachedLatest = parseDate(cachedLatestStr)
+
+        val latestOk = refreshLatestRates()
 
         val explicitRange = fromDate != null || toDate != null
-        val start = parseDate(fromDate) ?: earliestEntryDate() ?: return
+        val start = parseDate(fromDate) ?: earliestEntryDate() ?: return latestOk
         val clampedStart = if (start > end) end else start
 
         if (explicitRange || force) {
-            fetchHistoryRange(clampedStart, end)
-            return
+            return fetchHistoryRange(clampedStart, end) && latestOk
         }
 
-        val cachedEarliest = parseDate(exchangeRateDao.getEarliestRateDate())
-        val cachedLatest = parseDate(exchangeRateDao.getLatestRateDate())
+        val neededCodes = (entryDao.getActiveCurrencyCodes() + preferencesRepository.defaultCurrencyCode.first())
+            .map(::normalizeCurrencyCode)
+            .filter { it != CANONICAL_BASE_CURRENCY }
+            .toSet()
 
-        if (cachedEarliest == null || cachedLatest == null) {
-            fetchHistoryRange(clampedStart, end)
-            return
+        val boundsCovered = cachedEarliestStr != null &&
+            cachedLatestStr != null &&
+            hasAllSymbolsOnDate(cachedEarliestStr, neededCodes) &&
+            hasAllSymbolsOnDate(cachedLatestStr, neededCodes)
+
+        if (cachedEarliest == null || cachedLatest == null || !boundsCovered) {
+            return fetchHistoryRange(clampedStart, end) && latestOk
         }
 
+        var historyOk = true
         if (clampedStart.isBefore(cachedEarliest)) {
-            fetchHistoryRange(clampedStart, cachedEarliest.minusDays(1))
+            historyOk = fetchHistoryRange(clampedStart, cachedEarliest.minusDays(1)) && historyOk
         }
         if (cachedLatest.isBefore(end)) {
-            fetchHistoryRange(cachedLatest, end)
+            historyOk = fetchHistoryRange(cachedLatest, end) && historyOk
         }
+        return latestOk && historyOk
     }
 
     suspend fun refreshAll(force: Boolean = false) {
@@ -338,7 +357,10 @@ class CurrencyRepository @Inject constructor(
                         from = body.from,
                         to = body.to,
                         source = body.source,
-                        storedCount = body.storedCount
+                        storedCount = body.storedCount,
+                        syncedDays = body.stats?.synced,
+                        skippedDays = body.stats?.skipped,
+                        failedDays = body.stats?.failed
                     )
                 )
             }
@@ -394,27 +416,40 @@ class CurrencyRepository @Inject constructor(
         preferencesRepository.setCurrencyMetadata(selected.symbol, selected.symbolAfter)
     }
 
-    private suspend fun fetchHistoryRange(start: LocalDate, end: LocalDate) {
+    private suspend fun hasAllSymbolsOnDate(date: String, neededCodes: Set<String>): Boolean {
+        if (neededCodes.isEmpty()) return true
+        val presentCodes = exchangeRateDao.getForDate(date)
+            .mapTo(HashSet()) { normalizeCurrencyCode(it.currencyCode) }
+        return neededCodes.all { it in presentCodes }
+    }
+
+    private suspend fun fetchHistoryRange(start: LocalDate, end: LocalDate): Boolean {
+        var allOk = true
         var cursor = start
         while (!cursor.isAfter(end)) {
             val chunkEnd = minOf(cursor.plusDays(MAX_HISTORY_DAYS - 1), end)
-            val fetched = fetchHistory(cursor, chunkEnd)
-            if (!fetched) break
+            if (!fetchHistory(cursor, chunkEnd)) {
+                allOk = false
+            }
             cursor = chunkEnd.plusDays(1)
         }
+        return allOk
     }
 
-    private suspend fun refreshLatestRates() {
-        try {
+    private suspend fun refreshLatestRates(): Boolean {
+        return try {
             val response = currencyApi.getRates()
             val body = response.body()
             if (response.isSuccessful && body != null) {
                 storeSnapshot(body.date, body.rates)
+                true
             } else {
                 Log.w(TAG, "Unable to refresh latest rates (${response.code()})")
+                false
             }
         } catch (e: Exception) {
             Log.w(TAG, "Latest rate refresh failed: ${e.message}")
+            false
         }
     }
 

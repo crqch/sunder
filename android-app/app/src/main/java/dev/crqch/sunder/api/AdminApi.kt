@@ -44,13 +44,21 @@ data class CurrencyMutationResponseDto(
     @Json(name = "currency") val currency: AdminCurrencyDto? = null
 )
 
+data class BackfillStatsDto(
+    @Json(name = "total") val total: Int = 0,
+    @Json(name = "synced") val synced: Int = 0,
+    @Json(name = "skipped") val skipped: Int = 0,
+    @Json(name = "failed") val failed: Int = 0
+)
+
 data class SyncRatesResponseDto(
     @Json(name = "success") val success: Boolean = false,
     @Json(name = "date") val date: String? = null,
     @Json(name = "from") val from: String? = null,
     @Json(name = "to") val to: String? = null,
     @Json(name = "source") val source: String? = null,
-    @Json(name = "stored_count") val storedCount: Int? = null
+    @Json(name = "stored_count") val storedCount: Int? = null,
+    @Json(name = "stats") val stats: BackfillStatsDto? = null
 )
 
 data class UpsertRateRequest(

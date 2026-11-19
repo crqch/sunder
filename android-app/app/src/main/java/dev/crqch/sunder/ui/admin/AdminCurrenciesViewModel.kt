@@ -207,11 +207,12 @@ class AdminCurrenciesViewModel @Inject constructor(
 
     fun saveEditor() {
         val current = editor ?: return
-        val code = normalizeCurrencyCode(current.code)
-        if (code.length != 3 || code.any { !it.isLetter() }) {
+        val rawCode = current.code.trim().uppercase()
+        if (rawCode.length != 3 || rawCode.any { !it.isLetter() }) {
             editor = current.copy(error = AdminEditorError.CODE)
             return
         }
+        val code = normalizeCurrencyCode(rawCode)
         if (current.name.isBlank()) {
             editor = current.copy(error = AdminEditorError.NAME)
             return

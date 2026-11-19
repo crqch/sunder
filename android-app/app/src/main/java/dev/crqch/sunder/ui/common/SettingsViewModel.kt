@@ -88,6 +88,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 currencyRepository.setDefaultCurrency(code)
+                runCatching { currencyRepository.refreshRates() }
             }
         }
     }
@@ -100,7 +101,7 @@ class SettingsViewModel @Inject constructor(
                 runCatching {
                     currencyRepository.refreshCurrencies()
                     currencyRepository.refreshRates(force = true)
-                }.isSuccess
+                }.getOrDefault(false)
             }
             _isRefreshingRates.value = false
             _snackbarMessage.value = if (success) successMessage else failureMessage

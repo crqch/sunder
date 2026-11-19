@@ -66,7 +66,9 @@ class UserRepository @Inject constructor(
                     defaultCurrencyCode = normalizeCurrencyCode(body.defaultCurrencyCode)
                 )
                 saveUserLocal(user)
-                preferencesRepository.setDefaultCurrencyCode(user.defaultCurrencyCode)
+                if (!preferencesRepository.hasPendingDefaultCurrencySync()) {
+                    preferencesRepository.setDefaultCurrencyCode(user.defaultCurrencyCode)
+                }
                 syncManager.triggerSync()
                 syncManager.schedulePeriodicSync()
             } else if (res.code() == 401 || res.code() == 403) {
@@ -97,6 +99,7 @@ class UserRepository @Inject constructor(
     suspend fun logout() {
         authRepository.clearTokens()
         clearUserLocal()
+        preferencesRepository.clearUserCurrencyPreferences()
         syncRepository.resetSync()
     }
 }
