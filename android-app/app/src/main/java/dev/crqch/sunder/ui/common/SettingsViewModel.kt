@@ -11,6 +11,7 @@ import dev.crqch.sunder.data.repositories.SyncRepository
 import dev.crqch.sunder.data.repositories.ThemeMode
 import dev.crqch.sunder.data.repositories.UserRepository
 import dev.crqch.sunder.data.sync.SyncManager
+import dev.crqch.sunder.notifications.PaymentPromptNotifier
 import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +30,8 @@ class SettingsViewModel @Inject constructor(
     private val syncManager: SyncManager,
     private val userRepository: UserRepository,
     private val currencyRepository: CurrencyRepository,
-    private val database: SunderDatabase
+    private val database: SunderDatabase,
+    private val paymentPromptNotifier: PaymentPromptNotifier
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = preferencesRepository.settings
@@ -132,6 +134,23 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun setPaymentDetectionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setPaymentDetectionEnabled(enabled)
+        }
+    }
+
+    fun setPaymentDetectionIncludeIncoming(includeIncoming: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setPaymentDetectionIncludeIncoming(includeIncoming)
+        }
+    }
+
+    fun sendTestPaymentPrompt(sentMessage: String, permissionNeededMessage: String) {
+        val posted = paymentPromptNotifier.showTestPrompt(settings.value.defaultCurrencyCode)
+        _snackbarMessage.value = if (posted) sentMessage else permissionNeededMessage
     }
 
     fun syncNow(successMsg: String, failMsg: String) {

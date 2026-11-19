@@ -83,10 +83,20 @@ class EntriesViewModel @Inject constructor(
         null
     }
 
+    private val prefilledCurrencyCode: String? = entryRoute?.initialCurrencyCode
+        ?.takeIf { it.isNotBlank() }
+        ?.let { normalizeCurrencyCode(it) }
+
     var entryFormState by mutableStateOf(
         EntryFormState(
+            title = entryRoute?.initialTitle.orEmpty(),
+            date = entryRoute?.initialDate ?: Instant.now().toEpochMilli(),
+            amount = entryRoute?.initialAmount?.let { abs(it) } ?: 0.00f,
             accountId = entryRoute?.accountId ?: "",
-            categoryId = entryRoute?.categoryId ?: ""
+            categoryId = entryRoute?.categoryId ?: "",
+            description = entryRoute?.initialDescription.orEmpty(),
+            isExpense = entryRoute?.initialIsExpense ?: true,
+            currencyCode = prefilledCurrencyCode ?: dev.crqch.sunder.utils.CANONICAL_BASE_CURRENCY
         )
     )
         private set
@@ -96,9 +106,12 @@ class EntriesViewModel @Inject constructor(
     )
         private set
 
-    /** True once the user explicitly picked a currency in the entry editor. */
-    var currencyTouched by mutableStateOf(false)
+    /** True once the user explicitly picked a currency (or a payment notification pre-filled one). */
+    var currencyTouched by mutableStateOf(prefilledCurrencyCode != null)
         private set
+
+    private var amountTouched = false
+    private var initialCurrencyReconciled = false
 
     val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
         scope = viewModelScope,
@@ -106,11 +119,45 @@ class EntriesViewModel @Inject constructor(
         initialValue = CurrencyUiState()
     )
 
+    init {
+        if (prefilledCurrencyCode != null) {
+            viewModelScope.launch {
+                currencyState.collect { state ->
+                    if (initialCurrencyReconciled || state.allCurrencies.isEmpty()) return@collect
+                    initialCurrencyReconciled = true
+                    val matched = state.allCurrencies.firstOrNull {
+                        it.code.equals(prefilledCurrencyCode, ignoreCase = true)
+                    }
+                    if (matched != null) {
+                        if (!amountTouched) {
+                            amountInput = amountToCurrencyDigits(
+                                entryFormState.amount,
+                                matched.decimalDigits
+                            )
+                        }
+                    } else {
+                        // Detected currency isn't in the user's catalog; fall back safely.
+                        currencyTouched = false
+                        val fallback = state.defaultCurrency
+                        entryFormState = entryFormState.copy(currencyCode = fallback.code)
+                        if (!amountTouched) {
+                            amountInput = amountToCurrencyDigits(
+                                entryFormState.amount,
+                                fallback.decimalDigits
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fun updateForm(state: EntryFormState) {
         entryFormState = state
     }
 
     fun updateAmount(input: String) {
+        amountTouched = true
         val digits = currencyState.value.currency(entryFormState.currencyCode).decimalDigits
         val parsed = parseCurrencyAmountInput(input, entryFormState.isExpense, digits)
         amountInput = parsed.digits

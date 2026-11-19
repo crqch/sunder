@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.R
 import dev.crqch.sunder.data.local.User
+import dev.crqch.sunder.notifications.PaymentEntryDraft
 import dev.crqch.sunder.ui.auth.AuthViewModel
 import dev.crqch.sunder.ui.auth.SignInScreen
 import dev.crqch.sunder.ui.auth.SignUpScreen
@@ -35,7 +36,12 @@ object SignIn
 object SignUp
 
 @Composable
-fun SunderApp(authViewModel: AuthViewModel, user: User?) {
+fun SunderApp(
+    authViewModel: AuthViewModel,
+    user: User?,
+    pendingPaymentDraft: PaymentEntryDraft? = null,
+    onConsumePaymentDraft: (PaymentEntryDraft) -> Unit = {}
+) {
     val navController = rememberNavController()
 
     LaunchedEffect(user) {
@@ -67,7 +73,10 @@ fun SunderApp(authViewModel: AuthViewModel, user: User?) {
         }
     ) {
         composable<Main> {
-            BottomBarNavigation()
+            BottomBarNavigation(
+                pendingPaymentDraft = pendingPaymentDraft,
+                onConsumePaymentDraft = onConsumePaymentDraft
+            )
         }
         composable<SignIn> {
             val scope = rememberCoroutineScope()

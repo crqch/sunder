@@ -208,4 +208,35 @@
     <string name="invalid_days">Podaj dodatnią liczbę dni</string>
     <string name="operation_failed">Coś poszło nie tak. Spróbuj ponownie.</string>
     <string name="operation_failed_detail">Coś poszło nie tak: %1$s</string>
+
+    <!-- Payment notification detection -->
+    <string name="payment_listener_service_label">Wykrywanie płatności Sunder</string>
+    <string name="payment_prompt_channel_name">Propozycje płatności</string>
+    <string name="payment_prompt_channel_desc">Powiadomienia z propozycją dodania wykrytych płatności do Sunder.</string>
+    <string name="payment_prompt_title_expense">Dodać %1$s (%2$s)?</string>
+    <string name="payment_prompt_title_income">Dodać +%1$s (%2$s)?</string>
+    <string name="payment_prompt_body_with_source">Wykryto z %1$s · Dotknij, aby dodać do Sunder</string>
+    <string name="payment_prompt_body_generic">Wykryto płatność · Dotknij, aby dodać do Sunder</string>
+    <string name="payment_prompt_action_add">Dodaj wpis</string>
+    <string name="payment_prompt_action_dismiss">Odrzuć</string>
+    <string name="payment_test_merchant">Kawiarnia</string>
+    <string name="payment_test_description">Przykładowe powiadomienie z ustawień Sunder</string>
+
+    <string name="payment_notifications_title">Powiadomienia o płatnościach</string>
+    <string name="payment_detection_toggle">Wykrywaj powiadomienia o płatnościach</string>
+    <string name="payment_detection_toggle_desc">Odczytuj powiadomienia z PayPal, Portfela Google i aplikacji bankowych, aby proponować dodanie wpisów w Sunder.</string>
+    <string name="payment_detection_include_incoming">Uwzględniaj wpływy i zwroty</string>
+    <string name="payment_detection_include_incoming_desc">Proponuj dodanie wpisu także przy otrzymaniu przelewu lub zwrotu.</string>
+    <string name="payment_notification_access_title">Dostęp do powiadomień</string>
+    <string name="payment_notification_access_desc">Wymagany, aby Sunder mógł lokalnie odczytywać powiadomienia o płatnościach.</string>
+    <string name="payment_post_permission_title">Uprawnienie do powiadomień</string>
+    <string name="payment_post_permission_desc">Wymagane, aby Sunder mógł wyświetlać propozycje dodania płatności.</string>
+    <string name="permission_granted">Przyznano</string>
+    <string name="permission_required">Wymagane</string>
+    <string name="open_notification_access">Otwórz dostęp</string>
+    <string name="allow_notifications">Zezwól</string>
+    <string name="send_test_payment_prompt">Wyślij testowe powiadomienie</string>
+    <string name="test_payment_prompt_sent">Wysłano testowe powiadomienie o płatności</string>
+    <string name="test_payment_prompt_permission_needed">Najpierw zezwól na powiadomienia, aby wysłać test</string>
+    <string name="payment_privacy_note">Powiadomienia są analizowane wyłącznie lokalnie na urządzeniu i nigdzie nie są wysyłane, dopóki nie zapiszesz wpisu.</string>
 </resources>
