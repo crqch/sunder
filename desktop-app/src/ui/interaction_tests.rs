@@ -6,8 +6,7 @@
 
 use crate::api::AdminUser;
 use crate::app::{Boot, CloseOverlay, Screen, ShowDashboard, SortField, SunderApp, SyncState};
-use crate::format::CurrencyPosition;
-use crate::model::{self, Account, Category, Entry, User};
+use crate::model::{self, Account, Category, Currency, Entry, User};
 use crate::store::{Paths, Settings};
 use crate::theme::ThemeMode;
 use crate::ui::components::SunderTooltip;
@@ -1413,35 +1412,137 @@ fn category_count_filter_narrows_the_table(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn currency_position_and_symbol_are_customizable(cx: &mut TestAppContext) {
+fn default_currency_picker_updates_formatting_and_persists(cx: &mut TestAppContext) {
     let (view, cx, paths) = ready_entries_app(cx, "currency");
     view.update(cx, |app, cx| {
+        app.snapshot.currencies = vec![
+            Currency::fallback("USD"),
+            Currency {
+                code: "PLN".into(),
+                name: "Polish Zloty".into(),
+                symbol: "zł".into(),
+                symbol_after: true,
+                decimal_digits: 2,
+                is_active: true,
+            },
+            Currency {
+                code: "JPY".into(),
+                name: "Japanese Yen".into(),
+                symbol: "¥".into(),
+                symbol_after: false,
+                decimal_digits: 0,
+                is_active: true,
+            },
+        ];
         app.screen = Screen::Settings;
         cx.notify();
     });
     draw(cx);
 
-    let bounds = cx
-        .debug_bounds("currency-position-after")
-        .expect("after-position control is rendered");
-    cx.simulate_click(bounds.center(), Modifiers::none());
+    let trigger = cx
+        .debug_bounds("settings-currency-select")
+        .expect("default currency selector is rendered");
+    cx.simulate_click(trigger.center(), Modifiers::none());
+    draw(cx);
+
+    let pln_option = cx
+        .debug_bounds("settings-currency-option-PLN")
+        .expect("PLN option is rendered");
+    cx.simulate_click(pln_option.center(), Modifiers::none());
     view.update(cx, |app, _| {
-        assert_eq!(app.settings.currency_position, CurrencyPosition::After);
-        assert_eq!(app.money(1234.5), "1,234.50 $");
+        assert_eq!(app.settings.default_currency_code, "PLN");
+        assert_eq!(app.money(1234.5), "1,234.50 zł");
     });
     assert_eq!(
-        Settings::load(&paths.settings_file).currency_position,
-        CurrencyPosition::After
+        Settings::load(&paths.settings_file).default_currency_code,
+        "PLN"
     );
 
-    view.update(cx, |app, cx| {
-        app.currency_input
-            .update(cx, |input, cx| input.set_text("kr", cx));
-    });
-    cx.run_until_parked();
+    let trigger = cx
+        .debug_bounds("settings-currency-select")
+        .expect("default currency selector is rendered");
+    cx.simulate_click(trigger.center(), Modifiers::none());
+    draw(cx);
+
+    let jpy_option = cx
+        .debug_bounds("settings-currency-option-JPY")
+        .expect("JPY option is rendered");
+    cx.simulate_click(jpy_option.center(), Modifiers::none());
     view.update(cx, |app, _| {
-        assert_eq!(app.settings.currency_symbol, "kr");
-        assert_eq!(app.money(1234.5), "1,234.50 kr");
+        assert_eq!(app.settings.default_currency_code, "JPY");
+        assert_eq!(app.money(1234.5), "¥1,235");
+    });
+}
+
+#[gpui::test]
+fn bulk_change_currency_updates_selected_entries(cx: &mut TestAppContext) {
+    let (view, cx, _paths) = ready_entries_app(cx, "bulk-currency");
+    view.update(cx, |app, cx| {
+        let account = Account::new("Checking");
+        let category = Category::new("Food", "#22c55e");
+        let account_id = account.id.clone();
+        let category_id = category.id.clone();
+        app.snapshot.accounts.push(account);
+        app.snapshot.categories.push(category);
+        for id in ["bulk-cur-1", "bulk-cur-2"] {
+            app.snapshot.entries.push(Entry {
+                id: id.into(),
+                account_id: account_id.clone(),
+                category_id: category_id.clone(),
+                title: id.into(),
+                description: None,
+                location: None,
+                amount: -15.0,
+                currency_code: model::default_currency_code(),
+                date: model::now(),
+                deleted_at: None,
+                inserted_at: model::now(),
+                updated_at: model::now(),
+            });
+        }
+        app.snapshot.currencies = vec![
+            Currency::fallback("USD"),
+            Currency {
+                code: "EUR".into(),
+                name: "Euro".into(),
+                symbol: "€".into(),
+                symbol_after: false,
+                decimal_digits: 2,
+                is_active: true,
+            },
+        ];
+        app.screen = Screen::Entries;
+        cx.notify();
+    });
+    draw(cx);
+
+    view.update(cx, |app, cx| app.toggle_all_visible_entries(cx));
+    draw(cx);
+
+    let change_btn = cx
+        .debug_bounds("entries-change-currency")
+        .expect("bulk change currency button is rendered when entries are selected");
+    cx.simulate_click(change_btn.center(), Modifiers::none());
+    draw(cx);
+
+    let eur_option = cx
+        .debug_bounds("bulk-currency-option-EUR")
+        .expect("EUR option is rendered in bulk currency modal");
+    cx.simulate_click(eur_option.center(), Modifiers::none());
+    draw(cx);
+
+    let apply_btn = cx
+        .debug_bounds("bulk-currency-apply")
+        .expect("apply button is rendered in bulk currency modal");
+    cx.simulate_click(apply_btn.center(), Modifiers::none());
+    draw(cx);
+
+    view.update(cx, |app, _| {
+        assert!(app.bulk_currency_editor.is_none());
+        assert!(app.selected_entries.is_empty());
+        let active = app.snapshot.active_entries();
+        assert!(!active.is_empty());
+        assert!(active.iter().all(|entry| entry.currency_code == "EUR"));
     });
 }
 

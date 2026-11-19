@@ -23,6 +23,7 @@ pub enum SearchKind {
     Location,
     Category,
     Account,
+    Currency,
     Type,
     Amount,
     Date,
@@ -63,6 +64,7 @@ impl SearchTerm {
     pub fn matches(&self, entry: &Entry, snapshot: &Snapshot) -> bool {
         let category = snapshot.category_name(&entry.category_id).to_lowercase();
         let account = snapshot.account_name(&entry.account_id).to_lowercase();
+        let currency = entry.normalized_currency_code().to_lowercase();
         match (&self.kind, &self.value) {
             (SearchKind::Title, SearchValue::Text(value)) => {
                 entry.title.to_lowercase().contains(value)
@@ -81,6 +83,7 @@ impl SearchTerm {
                 .contains(value),
             (SearchKind::Category, SearchValue::Text(value)) => category.contains(value),
             (SearchKind::Account, SearchValue::Text(value)) => account.contains(value),
+            (SearchKind::Currency, SearchValue::Text(value)) => currency.contains(value),
             (SearchKind::Type, SearchValue::Income(income)) => {
                 if *income {
                     entry.amount > 0.0
@@ -122,6 +125,7 @@ impl SearchTerm {
                         .contains(value)
                     || category.contains(value)
                     || account.contains(value)
+                    || currency.contains(value)
             }
             _ => true,
         }
@@ -216,6 +220,7 @@ fn parse_token(token: &Token) -> Option<SearchTerm> {
         }
         "category" | "cat" => text_value(SearchKind::Category, "Category: is", value),
         "account" | "acc" => text_value(SearchKind::Account, "Account: is", value),
+        "currency" | "cur" => text_value(SearchKind::Currency, "Currency: is", value),
         "type" | "status" | "kind" | "is" => match value.to_lowercase().as_str() {
             "income" | "in" | "incoming" | "credit" | "deposit" => Some(income_term(true)),
             "expense" | "out" | "outgoing" | "debit" | "spend" => Some(income_term(false)),

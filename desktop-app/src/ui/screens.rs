@@ -1,13 +1,15 @@
 use crate::api::ImportKind;
-use crate::app::{AuthMode, Boot, CategoryCountFilter, Screen, SortField, SunderApp, SyncState};
+use crate::app::{
+    AdminCurrencyFilter, AuthMode, Boot, CategoryCountFilter, Screen, SortField, SunderApp,
+    SyncState,
+};
 use crate::assets::{Icon, icon, logo};
 use crate::format;
 use crate::model::{self, Entry, MonthFlow};
 use crate::search::SearchKind;
-use crate::store::Snapshot;
 use crate::theme::{Theme, space, text as type_scale, theme};
 use crate::ui::components::{
-    BadgeKind, SunderTooltip, amount, badge, card, chip, danger_button, divider, dot, empty_state,
+    BadgeKind, SunderTooltip, badge, card, chip, danger_button, divider, dot, empty_state,
     field_label, ghost_button, icon_badge, icon_button, icon_el, keycap, label, link_button,
     page_title, primary_button, secondary_button, section_title, shortcut, spinner,
 };
@@ -1000,8 +1002,12 @@ fn dashboard(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>
         format::today_label()
     );
 
+    let default_code = app.default_currency_code();
     let (month_income, month_expenses) = app.current_month_flow();
     let account_count = app.snapshot.active_accounts().len();
+    let net_balance = app.snapshot.converted_balance(&default_code);
+    let total_income = app.snapshot.converted_income(&default_code);
+    let total_expenses = app.snapshot.converted_expenses(&default_code);
 
     let stats = div()
         .flex()
@@ -1010,9 +1016,10 @@ fn dashboard(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>
         .child(stat_card(
             palette,
             "Net balance",
-            &app.signed_money(app.snapshot.balance()),
+            &app.signed_money(net_balance),
             &format!(
-                "All time  ·  {}",
+                "All time  ·  {}  ·  {}",
+                default_code,
                 format::plural(account_count, "account", "accounts")
             ),
             Icon::Wallet,
@@ -1022,7 +1029,7 @@ fn dashboard(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>
         .child(stat_card(
             palette,
             "Total income",
-            &app.signed_money(app.snapshot.income()),
+            &app.signed_money(total_income),
             &format!("{} this month", app.signed_money(month_income)),
             Icon::ArrowDownLeft,
             BadgeKind::Success,
@@ -1031,14 +1038,16 @@ fn dashboard(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>
         .child(stat_card(
             palette,
             "Total expenses",
-            &format!("-{}", app.money(app.snapshot.expenses())),
+            &format!("-{}", app.money(total_expenses)),
             &format!("-{} this month", app.money(month_expenses)),
             Icon::ArrowUpRight,
             BadgeKind::Danger,
             palette.expense,
         ));
 
-    let flows = model::monthly_flow(&app.snapshot.entries, 6);
+    let flows = model::monthly_flow_converted(&app.snapshot.entries, 6, |entry| {
+        app.convert_entry_amount(entry)
+    });
     let chart = cash_flow_card(app, palette, &flows);
     let top = top_categories_card(app, palette, cx);
 
@@ -1070,10 +1079,8 @@ fn dashboard(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>
         for entry in recent_entries {
             recent = recent.child(entry_row(
                 palette,
-                &app.snapshot,
+                app,
                 entry,
-                app.symbol(),
-                app.currency_position(),
                 false,
                 false,
                 false,
@@ -1371,7 +1378,8 @@ fn top_categories_card(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<
         .map(|category| category.spend)
         .fold(0.0_f64, f64::max)
         .max(1.0);
-    let total = app.snapshot.expenses().max(1.0);
+    let default_code = app.default_currency_code();
+    let total = app.snapshot.converted_expenses(&default_code).max(1.0);
 
     let mut list = div().flex().flex_col().gap(px(12.0));
     if categories.is_empty() {
@@ -1477,10 +1485,8 @@ type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut gpui::App) + 'stat
 #[allow(clippy::too_many_arguments)]
 fn entry_row(
     palette: &Theme,
-    snapshot: &Snapshot,
+    app: &SunderApp,
     entry: &Entry,
-    symbol: &str,
-    position: crate::format::CurrencyPosition,
     boxed: bool,
     show_date: bool,
     selectable: bool,
@@ -1488,9 +1494,11 @@ fn entry_row(
     on_select: Option<ClickHandler>,
     handler: impl Fn(&ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> Stateful<Div> {
+    let snapshot = &app.snapshot;
     let category = snapshot.category_name(&entry.category_id);
     let account = snapshot.account_name(&entry.account_id);
     let color = crate::theme::parse_color(&snapshot.category_color(&entry.category_id));
+    let entry_code = entry.normalized_currency_code();
     let meta = if show_date {
         format!(
             "{}  ·  {}  ·  {}",
@@ -1502,6 +1510,8 @@ fn entry_row(
         format!("{category}  ·  {account}")
     };
     let title = entry.title.clone();
+    let native_amount = app.signed_money_in(entry.amount, &entry_code);
+    let converted_preview = app.entry_converted_preview(entry);
 
     let hover_bg = palette.surface_hover;
     let border_hover = palette.border_strong;
@@ -1510,7 +1520,8 @@ fn entry_row(
         .flex()
         .items_center()
         .gap(px(11.0))
-        .h(px(58.0))
+        .min_h(px(58.0))
+        .py(px(8.0))
         .px(px(11.0))
         .rounded_lg()
         .cursor_pointer()
@@ -1572,7 +1583,31 @@ fn entry_row(
                     .child(meta),
             ),
     )
-    .child(amount(palette, entry.amount, symbol, position, 14.0))
+    .child(
+        div()
+            .flex()
+            .flex_col()
+            .items_end()
+            .gap(px(1.0))
+            .flex_shrink_0()
+            .child(
+                div()
+                    .text_size(px(14.0))
+                    .font_weight(type_scale::SEMIBOLD)
+                    .text_color(palette.money_color(entry.amount))
+                    .whitespace_nowrap()
+                    .child(native_amount),
+            )
+            .when_some(converted_preview, |element, preview| {
+                element.child(
+                    div()
+                        .text_size(px(10.5))
+                        .text_color(palette.subtle)
+                        .whitespace_nowrap()
+                        .child(preview),
+                )
+            }),
+    )
 }
 
 fn admin(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) -> Div {
@@ -1920,6 +1955,381 @@ fn admin(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) ->
                 )
                 .child(invite_rows),
         );
+
+        let syncing_rates = app.admin.syncing_rates;
+        let rates_card = card(palette)
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .px(px(16.0))
+                    .py(px(14.0))
+                    .border_b_1()
+                    .border_color(palette.border)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.0))
+                            .child(section_title(palette, "Exchange rates"))
+                            .when(syncing_rates, |el| el.child(spinner(palette, 14.0))),
+                    )
+                    .child(
+                        primary_button(
+                            palette,
+                            "admin-sync-latest-rates",
+                            if syncing_rates {
+                                "Syncing…"
+                            } else {
+                                "Sync latest rates"
+                            },
+                            Some(Icon::Refresh),
+                        )
+                        .debug_selector(|| "admin-sync-latest-rates".to_string())
+                        .on_click(cx.listener(|this, _, _, cx| this.admin_sync_latest_rates(cx))),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(12.0))
+                    .p(px(14.0))
+                    .when_some(app.admin.last_sync_summary.clone(), |el, summary| {
+                        el.child(
+                            div()
+                                .text_size(px(type_scale::MICRO))
+                                .text_color(palette.muted)
+                                .child(summary),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_end()
+                            .gap(px(12.0))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(5.0))
+                                    .child(label(palette, "Sync specific date"))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(6.0))
+                                            .child(
+                                                div()
+                                                    .w(px(145.0))
+                                                    .child(app.admin_rate_date.clone()),
+                                            )
+                                            .child(
+                                                secondary_button(
+                                                    palette,
+                                                    "admin-sync-date-rates",
+                                                    "Sync date",
+                                                    Some(Icon::Calendar),
+                                                )
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.admin_sync_date_rates(cx)
+                                                })),
+                                            ),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(5.0))
+                                    .child(label(palette, "Backfill history (days)"))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(6.0))
+                                            .child(
+                                                div()
+                                                    .w(px(90.0))
+                                                    .child(app.admin_backfill_days.clone()),
+                                            )
+                                            .child(
+                                                secondary_button(
+                                                    palette,
+                                                    "admin-backfill-rates",
+                                                    "Backfill",
+                                                    Some(Icon::Refresh),
+                                                )
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.admin_backfill_rates(cx)
+                                                })),
+                                            ),
+                                    ),
+                            ),
+                    )
+                    .child(divider(palette))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(label(palette, "Manual rate override (1 USD = rate)"))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .items_center()
+                                    .gap(px(8.0))
+                                    .child(
+                                        div()
+                                            .w(px(110.0))
+                                            .child(app.admin_manual_target.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(130.0))
+                                            .child(app.admin_manual_rate.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(150.0))
+                                            .child(app.admin_manual_date.clone()),
+                                    )
+                                    .child(
+                                        secondary_button(
+                                            palette,
+                                            "admin-save-manual-rate",
+                                            "Save rate",
+                                            Some(Icon::Check),
+                                        )
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.admin_save_manual_rate(cx)
+                                        })),
+                                    ),
+                            ),
+                    ),
+            );
+        content = content.child(rates_card);
+
+        let filtered_currencies = app.filtered_admin_currencies(cx);
+        let active_currency_count = app
+            .admin
+            .currencies
+            .iter()
+            .filter(|currency| currency.is_active)
+            .count();
+        let currency_filter_chips = div()
+            .flex()
+            .items_center()
+            .gap(px(4.0))
+            .children(
+                [
+                    (AdminCurrencyFilter::All, "All", "admin-currency-filter-all"),
+                    (
+                        AdminCurrencyFilter::Active,
+                        "Active",
+                        "admin-currency-filter-active",
+                    ),
+                    (
+                        AdminCurrencyFilter::Inactive,
+                        "Inactive",
+                        "admin-currency-filter-inactive",
+                    ),
+                ]
+                .into_iter()
+                .map(|(filter, title, id)| {
+                    chip(palette, id, title, app.admin.currency_filter == filter, None)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.admin.currency_filter = filter;
+                            cx.notify();
+                        }))
+                        .into_any_element()
+                }),
+            );
+
+        let currency_rows = if filtered_currencies.is_empty() {
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .p(px(24.0))
+                .child(
+                    div()
+                        .text_size(px(type_scale::SMALL))
+                        .text_color(palette.subtle)
+                        .child("No currencies match this filter."),
+                )
+                .into_any_element()
+        } else {
+            let mut rows = div()
+                .id("admin-currencies-scroll")
+                .flex()
+                .flex_col()
+                .max_h(px(360.0))
+                .overflow_y_scroll();
+            for currency in filtered_currencies {
+                let code = currency.code.clone();
+                let next_active = !currency.is_active;
+                let edit_currency = currency.clone();
+                let preview = format::money_in(1234.5, currency);
+                rows = rows.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(12.0))
+                        .px(px(14.0))
+                        .py(px(10.0))
+                        .border_b_1()
+                        .border_color(palette.border)
+                        .child(
+                            div()
+                                .w(px(58.0))
+                                .flex_shrink_0()
+                                .text_size(px(type_scale::SMALL))
+                                .font_family("Obel Mono")
+                                .font_weight(type_scale::SEMIBOLD)
+                                .text_color(palette.foreground)
+                                .child(currency.code.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(1.0))
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .child(
+                                    div()
+                                        .text_size(px(type_scale::SMALL))
+                                        .font_weight(type_scale::MEDIUM)
+                                        .text_color(palette.foreground)
+                                        .truncate()
+                                        .child(currency.name.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(type_scale::MICRO))
+                                        .text_color(palette.subtle)
+                                        .truncate()
+                                        .child(format!(
+                                            "{}  ·  {} decimals  ·  {}",
+                                            currency.symbol, currency.decimal_digits, preview
+                                        )),
+                                ),
+                        )
+                        .child(if currency.is_active {
+                            badge(palette, "Active", BadgeKind::Success)
+                        } else {
+                            badge(palette, "Inactive", BadgeKind::Neutral)
+                        })
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.0))
+                                .child(
+                                    ghost_button(
+                                        palette,
+                                        ElementId::Name(format!("admin-currency-toggle-{code}").into()),
+                                        if currency.is_active {
+                                            "Disable"
+                                        } else {
+                                            "Enable"
+                                        },
+                                        None,
+                                    )
+                                    .on_click(cx.listener({
+                                        let code = code.clone();
+                                        move |this, _, _, cx| {
+                                            this.admin_toggle_currency_active(
+                                                code.clone(),
+                                                next_active,
+                                                cx,
+                                            )
+                                        }
+                                    })),
+                                )
+                                .child(
+                                    icon_button(
+                                        palette,
+                                        ElementId::Name(format!("admin-currency-edit-{code}").into()),
+                                        Icon::Pencil,
+                                        true,
+                                    )
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.open_admin_currency_editor(
+                                            Some(edit_currency.clone()),
+                                            window,
+                                            cx,
+                                        )
+                                    }))
+                                    .sunder_tooltip("Edit currency", &[]),
+                                ),
+                        ),
+                );
+            }
+            rows.into_any_element()
+        };
+
+        content = content.child(
+            card(palette)
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .px(px(16.0))
+                        .py(px(14.0))
+                        .border_b_1()
+                        .border_color(palette.border)
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.0))
+                                .child(section_title(palette, "Supported currencies"))
+                                .child(badge(
+                                    palette,
+                                    format!(
+                                        "{active_currency_count} / {}",
+                                        app.admin.currencies.len()
+                                    ),
+                                    BadgeKind::Neutral,
+                                )),
+                        )
+                        .child(
+                            primary_button(
+                                palette,
+                                "admin-add-currency",
+                                "Add currency",
+                                Some(Icon::Plus),
+                            )
+                            .debug_selector(|| "admin-add-currency".to_string())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.open_admin_currency_editor(None, window, cx)
+                            })),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(10.0))
+                        .p(px(14.0))
+                        .border_b_1()
+                        .border_color(palette.border)
+                        .child(div().flex_1().child(app.admin_currency_search.clone()))
+                        .child(currency_filter_chips),
+                )
+                .child(currency_rows),
+        );
     }
 
     div()
@@ -1930,7 +2340,7 @@ fn admin(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) ->
         .child(page_header(
             palette,
             "Admin",
-            "Manage users and invite codes.",
+            "Manage users, invite codes, currencies, and exchange rates.",
             vec![refresh.into_any_element()],
         ))
         .child(content)
@@ -2393,16 +2803,34 @@ fn entries(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) 
             )
             .when(selected_count > 0, |element| {
                 element.child(
-                    danger_button(
-                        palette,
-                        "entries-delete-selected",
-                        format!("Delete selected ({selected_count})"),
-                        Some(Icon::Trash),
-                    )
-                    .debug_selector(|| "entries-delete-selected".to_string())
-                    .on_click(
-                        cx.listener(|this, _, _, cx| this.request_delete_selected_entries(cx)),
-                    ),
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(
+                            secondary_button(
+                                palette,
+                                "entries-change-currency",
+                                format!("Change currency ({selected_count})"),
+                                Some(Icon::Refresh),
+                            )
+                            .debug_selector(|| "entries-change-currency".to_string())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.open_bulk_currency_editor(window, cx)
+                            })),
+                        )
+                        .child(
+                            danger_button(
+                                palette,
+                                "entries-delete-selected",
+                                format!("Delete selected ({selected_count})"),
+                                Some(Icon::Trash),
+                            )
+                            .debug_selector(|| "entries-delete-selected".to_string())
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.request_delete_selected_entries(cx)
+                            })),
+                        ),
                 )
             });
         list = list.child(selection);
@@ -2414,13 +2842,14 @@ fn entries(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) 
                     .date_naive()
                     .map(model::day_label)
                     .unwrap_or_else(|| "Undated".to_string());
+                let converted = app.convert_entry_amount(entry);
                 if let Some((_, rows, total)) =
                     groups.iter_mut().find(|(group, _, _)| *group == label)
                 {
                     rows.push(entry);
-                    *total += entry.amount;
+                    *total += converted;
                 } else {
-                    groups.push((label, vec![entry], entry.amount));
+                    groups.push((label, vec![entry], converted));
                 }
             }
 
@@ -2459,10 +2888,8 @@ fn entries(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) 
                     }));
                     group = group.child(entry_row(
                         palette,
-                        &app.snapshot,
+                        app,
                         entry,
-                        app.symbol(),
-                        app.currency_position(),
                         true,
                         false,
                         true,
@@ -2496,10 +2923,8 @@ fn entries(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) 
                 }));
                 flat = flat.child(entry_row(
                     palette,
-                    &app.snapshot,
+                    app,
                     entry,
-                    app.symbol(),
-                    app.currency_position(),
                     true,
                     true,
                     true,
@@ -2618,6 +3043,48 @@ fn filter_panel(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderA
         );
     }
 
+    let mut currency_codes: Vec<String> = app
+        .snapshot
+        .active_entries()
+        .into_iter()
+        .map(|entry| entry.normalized_currency_code().to_string())
+        .chain(app.filter.currency_codes.iter().cloned())
+        .collect();
+    currency_codes.sort();
+    currency_codes.dedup();
+
+    let mut currency_chips = div().flex().flex_wrap().gap(px(6.0));
+    currency_chips = currency_chips.child(
+        chip(
+            palette,
+            "filter-currency-all",
+            "All currencies",
+            app.filter.currency_codes.is_empty(),
+            None,
+        )
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.filter.currency_codes.clear();
+            cx.notify();
+        })),
+    );
+    for code in currency_codes {
+        let code_for_click = code.clone();
+        let selected = app.filter.currency_codes.contains(&code);
+        currency_chips = currency_chips.child(
+            chip(
+                palette,
+                ElementId::Name(format!("filter-currency-{code}").into()),
+                code,
+                selected,
+                None,
+            )
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.filter.toggle_currency(&code_for_click);
+                cx.notify();
+            })),
+        );
+    }
+
     let mut sort_chips = div().flex().items_center().gap(px(6.0));
     for (field, label) in [
         (SortField::Date, "Date"),
@@ -2697,6 +3164,14 @@ fn filter_panel(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderA
                 .gap(px(6.0))
                 .child(label(palette, "Categories"))
                 .child(category_chips),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .child(label(palette, "Currencies"))
+                .child(currency_chips),
         )
         .child(divider(palette))
         .child(
@@ -2835,6 +3310,10 @@ fn entry_detail(
     let title = entry.title.clone();
     let location = entry.location.clone();
     let description = entry.description.clone();
+    let entry_code = entry.normalized_currency_code().to_string();
+    let entry_currency = app.currency(&entry_code);
+    let native_amount = app.signed_money_in(entry.amount, &entry_code);
+    let converted_preview = app.entry_converted_preview(entry);
 
     let row = |palette: &Theme, name: &str, value: AnyElement| {
         div()
@@ -2921,8 +3400,16 @@ fn entry_detail(
                                 .line_height(px(48.0))
                                 .font_weight(type_scale::BOLD)
                                 .text_color(palette.money_color(entry.amount))
-                                .child(app.signed_money(entry.amount)),
-                        ),
+                                .child(native_amount),
+                        )
+                        .when_some(converted_preview.clone(), |element, preview| {
+                            element.child(
+                                div()
+                                    .text_size(px(type_scale::SMALL))
+                                    .text_color(palette.subtle)
+                                    .child(preview),
+                            )
+                        }),
                 )
                 .child(
                     div()
@@ -2930,6 +3417,35 @@ fn entry_detail(
                         .flex_col()
                         .gap(px(15.0))
                         .p(px(24.0))
+                        .child(row(
+                            palette,
+                            "Currency",
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(6.0))
+                                .child(badge(palette, entry_code.clone(), BadgeKind::Neutral))
+                                .child(
+                                    div()
+                                        .text_size(px(type_scale::SMALL))
+                                        .font_weight(type_scale::MEDIUM)
+                                        .text_color(palette.foreground)
+                                        .child(entry_currency.name),
+                                )
+                                .into_any_element(),
+                        ))
+                        .when_some(converted_preview, |element, preview| {
+                            element.child(row(
+                                palette,
+                                "Converted",
+                                div()
+                                    .text_size(px(type_scale::SMALL))
+                                    .font_weight(type_scale::MEDIUM)
+                                    .text_color(palette.muted)
+                                    .child(format!("{preview} ({})", app.default_currency_code()))
+                                    .into_any_element(),
+                            ))
+                        })
                         .child(row(
                             palette,
                             "Account",
@@ -3025,13 +3541,15 @@ fn account_detail(
         return missing_detail(palette, "Account not found or deleted.", cx);
     };
     let name = account.name.clone();
+    let account_currency = account.normalized_currency_code();
     let entries: Vec<&Entry> = app
         .snapshot
         .active_entries()
         .into_iter()
         .filter(|entry| entry.account_id == id)
         .collect();
-    let balance = app.snapshot.account_balance(id);
+    let default_code = app.default_currency_code();
+    let balance = app.snapshot.converted_account_balance(id, &default_code);
     let account_id = id.to_string();
 
     let mut list = div().flex().flex_col().gap(px(6.0));
@@ -3046,10 +3564,8 @@ fn account_detail(
         for entry in entries {
             list = list.child(entry_row(
                 palette,
-                &app.snapshot,
+                app,
                 entry,
-                app.symbol(),
-                app.currency_position(),
                 true,
                 true,
                 false,
@@ -3063,6 +3579,20 @@ fn account_detail(
         }
     }
 
+    let header_subtitle = match &account_currency {
+        Some(code) => format!(
+            "{}  ·  {}  ·  {}",
+            format::plural(app.snapshot.account_entry_count(id), "entry", "entries"),
+            code,
+            app.signed_money(balance)
+        ),
+        None => format!(
+            "{}  ·  {}",
+            format::plural(app.snapshot.account_entry_count(id), "entry", "entries"),
+            app.signed_money(balance)
+        ),
+    };
+
     div()
         .flex()
         .flex_col()
@@ -3071,11 +3601,7 @@ fn account_detail(
         .child(detail_header(
             palette,
             name.clone(),
-            format!(
-                "{}  ·  {}",
-                format::plural(app.snapshot.account_entry_count(id), "entry", "entries"),
-                app.signed_money(balance)
-            ),
+            header_subtitle,
             vec![
                 secondary_button(palette, "account-detail-add", "Add entry", Some(Icon::Plus))
                     .sunder_tooltip("Add entry to this account", &[])
@@ -3116,14 +3642,23 @@ fn account_detail(
             card(palette)
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(4.0))
                 .p(px(20.0))
                 .child(
                     div()
-                        .text_size(px(type_scale::SMALL))
-                        .font_weight(type_scale::MEDIUM)
-                        .text_color(palette.muted)
-                        .child("Current balance"),
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_size(px(type_scale::SMALL))
+                                .font_weight(type_scale::MEDIUM)
+                                .text_color(palette.muted)
+                                .child(format!("Current balance ({default_code})")),
+                        )
+                        .when_some(account_currency, |el, code| {
+                            el.child(badge(palette, format!("Default: {code}"), BadgeKind::Neutral))
+                        }),
                 )
                 .child(
                     div()
@@ -3171,7 +3706,8 @@ fn category_detail(
         .filter(|entry| entry.category_id == id)
         .collect();
     let category_id = id.to_string();
-    let spend = app.snapshot.category_spend(id);
+    let default_code = app.default_currency_code();
+    let spend = app.snapshot.converted_category_spend(id, &default_code);
 
     let mut list = div().flex().flex_col().gap(px(6.0));
     if entries.is_empty() {
@@ -3185,10 +3721,8 @@ fn category_detail(
         for entry in entries {
             list = list.child(entry_row(
                 palette,
-                &app.snapshot,
+                app,
                 entry,
-                app.symbol(),
-                app.currency_position(),
                 true,
                 true,
                 false,
@@ -3341,6 +3875,7 @@ fn missing_detail(
 
 fn accounts(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) -> Div {
     let query = app.account_search.read(cx).text().trim().to_lowercase();
+    let default_code = app.default_currency_code();
     let accounts = app
         .snapshot
         .active_accounts()
@@ -3350,7 +3885,8 @@ fn accounts(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>)
             (
                 account.id.clone(),
                 account.name.clone(),
-                app.snapshot.account_balance(&account.id),
+                account.normalized_currency_code(),
+                app.snapshot.converted_account_balance(&account.id, &default_code),
                 app.snapshot.account_entry_count(&account.id),
             )
         })
@@ -3369,7 +3905,7 @@ fn accounts(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>)
         format!(
             "{} holding {}",
             format::plural(total_accounts, "account", "accounts"),
-            app.signed_money(app.snapshot.balance())
+            app.signed_money(app.snapshot.converted_balance(&default_code))
         )
     } else {
         format!("{} of {} accounts", accounts.len(), total_accounts)
@@ -3459,7 +3995,7 @@ fn accounts(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>)
             .w_full()
             .child(selection);
         let mut cards = div().grid().grid_cols(2).gap(px(12.0)).w_full();
-        for (id, name, balance, count) in accounts {
+        for (id, name, currency, balance, count) in accounts {
             let account_name = name.clone();
             let card_id = ElementId::Name(format!("account-card-{id}").into());
             let checkbox_id = ElementId::Name(format!("account-select-{id}").into());
@@ -3507,7 +4043,10 @@ fn accounts(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>)
                                             .text_color(palette.foreground)
                                             .truncate()
                                             .child(account_name),
-                                    ),
+                                    )
+                                    .when_some(currency, |el, code| {
+                                        el.child(badge(palette, code, BadgeKind::Neutral))
+                                    }),
                             )
                             .child(
                                 crate::ui::components::selection_checkbox(
@@ -3582,6 +4121,7 @@ fn accounts(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>)
 
 fn categories(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>) -> Div {
     let query = app.category_search.read(cx).text().trim().to_lowercase();
+    let default_code = app.default_currency_code();
     let categories = app
         .visible_categories(cx)
         .into_iter()
@@ -3591,7 +4131,7 @@ fn categories(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp
                 category.title.clone(),
                 category.description.clone().unwrap_or_default(),
                 category.color.clone(),
-                app.snapshot.category_spend(&category.id),
+                app.snapshot.converted_category_spend(&category.id, &default_code),
                 app.snapshot.category_entry_count(&category.id),
             )
         })
@@ -4079,55 +4619,238 @@ fn settings(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>)
         );
     }
 
-    let mut currency_chips = div().flex().items_center().gap(px(4.0));
-    for symbol in ["$", "€", "£", "¥"] {
-        let selected = app.symbol() == symbol;
-        currency_chips = currency_chips.child(
-            chip(
-                palette,
-                ElementId::Name(format!("currency-{symbol}").into()),
-                symbol,
-                selected,
-                None,
-            )
-            .on_click(cx.listener(move |this, _, _, cx| this.set_currency(symbol, cx))),
+    let default_currency = app.default_currency();
+    let default_code = default_currency.code.clone();
+    let currency_preview = app.money(1234.5);
+    let currency_query = app
+        .settings_currency_search
+        .read(cx)
+        .text()
+        .trim()
+        .to_lowercase();
+    let available_currencies = app.snapshot.active_currencies();
+    let filtered_settings_currencies: Vec<_> = available_currencies
+        .iter()
+        .copied()
+        .filter(|currency| {
+            currency_query.is_empty()
+                || currency.code.to_lowercase().contains(&currency_query)
+                || currency.name.to_lowercase().contains(&currency_query)
+                || currency.symbol.to_lowercase().contains(&currency_query)
+        })
+        .collect();
+    let cached_currency_count = app.snapshot.currencies.len();
+    let cached_rate_days = app.snapshot.exchange_rates.len();
+
+    let mut currency_picker = div()
+        .flex()
+        .flex_col()
+        .gap(px(8.0))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(12.0))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.0))
+                        .child(label(palette, "Default display currency"))
+                        .child(
+                            div()
+                                .text_size(px(type_scale::MICRO))
+                                .text_color(palette.subtle)
+                                .child("Used for totals, balances, charts, and synced across devices"),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(
+                            div()
+                                .id("settings-currency-select")
+                                .debug_selector(|| "settings-currency-select".to_string())
+                                .flex()
+                                .items_center()
+                                .gap(px(8.0))
+                                .h(px(34.0))
+                                .px(px(11.0))
+                                .rounded_lg()
+                                .border_1()
+                                .border_color(if app.settings_currency_open {
+                                    palette.primary
+                                } else {
+                                    palette.border
+                                })
+                                .bg(palette.surface_muted)
+                                .cursor_pointer()
+                                .hover({
+                                    let hover = palette.surface_hover;
+                                    move |style| style.bg(hover)
+                                })
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.settings_currency_open = !this.settings_currency_open;
+                                    if this.settings_currency_open {
+                                        this.settings_currency_search
+                                            .update(cx, |input, cx| input.clear(cx));
+                                        let focus = this.settings_currency_search.read(cx).focus();
+                                        window.focus(&focus);
+                                    }
+                                    cx.notify();
+                                }))
+                                .child(
+                                    div()
+                                        .text_size(px(type_scale::SMALL))
+                                        .font_weight(type_scale::SEMIBOLD)
+                                        .text_color(palette.foreground)
+                                        .child(format!(
+                                            "{} ({})",
+                                            default_currency.code, default_currency.symbol
+                                        )),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(type_scale::MICRO))
+                                        .text_color(palette.muted)
+                                        .max_w(px(140.0))
+                                        .truncate()
+                                        .child(default_currency.name.clone()),
+                                )
+                                .child(icon_el(Icon::ChevronDown, 13.0, palette.muted)),
+                        )
+                        .child(
+                            secondary_button(
+                                palette,
+                                "settings-refresh-rates",
+                                "Refresh rates",
+                                Some(Icon::Refresh),
+                            )
+                            .debug_selector(|| "settings-refresh-rates".to_string())
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.refresh_currencies_and_rates(true, cx)
+                            })),
+                        ),
+                ),
+        );
+
+    if app.settings_currency_open {
+        let mut options = div()
+            .id("settings-currency-options")
+            .flex()
+            .flex_col()
+            .gap(px(2.0))
+            .max_h(px(220.0))
+            .overflow_y_scroll();
+        if filtered_settings_currencies.is_empty() {
+            options = options.child(
+                div()
+                    .px(px(10.0))
+                    .py(px(8.0))
+                    .text_size(px(type_scale::SMALL))
+                    .text_color(palette.subtle)
+                    .child("No matching currencies"),
+            );
+        } else {
+            for currency in filtered_settings_currencies {
+                let code = currency.code.clone();
+                let debug_id = format!("settings-currency-option-{code}");
+                let selected = code == default_code;
+                let preview = format::money_in(1234.5, currency);
+                options = options.child(
+                    div()
+                        .id(ElementId::Name(debug_id.clone().into()))
+                        .debug_selector(move || debug_id.clone())
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(10.0))
+                        .px(px(10.0))
+                        .py(px(7.0))
+                        .rounded_md()
+                        .cursor_pointer()
+                        .when(selected, |style| style.bg(palette.primary_tint))
+                        .hover({
+                            let hover = palette.surface_hover;
+                            move |style| style.bg(hover)
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.set_default_currency(&code, cx);
+                        }))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.0))
+                                .min_w(px(0.0))
+                                .child(
+                                    div()
+                                        .w(px(44.0))
+                                        .font_family("Obel Mono")
+                                        .text_size(px(type_scale::SMALL))
+                                        .font_weight(type_scale::SEMIBOLD)
+                                        .text_color(if selected {
+                                            palette.primary
+                                        } else {
+                                            palette.foreground
+                                        })
+                                        .child(currency.code.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(type_scale::SMALL))
+                                        .text_color(palette.foreground)
+                                        .truncate()
+                                        .child(currency.name.clone()),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.0))
+                                .child(
+                                    div()
+                                        .text_size(px(type_scale::MICRO))
+                                        .text_color(palette.subtle)
+                                        .child(preview),
+                                )
+                                .when(selected, |el| {
+                                    el.child(icon_el(Icon::Check, 13.0, palette.primary))
+                                }),
+                        ),
+                );
+            }
+        }
+        currency_picker = currency_picker.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .p(px(8.0))
+                .rounded_lg()
+                .border_1()
+                .border_color(palette.border)
+                .bg(palette.surface)
+                .child(app.settings_currency_search.clone())
+                .child(options),
         );
     }
-    let position_chips = div()
-        .flex()
-        .items_center()
-        .gap(px(4.0))
-        .child(
-            chip(
-                palette,
-                "currency-position-before",
-                "Before",
-                app.settings.currency_position == crate::format::CurrencyPosition::Before,
-                None,
-            )
-            .debug_selector(|| "currency-position-before".to_string())
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.set_currency_position(crate::format::CurrencyPosition::Before, cx)
-            })),
-        )
-        .child(
-            chip(
-                palette,
-                "currency-position-after",
-                "After",
-                app.settings.currency_position == crate::format::CurrencyPosition::After,
-                None,
-            )
-            .debug_selector(|| "currency-position-after".to_string())
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.set_currency_position(crate::format::CurrencyPosition::After, cx)
-            })),
-        );
-    let currency_preview = format::money(
-        1234.5,
-        &app.settings.currency_symbol,
-        app.settings.currency_position,
+
+    currency_picker = currency_picker.child(
+        div()
+            .text_size(px(type_scale::MICRO))
+            .text_color(palette.subtle)
+            .child(format!(
+                "Preview  ·  {currency_preview}  ·  {}  ·  {}",
+                format::plural(cached_currency_count, "currency", "currencies"),
+                format::plural(cached_rate_days, "rate day", "rate days")
+            )),
     );
+
     let motion_chips = div()
         .flex()
         .items_center()
@@ -4225,73 +4948,27 @@ fn settings(app: &SunderApp, palette: &Theme, cx: &mut gpui::Context<SunderApp>)
                 .child(theme_chips),
         )
         .child(divider(palette))
+        .child(currency_picker)
+        .child(divider(palette))
         .child(
             div()
                 .flex()
-                .flex_col()
-                .gap(px(10.0))
+                .items_center()
+                .justify_between()
                 .child(
                     div()
                         .flex()
-                        .items_center()
-                        .justify_between()
+                        .flex_col()
+                        .gap(px(2.0))
+                        .child(label(palette, "Motion"))
                         .child(
                             div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(2.0))
-                                .child(label(palette, "Currency symbol"))
-                                .child(
-                                    div()
-                                        .text_size(px(type_scale::MICRO))
-                                        .text_color(palette.subtle)
-                                        .child("Custom symbol, up to four characters"),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.0))
-                                .child(div().w(px(82.0)).child(app.currency_input.clone()))
-                                .child(currency_chips),
+                                .text_size(px(type_scale::MICRO))
+                                .text_color(palette.subtle)
+                                .child("Full motion or a gentler reduced-motion mode"),
                         ),
                 )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(label(palette, "Number formatting"))
-                        .child(position_chips),
-                )
-                .child(
-                    div()
-                        .text_size(px(type_scale::MICRO))
-                        .text_color(palette.subtle)
-                        .child(format!("Preview  ·  {currency_preview}")),
-                )
-                .child(divider(palette))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(2.0))
-                                .child(label(palette, "Motion"))
-                                .child(
-                                    div()
-                                        .text_size(px(type_scale::MICRO))
-                                        .text_color(palette.subtle)
-                                        .child("Full motion or a gentler reduced-motion mode"),
-                                ),
-                        )
-                        .child(motion_chips),
-                ),
+                .child(motion_chips),
         );
 
     let sync_section = card(palette)

@@ -1,17 +1,17 @@
-use crate::api::AdminUser;
+use crate::api::{AdminCurrencyPatch, AdminUser};
 use crate::app::{
     CalendarState, CalendarTarget, CalendarView, SunderApp, Toast, ToastAction, ToastKind,
     calendar_grid,
 };
 use crate::assets::{Icon, icon};
 use crate::format;
-use crate::model::{self, Account, Category, Entry, new_id, now};
+use crate::model::{self, Account, Category, Currency, Entry, new_id, now};
 use crate::theme::{Theme, parse_color, text as type_scale, theme};
 use crate::ui::components::{
     BadgeKind, SunderTooltip, chip, danger_button, dot, field_label, ghost_button, icon_badge,
     icon_button, primary_button, secondary_button, shortcut,
 };
-use crate::ui::input::{InputStyle, TextInput};
+use crate::ui::input::{InputStyle, TextInput, TextInputEvent};
 use chrono::{Datelike, Duration};
 use gpui::{
     AnyElement, BoxShadow, Div, ElementId, IntoElement, MouseButton, NavigationDirection,
@@ -28,6 +28,10 @@ pub struct EntryEditor {
     pub account_id: Option<String>,
     pub category_id: Option<String>,
     pub category_picker_open: bool,
+    pub currency_code: String,
+    pub currency_picker_open: bool,
+    pub currency_search: gpui::Entity<TextInput>,
+    pub currency_touched: bool,
     pub income: bool,
     pub error: Option<String>,
     pub seq: u64,
@@ -36,6 +40,28 @@ pub struct EntryEditor {
 pub struct AccountEditor {
     pub editing: Option<String>,
     pub name: gpui::Entity<TextInput>,
+    pub currency_code: Option<String>,
+    pub currency_picker_open: bool,
+    pub currency_search: gpui::Entity<TextInput>,
+    pub error: Option<String>,
+    pub seq: u64,
+}
+
+pub struct BulkCurrencyEditor {
+    pub entry_ids: Vec<String>,
+    pub currency_code: String,
+    pub search: gpui::Entity<TextInput>,
+    pub seq: u64,
+}
+
+pub struct AdminCurrencyEditor {
+    pub editing_code: Option<String>,
+    pub code: gpui::Entity<TextInput>,
+    pub name: gpui::Entity<TextInput>,
+    pub symbol: gpui::Entity<TextInput>,
+    pub decimal_digits: gpui::Entity<TextInput>,
+    pub symbol_after: bool,
+    pub is_active: bool,
     pub error: Option<String>,
     pub seq: u64,
 }
@@ -96,9 +122,21 @@ impl SunderApp {
                     .map(|category| category.id.clone())
             });
 
+        let currency_code = entry
+            .as_ref()
+            .map(|entry| entry.normalized_currency_code().to_string())
+            .or_else(|| {
+                account_id
+                    .as_deref()
+                    .and_then(|id| self.snapshot.account(id))
+                    .and_then(|account| account.normalized_currency_code())
+            })
+            .unwrap_or_else(|| self.default_currency_code());
+        let currency_meta = self.currency(&currency_code);
+
         let amount_text = entry
             .as_ref()
-            .map(|entry| format::number(entry.amount.abs()))
+            .map(|entry| format::number_with_digits(entry.amount.abs(), currency_meta.decimal_digits))
             .unwrap_or_default();
         let title_text = entry
             .as_ref()
@@ -163,11 +201,21 @@ impl SunderApp {
                 cx,
             )
         });
+        let currency_search = cx.new(|cx| {
+            TextInput::new("Search currency…", "", InputStyle::compact(), cx)
+                .with_prefix(Icon::Search)
+        });
+        cx.subscribe(&currency_search, |_, _, event, cx| {
+            if matches!(event, TextInputEvent::Change) {
+                cx.notify();
+            }
+        })
+        .detach();
 
         let handle = amount.read(cx).focus();
         self.modal_seq += 1;
         self.editor = Some(EntryEditor {
-            editing: entry_id,
+            editing: entry_id.clone(),
             amount,
             title,
             date,
@@ -176,6 +224,10 @@ impl SunderApp {
             account_id,
             category_id,
             category_picker_open: false,
+            currency_code,
+            currency_picker_open: false,
+            currency_search,
+            currency_touched: entry_id.is_some(),
             income,
             error: None,
             seq: self.modal_seq,
@@ -199,7 +251,10 @@ impl SunderApp {
             return;
         };
 
-        let amount_value = format::parse_amount(editor.amount.read(cx).text());
+        let currency_code = model::normalize_currency_code(&editor.currency_code);
+        let decimal_digits = self.currency(&currency_code).decimal_digits;
+        let amount_value =
+            format::parse_amount_with_digits(editor.amount.read(cx).text(), decimal_digits);
         let title_value = editor.title.read(cx).text().trim().to_string();
         let date_value = editor.date.read(cx).text().trim().to_string();
         let description_value = editor.description.read(cx).text().trim().to_string();
@@ -259,6 +314,7 @@ impl SunderApp {
                 description: (!description_value.is_empty()).then_some(description_value),
                 location: (!location_value.is_empty()).then_some(location_value),
                 amount,
+                currency_code,
                 date: date_stamp,
                 updated_at: now(),
                 ..previous
@@ -272,7 +328,7 @@ impl SunderApp {
                 description: (!description_value.is_empty()).then_some(description_value),
                 location: (!location_value.is_empty()).then_some(location_value),
                 amount,
-                currency_code: self.settings.default_currency_code.clone(),
+                currency_code,
                 date: date_stamp,
                 deleted_at: None,
                 inserted_at: now(),
@@ -363,13 +419,29 @@ impl SunderApp {
             .as_ref()
             .map(|account| account.name.clone())
             .unwrap_or_default();
+        let currency_code = account
+            .as_ref()
+            .and_then(|account| account.normalized_currency_code());
         let name =
             cx.new(|cx| TextInput::new("Checking account", name_text, InputStyle::large(), cx));
+        let currency_search = cx.new(|cx| {
+            TextInput::new("Search currency…", "", InputStyle::compact(), cx)
+                .with_prefix(Icon::Search)
+        });
+        cx.subscribe(&currency_search, |_, _, event, cx| {
+            if matches!(event, TextInputEvent::Change) {
+                cx.notify();
+            }
+        })
+        .detach();
         let handle = name.read(cx).focus();
         self.modal_seq += 1;
         self.account_editor = Some(AccountEditor {
             editing: account_id,
             name,
+            currency_code,
+            currency_picker_open: false,
+            currency_search,
             error: None,
             seq: self.modal_seq,
         });
@@ -382,6 +454,10 @@ impl SunderApp {
             return;
         };
         let name = editor.name.read(cx).text().trim().to_string();
+        let currency_code = editor
+            .currency_code
+            .as_deref()
+            .map(model::normalize_currency_code);
         let editing = editor.editing.clone();
         if name.is_empty() {
             if let Some(editor) = self.account_editor.as_mut() {
@@ -409,11 +485,14 @@ impl SunderApp {
         let account = if let Some(previous) = previous.clone() {
             Account {
                 name,
+                currency_code: currency_code.clone(),
                 updated_at: now(),
                 ..previous
             }
         } else {
-            Account::new(name)
+            let mut created = Account::new(name);
+            created.currency_code = currency_code.clone();
+            created
         };
         let created = previous.is_none();
         let undo = account.clone();
@@ -421,6 +500,11 @@ impl SunderApp {
         self.snapshot.upsert_account(account);
         if let Some(editor) = self.editor.as_mut() {
             editor.account_id = Some(account_id.clone());
+            if !editor.currency_touched
+                && let Some(code) = currency_code
+            {
+                editor.currency_code = code;
+            }
         } else if created {
             self.screen = crate::app::Screen::Accounts;
             self.detail = Some(crate::app::DetailView::Account(account_id.clone()));
@@ -788,6 +872,250 @@ impl SunderApp {
         })
         .detach();
     }
+
+    pub fn open_bulk_currency_editor(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let entry_ids: Vec<String> = self.selected_entries.iter().cloned().collect();
+        if entry_ids.is_empty() {
+            return;
+        }
+        let currency_code = self.default_currency_code();
+        let search = cx.new(|cx| {
+            TextInput::new("Search currency…", "", InputStyle::compact(), cx)
+                .with_prefix(Icon::Search)
+        });
+        cx.subscribe(&search, |_, _, event, cx| {
+            if matches!(event, TextInputEvent::Change) {
+                cx.notify();
+            }
+        })
+        .detach();
+        let handle = search.read(cx).focus();
+        self.modal_seq += 1;
+        self.bulk_currency_editor = Some(BulkCurrencyEditor {
+            entry_ids,
+            currency_code,
+            search,
+            seq: self.modal_seq,
+        });
+        window.focus(&handle);
+        cx.notify();
+    }
+
+    pub fn apply_bulk_currency_change(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(editor) = self.bulk_currency_editor.take() else {
+            return;
+        };
+        let target_code = model::normalize_currency_code(&editor.currency_code);
+        let stamp = now();
+        let mut updated = 0usize;
+        for id in &editor.entry_ids {
+            if let Some(mut entry) = self.snapshot.entry(id).cloned()
+                && entry.is_active()
+            {
+                if entry.normalized_currency_code() != target_code {
+                    entry.currency_code = target_code.clone();
+                    entry.updated_at = stamp.clone();
+                    self.snapshot.upsert_entry(entry);
+                    updated += 1;
+                }
+            }
+        }
+        self.selected_entries.clear();
+        window.blur();
+        if updated > 0 {
+            self.persist(cx);
+            self.schedule_sync(cx);
+            self.toast(
+                ToastKind::Success,
+                format!(
+                    "Updated {} to {target_code}.",
+                    format::plural(updated, "entry", "entries")
+                ),
+                None,
+                cx,
+            );
+        } else {
+            self.toast(
+                ToastKind::Info,
+                format!("All selected entries already use {target_code}."),
+                None,
+                cx,
+            );
+        }
+        cx.notify();
+    }
+
+    pub fn open_admin_currency_editor(
+        &mut self,
+        currency: Option<Currency>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let editing_code = currency.as_ref().map(|c| c.code.clone());
+        let code_text = currency.as_ref().map(|c| c.code.clone()).unwrap_or_default();
+        let name_text = currency.as_ref().map(|c| c.name.clone()).unwrap_or_default();
+        let symbol_text = currency
+            .as_ref()
+            .map(|c| c.symbol.clone())
+            .unwrap_or_default();
+        let digits_text = currency
+            .as_ref()
+            .map(|c| c.decimal_digits.to_string())
+            .unwrap_or_else(|| "2".into());
+        let symbol_after = currency.as_ref().is_some_and(|c| c.symbol_after);
+        let is_active = currency.as_ref().is_none_or(|c| c.is_active);
+
+        let code = cx.new(|cx| TextInput::new("ISO code (e.g. PLN)", code_text, InputStyle::default(), cx));
+        let name = cx.new(|cx| TextInput::new("Currency name (e.g. Polish Zloty)", name_text, InputStyle::default(), cx));
+        let symbol = cx.new(|cx| TextInput::new("Symbol (e.g. zł)", symbol_text, InputStyle::compact(), cx));
+        let decimal_digits = cx.new(|cx| TextInput::new("2", digits_text, InputStyle::compact(), cx));
+        let focus_target = if editing_code.is_some() {
+            name.read(cx).focus()
+        } else {
+            code.read(cx).focus()
+        };
+        self.modal_seq += 1;
+        self.admin_currency_editor = Some(AdminCurrencyEditor {
+            editing_code,
+            code,
+            name,
+            symbol,
+            decimal_digits,
+            symbol_after,
+            is_active,
+            error: None,
+            seq: self.modal_seq,
+        });
+        window.focus(&focus_target);
+        cx.notify();
+    }
+
+    pub fn save_admin_currency(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        let Some(editor) = self.admin_currency_editor.as_ref() else {
+            return;
+        };
+        let editing_code = editor.editing_code.clone();
+        let code_raw = editing_code
+            .clone()
+            .unwrap_or_else(|| editor.code.read(cx).text().trim().to_ascii_uppercase());
+        let name = editor.name.read(cx).text().trim().to_string();
+        let symbol = editor.symbol.read(cx).text().trim().to_string();
+        let digits_raw = editor.decimal_digits.read(cx).text().trim().to_string();
+        let symbol_after = editor.symbol_after;
+        let is_active = editor.is_active;
+
+        let valid_code = (3..=10).contains(&code_raw.len())
+            && code_raw.chars().all(|ch| ch.is_ascii_alphanumeric());
+        let parsed_digits = digits_raw.parse::<u8>().ok().filter(|d| *d <= 8);
+
+        let error = if !valid_code {
+            Some("Code must be 3–10 uppercase letters or digits (e.g. USD, EUR, BTC).".into())
+        } else if name.is_empty() {
+            Some("Enter a currency name.".into())
+        } else if symbol.is_empty() {
+            Some("Enter a display symbol.".into())
+        } else if parsed_digits.is_none() {
+            Some("Decimal digits must be between 0 and 8.".into())
+        } else {
+            None
+        };
+
+        if let Some(error) = error {
+            if let Some(editor) = self.admin_currency_editor.as_mut() {
+                editor.error = Some(error);
+            }
+            cx.notify();
+            return;
+        }
+        let decimal_digits = parsed_digits.unwrap_or(2);
+        let api = self.api.clone();
+        let access = self.access_token.clone();
+        let refresh = self.settings.refresh_token.clone();
+        window.blur();
+        cx.spawn(async move |this, cx| {
+            let is_edit = editing_code.is_some();
+            let result = crate::app::with_access(api, access, refresh, move |api, token| {
+                let code = code_raw.clone();
+                let name = name.clone();
+                let symbol = symbol.clone();
+                Box::pin(async move {
+                    if is_edit {
+                        api.admin_update_currency(
+                            token,
+                            code,
+                            AdminCurrencyPatch {
+                                name: Some(name),
+                                symbol: Some(symbol),
+                                symbol_after: Some(symbol_after),
+                                decimal_digits: Some(decimal_digits),
+                                is_active: Some(is_active),
+                            },
+                        )
+                        .await
+                    } else {
+                        api.admin_create_currency(
+                            token,
+                            Currency {
+                                code,
+                                name,
+                                symbol,
+                                symbol_after,
+                                decimal_digits,
+                                is_active,
+                            },
+                        )
+                        .await
+                    }
+                })
+            })
+            .await;
+            this.update(cx, |app, cx| match result {
+                Ok((currency, token)) => {
+                    app.access_token = Some(token);
+                    if let Some(existing) = app
+                        .admin
+                        .currencies
+                        .iter_mut()
+                        .find(|item| item.code.eq_ignore_ascii_case(&currency.code))
+                    {
+                        *existing = currency.clone();
+                    } else {
+                        app.admin.currencies.push(currency.clone());
+                    }
+                    app.admin_currency_editor = None;
+                    app.refresh_currencies_and_rates(false, cx);
+                    app.toast(
+                        ToastKind::Success,
+                        if is_edit {
+                            format!("Updated {}.", currency.code)
+                        } else {
+                            format!("Added {}.", currency.code)
+                        },
+                        None,
+                        cx,
+                    );
+                }
+                Err(error) => {
+                    if error.status == Some(401) {
+                        app.session_expired(cx);
+                    } else if let Some(editor) = app.admin_currency_editor.as_mut() {
+                        editor.error = Some(error.message);
+                        cx.notify();
+                    }
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
 }
 
 pub fn render_overlays(
@@ -815,7 +1143,7 @@ pub fn render_overlays(
         layers.push(modal_layer(
             &palette,
             editor.seq,
-            430.0,
+            450.0,
             content.into_any_element(),
             false,
             cx,
@@ -834,12 +1162,36 @@ pub fn render_overlays(
         ));
     }
 
+    if let Some(editor) = app.bulk_currency_editor.as_ref() {
+        let content = bulk_currency_editor_content(app, &palette, editor, cx);
+        layers.push(modal_layer(
+            &palette,
+            editor.seq,
+            460.0,
+            content.into_any_element(),
+            false,
+            cx,
+        ));
+    }
+
     if let Some(editor) = app.admin_editor.as_ref() {
         let content = admin_editor_content(&palette, editor, cx);
         layers.push(modal_layer(
             &palette,
             editor.seq,
             500.0,
+            content.into_any_element(),
+            false,
+            cx,
+        ));
+    }
+
+    if let Some(editor) = app.admin_currency_editor.as_ref() {
+        let content = admin_currency_editor_content(&palette, editor, cx);
+        layers.push(modal_layer(
+            &palette,
+            editor.seq,
+            480.0,
             content.into_any_element(),
             false,
             cx,
@@ -1140,6 +1492,7 @@ fn entry_editor_content(
                 .child("Income"),
         );
 
+    let entry_currency = app.currency(&editor.currency_code);
     let symbol_el = || {
         div()
             .text_size(px(26.0))
@@ -1149,9 +1502,45 @@ fn entry_editor_content(
             } else {
                 palette.foreground
             })
-            .child(app.symbol().to_string())
+            .child(entry_currency.symbol.clone())
     };
-    let symbol_before = app.currency_position() == crate::format::CurrencyPosition::Before;
+    let symbol_before = !entry_currency.symbol_after;
+    let currency_toggle = div()
+        .id("entry-currency-select")
+        .debug_selector(|| "entry-currency-select".to_string())
+        .flex()
+        .items_center()
+        .gap(px(5.0))
+        .h(px(48.0))
+        .px(px(12.0))
+        .rounded_lg()
+        .border_1()
+        .border_color(if editor.currency_picker_open {
+            palette.primary
+        } else {
+            palette.border
+        })
+        .bg(palette.surface_muted)
+        .cursor_pointer()
+        .hover({
+            let hover = palette.surface_hover;
+            move |style| style.bg(hover)
+        })
+        .on_click(cx.listener(|this, _, _, cx| {
+            if let Some(editor) = this.editor.as_mut() {
+                editor.currency_picker_open = !editor.currency_picker_open;
+            }
+            cx.notify();
+        }))
+        .child(
+            div()
+                .text_size(px(type_scale::SMALL))
+                .font_weight(type_scale::SEMIBOLD)
+                .text_color(palette.foreground)
+                .child(entry_currency.code.clone()),
+        )
+        .child(icon(Icon::ChevronDown, 13.0, palette.muted));
+
     let mut amount_row = div().flex().items_center().gap(px(8.0));
     if symbol_before {
         amount_row = amount_row.child(symbol_el());
@@ -1160,11 +1549,116 @@ fn entry_editor_content(
     if !symbol_before {
         amount_row = amount_row.child(symbol_el());
     }
+    amount_row = amount_row.child(currency_toggle);
     let amount_row = crate::motion::tab_in(
         ElementId::Name(format!("entry-amount-{}-{}", editor.seq, editor.income).into()),
         amount_row,
         crate::motion::reduce_motion(cx),
     );
+
+    let currency_query = editor
+        .currency_search
+        .read(cx)
+        .text()
+        .trim()
+        .to_lowercase();
+    let filtered_currencies: Vec<Currency> = app
+        .snapshot
+        .active_currencies()
+        .into_iter()
+        .filter(|currency| {
+            currency_query.is_empty()
+                || currency.code.to_lowercase().contains(&currency_query)
+                || currency.name.to_lowercase().contains(&currency_query)
+                || currency.symbol.to_lowercase().contains(&currency_query)
+        })
+        .cloned()
+        .collect();
+    let mut entry_currency_list = div()
+        .id("entry-currency-list")
+        .max_h(px(190.0))
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .gap(px(2.0));
+    for currency in filtered_currencies {
+        let code = currency.code.clone();
+        let selected = entry_currency.code == code;
+        let debug_id = format!("entry-currency-option-{code}");
+        let code_for_click = code.clone();
+        entry_currency_list = entry_currency_list.child(
+            div()
+                .id(ElementId::Name(debug_id.clone().into()))
+                .debug_selector(move || debug_id.clone())
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(8.0))
+                .px(px(10.0))
+                .py(px(6.0))
+                .rounded_md()
+                .cursor_pointer()
+                .when(selected, |style| style.bg(palette.primary_tint))
+                .hover({
+                    let hover = palette.surface_hover;
+                    move |style| style.bg(hover)
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if let Some(editor) = this.editor.as_mut() {
+                        editor.currency_code = code_for_click.clone();
+                        editor.currency_picker_open = false;
+                        editor.currency_touched = true;
+                        editor
+                            .currency_search
+                            .update(cx, |input, cx| input.clear(cx));
+                    }
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .min_w(px(0.0))
+                        .child(
+                            div()
+                                .text_size(px(type_scale::SMALL))
+                                .font_weight(type_scale::SEMIBOLD)
+                                .text_color(if selected {
+                                    palette.primary
+                                } else {
+                                    palette.foreground
+                                })
+                                .child(code),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(type_scale::SMALL))
+                                .text_color(palette.muted)
+                                .truncate()
+                                .child(currency.name),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(px(type_scale::SMALL))
+                        .text_color(palette.subtle)
+                        .child(currency.symbol),
+                ),
+        );
+    }
+    let entry_currency_panel = div()
+        .id("entry-currency-panel")
+        .flex()
+        .flex_col()
+        .gap(px(6.0))
+        .p(px(8.0))
+        .rounded_lg()
+        .border_1()
+        .border_color(palette.border)
+        .bg(palette.surface)
+        .child(editor.currency_search.clone())
+        .child(entry_currency_list);
 
     let mut account_chips = div().flex().flex_wrap().gap(px(6.0));
     if accounts.is_empty() {
@@ -1186,8 +1680,17 @@ fn entry_editor_content(
                 None,
             )
             .on_click(cx.listener(move |this, _, _, cx| {
+                let account_currency = this
+                    .snapshot
+                    .account(&id)
+                    .and_then(|account| account.normalized_currency_code());
                 if let Some(editor) = this.editor.as_mut() {
                     editor.account_id = Some(id.clone());
+                    if !editor.currency_touched
+                        && let Some(code) = account_currency
+                    {
+                        editor.currency_code = code;
+                    }
                 }
                 cx.notify();
             })),
@@ -1436,8 +1939,11 @@ fn entry_editor_content(
                         .flex()
                         .flex_col()
                         .gap(px(6.0))
-                        .child(field_label(palette, "Amount"))
-                        .child(amount_row),
+                        .child(field_label(palette, "Amount & Currency"))
+                        .child(amount_row)
+                        .when(editor.currency_picker_open, |element| {
+                            element.child(entry_currency_panel)
+                        }),
                 )
                 .child(
                     div()
@@ -1588,8 +2094,181 @@ fn account_editor_content(
             format::plural(entry_count, "entry", "entries")
         )
     } else {
-        "Accounts group entries. Name it after the place your money lives.".into()
+        "Accounts group entries. Optionally set a default currency for new entries on this account.".into()
     };
+
+    let selected_currency_label = match &editor.currency_code {
+        Some(code) => {
+            let meta = app.currency(code);
+            format!("{} — {} ({})", meta.code, meta.name, meta.symbol)
+        }
+        None => format!("Use default ({})", app.default_currency_code()),
+    };
+
+    let currency_select = div()
+        .id("account-currency-select")
+        .debug_selector(|| "account-currency-select".to_string())
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(8.0))
+        .h(px(38.0))
+        .px(px(10.0))
+        .rounded_lg()
+        .border_1()
+        .border_color(if editor.currency_picker_open {
+            palette.primary
+        } else {
+            palette.border
+        })
+        .bg(palette.surface_muted)
+        .cursor_pointer()
+        .hover({
+            let hover = palette.surface_hover;
+            move |style| style.bg(hover)
+        })
+        .on_click(cx.listener(|this, _, _, cx| {
+            if let Some(editor) = this.account_editor.as_mut() {
+                editor.currency_picker_open = !editor.currency_picker_open;
+            }
+            cx.notify();
+        }))
+        .child(
+            div()
+                .text_size(px(type_scale::SMALL))
+                .text_color(palette.foreground)
+                .truncate()
+                .child(selected_currency_label),
+        )
+        .child(icon(Icon::ChevronDown, 14.0, palette.muted));
+
+    let query = editor
+        .currency_search
+        .read(cx)
+        .text()
+        .trim()
+        .to_lowercase();
+    let mut currency_list = div()
+        .id("account-currency-list")
+        .max_h(px(170.0))
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .gap(px(2.0));
+    currency_list = currency_list.child(
+        div()
+            .id("account-currency-option-default")
+            .debug_selector(|| "account-currency-option-default".to_string())
+            .flex()
+            .items_center()
+            .justify_between()
+            .px(px(10.0))
+            .py(px(6.0))
+            .rounded_md()
+            .cursor_pointer()
+            .when(editor.currency_code.is_none(), |style| {
+                style.bg(palette.primary_tint)
+            })
+            .hover({
+                let hover = palette.surface_hover;
+                move |style| style.bg(hover)
+            })
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(editor) = this.account_editor.as_mut() {
+                    editor.currency_code = None;
+                    editor.currency_picker_open = false;
+                    editor
+                        .currency_search
+                        .update(cx, |input, cx| input.clear(cx));
+                }
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .text_size(px(type_scale::SMALL))
+                    .font_weight(type_scale::MEDIUM)
+                    .text_color(palette.foreground)
+                    .child(format!("Use default ({})", app.default_currency_code())),
+            ),
+    );
+    for currency in app.snapshot.active_currencies().into_iter().filter(|c| {
+        query.is_empty()
+            || c.code.to_lowercase().contains(&query)
+            || c.name.to_lowercase().contains(&query)
+            || c.symbol.to_lowercase().contains(&query)
+    }) {
+        let code = currency.code.clone();
+        let selected = editor.currency_code.as_deref() == Some(code.as_str());
+        let debug_id = format!("account-currency-option-{code}");
+        let code_for_click = code.clone();
+        currency_list = currency_list.child(
+            div()
+                .id(ElementId::Name(debug_id.clone().into()))
+                .debug_selector(move || debug_id.clone())
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(8.0))
+                .px(px(10.0))
+                .py(px(6.0))
+                .rounded_md()
+                .cursor_pointer()
+                .when(selected, |style| style.bg(palette.primary_tint))
+                .hover({
+                    let hover = palette.surface_hover;
+                    move |style| style.bg(hover)
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if let Some(editor) = this.account_editor.as_mut() {
+                        editor.currency_code = Some(code_for_click.clone());
+                        editor.currency_picker_open = false;
+                        editor
+                            .currency_search
+                            .update(cx, |input, cx| input.clear(cx));
+                    }
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .min_w(px(0.0))
+                        .child(
+                            div()
+                                .text_size(px(type_scale::SMALL))
+                                .font_weight(type_scale::SEMIBOLD)
+                                .text_color(palette.foreground)
+                                .child(code),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(type_scale::SMALL))
+                                .text_color(palette.muted)
+                                .truncate()
+                                .child(currency.name.clone()),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(px(type_scale::SMALL))
+                        .text_color(palette.subtle)
+                        .child(currency.symbol.clone()),
+                ),
+        );
+    }
+
+    let currency_panel = div()
+        .flex()
+        .flex_col()
+        .gap(px(6.0))
+        .p(px(8.0))
+        .rounded_lg()
+        .border_1()
+        .border_color(palette.border)
+        .bg(palette.surface)
+        .child(editor.currency_search.clone())
+        .child(currency_list);
 
     div()
         .flex()
@@ -1617,10 +2296,364 @@ fn account_editor_content(
                 )
                 .child(
                     div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.0))
+                        .child(field_label(palette, "Default currency (optional)"))
+                        .child(currency_select)
+                        .when(editor.currency_picker_open, |element| {
+                            element.child(currency_panel)
+                        }),
+                )
+                .child(
+                    div()
                         .text_size(px(type_scale::MICRO))
                         .line_height(px(16.0))
                         .text_color(palette.subtle)
                         .child(hint),
+                ),
+        )
+        .child(footer)
+}
+
+fn bulk_currency_editor_content(
+    app: &SunderApp,
+    palette: &Theme,
+    editor: &BulkCurrencyEditor,
+    cx: &mut gpui::Context<SunderApp>,
+) -> Div {
+    let count = editor.entry_ids.len();
+    let query = editor.search.read(cx).text().trim().to_lowercase();
+    let currencies: Vec<Currency> = app
+        .snapshot
+        .active_currencies()
+        .into_iter()
+        .filter(|currency| {
+            query.is_empty()
+                || currency.code.to_lowercase().contains(&query)
+                || currency.name.to_lowercase().contains(&query)
+                || currency.symbol.to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect();
+
+    let mut list = div()
+        .id("bulk-currency-list")
+        .max_h(px(240.0))
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .gap(px(3.0));
+    for currency in currencies {
+        let code = currency.code.clone();
+        let selected = editor.currency_code.eq_ignore_ascii_case(&code);
+        let debug_id = format!("bulk-currency-option-{code}");
+        let code_for_click = code.clone();
+        list = list.child(
+            div()
+                .id(ElementId::Name(debug_id.clone().into()))
+                .debug_selector(move || debug_id.clone())
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(8.0))
+                .px(px(10.0))
+                .py(px(7.0))
+                .rounded_lg()
+                .border_1()
+                .border_color(if selected {
+                    palette.primary
+                } else {
+                    gpui::transparent_black()
+                })
+                .bg(if selected {
+                    palette.primary_tint
+                } else {
+                    palette.surface_muted
+                })
+                .cursor_pointer()
+                .hover({
+                    let hover = palette.surface_hover;
+                    move |style| style.bg(hover)
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if let Some(editor) = this.bulk_currency_editor.as_mut() {
+                        editor.currency_code = code_for_click.clone();
+                    }
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .min_w(px(0.0))
+                        .child(
+                            div()
+                                .text_size(px(type_scale::SMALL))
+                                .font_weight(type_scale::SEMIBOLD)
+                                .text_color(if selected {
+                                    palette.primary
+                                } else {
+                                    palette.foreground
+                                })
+                                .child(code),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(type_scale::SMALL))
+                                .text_color(palette.muted)
+                                .truncate()
+                                .child(currency.name),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(px(type_scale::SMALL))
+                        .text_color(palette.subtle)
+                        .child(currency.symbol),
+                ),
+        );
+    }
+
+    let footer = div()
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(px(8.0))
+        .px(px(20.0))
+        .py(px(14.0))
+        .border_t_1()
+        .border_color(palette.border)
+        .child(
+            secondary_button(palette, "bulk-currency-cancel", "Cancel", None)
+                .on_click(cx.listener(|this, _, window, cx| this.close_top_overlay(window, cx))),
+        )
+        .child(
+            primary_button(
+                palette,
+                "bulk-currency-apply",
+                format!("Set currency to {}", editor.currency_code),
+                Some(Icon::Check),
+            )
+            .debug_selector(|| "bulk-currency-apply".to_string())
+            .on_click(cx.listener(|this, _, window, cx| this.apply_bulk_currency_change(window, cx))),
+        );
+
+    div()
+        .flex()
+        .flex_col()
+        .child(modal_header(
+            palette,
+            format!(
+                "Change currency for {}",
+                format::plural(count, "entry", "entries")
+            ),
+            "Numeric amounts stay as entered; only the currency code is updated.",
+            cx,
+        ))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(10.0))
+                .p(px(20.0))
+                .child(editor.search.clone())
+                .child(list),
+        )
+        .child(footer)
+}
+
+fn admin_currency_editor_content(
+    palette: &Theme,
+    editor: &AdminCurrencyEditor,
+    cx: &mut gpui::Context<SunderApp>,
+) -> Div {
+    let is_edit = editor.editing_code.is_some();
+    let title = if let Some(code) = &editor.editing_code {
+        format!("Edit currency {code}")
+    } else {
+        "Add currency".into()
+    };
+
+    let error = editor.error.as_ref().map(|error| {
+        div()
+            .flex()
+            .items_start()
+            .gap(px(8.0))
+            .p(px(9.0))
+            .rounded_lg()
+            .bg(palette.expense_tint)
+            .border_1()
+            .border_color(palette.expense.opacity(0.25))
+            .child(icon(Icon::Alert, 14.0, palette.expense))
+            .child(
+                div()
+                    .text_size(px(type_scale::SMALL))
+                    .text_color(palette.expense)
+                    .child(error.clone()),
+            )
+    });
+
+    let position_row = div()
+        .flex()
+        .gap(px(8.0))
+        .child(
+            chip(
+                palette,
+                "admin-currency-pos-before",
+                "Before amount ($10.00)",
+                !editor.symbol_after,
+                None,
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(editor) = this.admin_currency_editor.as_mut() {
+                    editor.symbol_after = false;
+                }
+                cx.notify();
+            })),
+        )
+        .child(
+            chip(
+                palette,
+                "admin-currency-pos-after",
+                "After amount (10.00 zł)",
+                editor.symbol_after,
+                None,
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(editor) = this.admin_currency_editor.as_mut() {
+                    editor.symbol_after = true;
+                }
+                cx.notify();
+            })),
+        );
+
+    let active_row = div()
+        .flex()
+        .gap(px(8.0))
+        .child(
+            chip(
+                palette,
+                "admin-currency-active-on",
+                "Active (available to users)",
+                editor.is_active,
+                None,
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(editor) = this.admin_currency_editor.as_mut() {
+                    editor.is_active = true;
+                }
+                cx.notify();
+            })),
+        )
+        .child(
+            chip(
+                palette,
+                "admin-currency-active-off",
+                "Inactive (hidden)",
+                !editor.is_active,
+                None,
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(editor) = this.admin_currency_editor.as_mut() {
+                    editor.is_active = false;
+                }
+                cx.notify();
+            })),
+        );
+
+    let footer = div()
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(px(8.0))
+        .px(px(20.0))
+        .py(px(14.0))
+        .border_t_1()
+        .border_color(palette.border)
+        .child(
+            secondary_button(palette, "admin-currency-cancel", "Cancel", None)
+                .on_click(cx.listener(|this, _, window, cx| this.close_top_overlay(window, cx))),
+        )
+        .child(
+            primary_button(palette, "admin-currency-save", "Save currency", Some(Icon::Check))
+                .debug_selector(|| "admin-currency-save".to_string())
+                .on_click(cx.listener(|this, _, window, cx| this.save_admin_currency(window, cx))),
+        );
+
+    div()
+        .flex()
+        .flex_col()
+        .child(modal_header(
+            palette,
+            title,
+            "Configure how this currency is displayed and whether clients can select it.",
+            cx,
+        ))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(12.0))
+                .p(px(20.0))
+                .when_some(error, |element, error| element.child(error))
+                .when(!is_edit, |element| {
+                    element.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(5.0))
+                            .child(field_label(palette, "Currency code"))
+                            .child(editor.code.clone()),
+                    )
+                })
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(5.0))
+                        .child(field_label(palette, "Name"))
+                        .child(editor.name.clone()),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap(px(10.0))
+                        .child(
+                            div()
+                                .flex_1()
+                                .flex()
+                                .flex_col()
+                                .gap(px(5.0))
+                                .child(field_label(palette, "Symbol"))
+                                .child(editor.symbol.clone()),
+                        )
+                        .child(
+                            div()
+                                .w(px(120.0))
+                                .flex()
+                                .flex_col()
+                                .gap(px(5.0))
+                                .child(field_label(palette, "Decimal digits"))
+                                .child(editor.decimal_digits.clone()),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(5.0))
+                        .child(field_label(palette, "Symbol position"))
+                        .child(position_row),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(5.0))
+                        .child(field_label(palette, "Status"))
+                        .child(active_row),
                 ),
         )
         .child(footer)

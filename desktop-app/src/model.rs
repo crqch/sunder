@@ -139,6 +139,14 @@ impl Account {
     pub fn is_active(&self) -> bool {
         self.deleted_at.is_none()
     }
+
+    pub fn normalized_currency_code(&self) -> Option<String> {
+        self.currency_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|code| !code.is_empty())
+            .map(|code| code.to_ascii_uppercase())
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
