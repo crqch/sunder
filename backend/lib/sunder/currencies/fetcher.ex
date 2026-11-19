@@ -85,42 +85,50 @@ defmodule Sunder.Currencies.Fetcher do
   end
 
   defp http_get_json(url) do
-    uri = URI.parse(url)
-    host_charlist = String.to_charlist(uri.host || "")
+    with {:ok, cacerts} <- fetch_cacerts() do
+      uri = URI.parse(url)
+      host_charlist = String.to_charlist(uri.host || "")
 
-    ssl_opts = [
-      verify: :verify_peer,
-      cacerts: :public_key.cacerts_get(),
-      depth: 3,
-      server_name_indication: host_charlist,
-      customize_hostname_check: [
-        match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+      ssl_opts = [
+        verify: :verify_peer,
+        cacerts: cacerts,
+        depth: 3,
+        server_name_indication: host_charlist,
+        customize_hostname_check: [
+          match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+        ]
       ]
-    ]
 
-    http_opts = [
-      timeout: @request_timeout_ms,
-      connect_timeout: @connect_timeout_ms,
-      ssl: ssl_opts
-    ]
+      http_opts = [
+        timeout: @request_timeout_ms,
+        connect_timeout: @connect_timeout_ms,
+        ssl: ssl_opts
+      ]
 
-    headers = [
-      {~c"accept", ~c"application/json"},
-      {~c"user-agent", ~c"Sunder/1.0"}
-    ]
+      headers = [
+        {~c"accept", ~c"application/json"},
+        {~c"user-agent", ~c"Sunder/1.0"}
+      ]
 
-    case :httpc.request(:get, {String.to_charlist(url), headers}, http_opts,
-           body_format: :binary
-         ) do
-      {:ok, {{_, 200, _}, _resp_headers, body}} ->
-        Jason.decode(body)
+      case :httpc.request(:get, {String.to_charlist(url), headers}, http_opts,
+             body_format: :binary
+           ) do
+        {:ok, {{_, 200, _}, _resp_headers, body}} ->
+          Jason.decode(body)
 
-      {:ok, {{_, status, _}, _resp_headers, _body}} ->
-        {:error, {:http_status, status}}
+        {:ok, {{_, status, _}, _resp_headers, _body}} ->
+          {:error, {:http_status, status}}
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
+  end
+
+  defp fetch_cacerts do
+    {:ok, :public_key.cacerts_get()}
+  rescue
+    error -> {:error, {:cacerts_unavailable, error}}
   end
 
   defp parse_fawazahmed0(%{"date" => date_str, "usd" => raw_rates}, fallback_date)

@@ -34,7 +34,7 @@ RUN mix release
 # Runtime Stage
 FROM debian:bookworm-20231009-slim AS app
 
-RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales sqlite3 \
+RUN apt-get update -y && apt-get install -y libstdc++6 openssl ca-certificates libncurses5 locales sqlite3 \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set the locale
