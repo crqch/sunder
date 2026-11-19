@@ -50,4 +50,10 @@ class CategoryRepository @Inject constructor(
         categoryDao.softDelete(id)
         syncManager.triggerSync()
     }
+
+    suspend fun deleteCategories(ids: List<String>) {
+        if (ids.isEmpty()) return
+        categoryDao.softDeleteAll(ids)
+        syncManager.triggerSync()
+    }
 }

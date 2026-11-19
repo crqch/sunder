@@ -3,13 +3,15 @@ package dev.crqch.sunder.ui.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.crqch.sunder.api.AuthLoginRequest
+import dev.crqch.sunder.api.AuthRegisterRequest
 import dev.crqch.sunder.api.DefaultApi
 import dev.crqch.sunder.data.local.SunderDatabase
+import dev.crqch.sunder.data.repositories.AppSettings
 import dev.crqch.sunder.data.repositories.AuthRepository
+import dev.crqch.sunder.data.repositories.PreferencesRepository
 import dev.crqch.sunder.data.repositories.SyncRepository
 import dev.crqch.sunder.data.repositories.UserRepository
-import dev.crqch.sunder.models.AuthLoginTHN4OMARequest
-import dev.crqch.sunder.models.AuthRegisterTHN4OMARequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +26,8 @@ class AuthViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val authRepository: AuthRepository,
     private val syncRepository: SyncRepository,
-    private val database: SunderDatabase
+    private val database: SunderDatabase,
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
     private val _isInitializing = MutableStateFlow(true)
@@ -34,6 +37,7 @@ class AuthViewModel @Inject constructor(
     val logoutError: StateFlow<String?> = _logoutError
 
     val currentUser = userRepository.currentUser
+    val appSettings: StateFlow<AppSettings> = preferencesRepository.settings
 
     init {
         checkAuthStatus()
@@ -63,10 +67,10 @@ class AuthViewModel @Inject constructor(
     suspend fun signIn(signInFormFields: SignInFormFields): SignInResponse =
         withContext(Dispatchers.IO) {
             val res = try {
-                api.authLoginTHN4OMA(
-                    AuthLoginTHN4OMARequest(
-                        signInFormFields.login,
-                        signInFormFields.password
+                api.login(
+                    AuthLoginRequest(
+                        login = signInFormFields.login,
+                        pass = signInFormFields.password
                     )
                 )
             } catch (e: Exception) {
@@ -99,12 +103,12 @@ class AuthViewModel @Inject constructor(
     suspend fun signUp(signUpFormData: SignUpFormData): SignInResponse =
         withContext(Dispatchers.IO) {
             val res = try {
-                api.authRegisterTHN4OMA(
-                    signUpFormData.inviteCode,
-                    AuthRegisterTHN4OMARequest(
-                        signUpFormData.email,
-                        signUpFormData.password,
-                        signUpFormData.username
+                api.register(
+                    invite = signUpFormData.inviteCode,
+                    request = AuthRegisterRequest(
+                        email = signUpFormData.email,
+                        pass = signUpFormData.password,
+                        username = signUpFormData.username
                     )
                 )
             } catch (e: Exception) {

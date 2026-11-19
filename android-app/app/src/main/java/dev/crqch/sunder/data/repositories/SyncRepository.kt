@@ -5,6 +5,10 @@ import androidx.room.withTransaction
 import dev.crqch.sunder.api.SyncApi
 import dev.crqch.sunder.data.local.*
 import dev.crqch.sunder.data.sync.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -22,7 +26,13 @@ class SyncRepository @Inject constructor(
 ) {
     private val formatter = DateTimeFormatter.ISO_INSTANT.withZone(ZoneOffset.UTC)
 
+    val lastSyncedAt: Flow<Long?> = syncMetadataDao.observeLastSyncedAt()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
     suspend fun performSync() {
+        _isSyncing.value = true
         val lastSyncedAt = syncMetadataDao.getLastSyncedAt() ?: 0L
         val syncStartTime = System.currentTimeMillis()
 
@@ -73,6 +83,17 @@ class SyncRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("SyncRepository", "Exception during sync: ${e.message}", e)
             throw e
+        } finally {
+            _isSyncing.value = false
+        }
+    }
+
+    suspend fun syncNow(): Result<Unit> {
+        return try {
+            performSync()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -80,10 +101,14 @@ class SyncRepository @Inject constructor(
         syncMetadataDao.saveMetadata(SyncMetadataEntity(lastSyncedAt = null))
     }
 
-    suspend fun hasUnsyncedData(): Boolean {
+    suspend fun getUnsyncedCount(): Int {
         val lastSyncedAt = syncMetadataDao.getLastSyncedAt() ?: 0L
-        return accountDao.getModifiedSince(lastSyncedAt).isNotEmpty() ||
-                categoryDao.getModifiedSince(lastSyncedAt).isNotEmpty() ||
-                entryDao.getModifiedSince(lastSyncedAt).isNotEmpty()
+        return accountDao.getModifiedSince(lastSyncedAt).size +
+                categoryDao.getModifiedSince(lastSyncedAt).size +
+                entryDao.getModifiedSince(lastSyncedAt).size
+    }
+
+    suspend fun hasUnsyncedData(): Boolean {
+        return getUnsyncedCount() > 0
     }
 }

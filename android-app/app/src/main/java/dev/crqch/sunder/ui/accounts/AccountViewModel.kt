@@ -9,9 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.AccountEntity
-import dev.crqch.sunder.data.local.CategoryEntity
 import dev.crqch.sunder.data.repositories.AccountRepository
-import dev.crqch.sunder.data.repositories.CategoryRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
 import dev.crqch.sunder.ui.SubRoute
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,15 +21,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-
 data class AccountFormState(
     val name: String = ""
 ) {
     companion object {
         fun ofAccount(account: AccountEntity): AccountFormState = AccountFormState(
-            account.name
+            name = account.name
         )
-
     }
 
     fun isFilled(): Boolean {
@@ -40,7 +36,7 @@ data class AccountFormState(
 
     fun toAccount(id: String, createdAt: Long, updatedAt: Long): AccountEntity = AccountEntity(
         id = id,
-        name = name,
+        name = name.trim(),
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -49,7 +45,6 @@ data class AccountFormState(
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val categoryRepository: CategoryRepository,
     private val accountRepository: AccountRepository,
     private val entryRepository: EntryRepository
 ) : ViewModel() {
@@ -65,26 +60,26 @@ class AccountViewModel @Inject constructor(
 
     val accountId = accountRoute?.accountId
 
+    var accountFormState by mutableStateOf(AccountFormState())
+        private set
 
     fun updateForm(state: AccountFormState) {
         accountFormState = state
     }
-
-    var accountFormState by mutableStateOf(AccountFormState())
-        private set
 
     init {
         accountId?.let { id ->
             viewModelScope.launch {
                 accountRepository.getAccount(id).collect { entity ->
                     entity?.let {
-                        accountFormState = AccountFormState.ofAccount(it)
+                        if (!isEditMode) {
+                            accountFormState = AccountFormState.ofAccount(it)
+                        }
                     }
                 }
             }
         }
     }
-
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val account: StateFlow<AccountEntity?> = flowOf(accountId).flatMapLatest { id ->
@@ -104,6 +99,28 @@ class AccountViewModel @Inject constructor(
         initialValue = listOf()
     )
 
+    fun startEdit() {
+        account.value?.let {
+            accountFormState = AccountFormState.ofAccount(it)
+        }
+        isEditMode = true
+    }
+
+    fun cancelEdit() {
+        account.value?.let {
+            accountFormState = AccountFormState.ofAccount(it)
+        }
+        isEditMode = false
+    }
+
+    fun saveEdit() {
+        if (!accountFormState.isFilled()) return
+        viewModelScope.launch {
+            accountRepository.saveAccount(accountFormState, accountId)
+            isEditMode = false
+        }
+    }
+
     fun delete(onComplete: () -> Unit) {
         accountId?.let { id ->
             viewModelScope.launch {
@@ -111,12 +128,5 @@ class AccountViewModel @Inject constructor(
                 onComplete()
             }
         }
-    }
-
-    fun toggleEditMode() {
-        viewModelScope.launch {
-            accountRepository.saveAccount(accountFormState, accountId)
-        }
-        isEditMode = !isEditMode
     }
 }

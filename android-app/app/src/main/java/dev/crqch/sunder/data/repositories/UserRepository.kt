@@ -53,7 +53,7 @@ class UserRepository @Inject constructor(
 
     suspend fun fetchCurrentUser() {
         try {
-            val res = api.dashboardIndexFHMHL3Q()
+            val res = api.getDashboardUser()
             val body = res.body()
 
             if (res.isSuccessful && body != null) {

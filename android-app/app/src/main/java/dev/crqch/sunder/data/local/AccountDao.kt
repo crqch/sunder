@@ -38,9 +38,12 @@ interface AccountDao {
     @Query("update accounts set deletedAt = :timestamp, updatedAt = :timestamp where id = :id")
     suspend fun softDelete(id: String, timestamp: Long = System.currentTimeMillis())
 
+    @Query("update accounts set deletedAt = :timestamp, updatedAt = :timestamp where id in (:ids)")
+    suspend fun softDeleteAll(ids: List<String>, timestamp: Long = System.currentTimeMillis())
+
     @Query("select * from accounts where updatedAt > :timestamp")
     suspend fun getModifiedSince(timestamp: Long): List<AccountEntity>
 
     @Upsert
     suspend fun upsertAll(accounts: List<AccountEntity>)
-    }
+}

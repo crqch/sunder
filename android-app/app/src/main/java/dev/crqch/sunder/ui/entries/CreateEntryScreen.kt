@@ -2,20 +2,74 @@ package dev.crqch.sunder.ui.entries
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Title
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -27,6 +81,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.components.SelectionItem
+import dev.crqch.sunder.ui.components.SelectionSheet
+import dev.crqch.sunder.ui.theme.sunderColors
+import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.parseHexColor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -44,7 +102,20 @@ fun CreateEntryScreen(
     val accounts by viewModel.availableAccounts.collectAsState()
     val categories by viewModel.categories.collectAsState()
 
+    // Auto-select first available account/category if none pre-selected (matches web EntryForm)
+    LaunchedEffect(accounts) {
+        if (entryFormState.accountId.isBlank() && accounts.size == 1) {
+            viewModel.updateForm(entryFormState.copy(accountId = accounts.first().account.id))
+        }
+    }
+    LaunchedEffect(categories) {
+        if (entryFormState.categoryId.isBlank() && categories.size == 1) {
+            viewModel.updateForm(entryFormState.copy(categoryId = categories.first().id))
+        }
+    }
+
     val amountInput = viewModel.amountInput
+    val sunderColors = MaterialTheme.sunderColors
 
     var selectionType by remember { mutableStateOf(SelectionType.NONE) }
     val sheetState = rememberModalBottomSheetState()
@@ -52,12 +123,7 @@ fun CreateEntryScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = entryFormState.date,
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                return utcTimeMillis <= System.currentTimeMillis()
-            }
-        }
+        initialSelectedDateMillis = entryFormState.date
     )
 
     val selectedAccount = accounts.find { it.account.id == entryFormState.accountId }
@@ -71,27 +137,31 @@ fun CreateEntryScreen(
             .format(dateFormatter)
     }
 
-    val glintColor = if (entryFormState.isExpense) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.primaryContainer
-    }
+    val accentColor by animateColorAsState(
+        targetValue = if (entryFormState.isExpense) sunderColors.expense else sunderColors.income,
+        animationSpec = tween(durationMillis = 320),
+        label = "AccentColorAnim"
+    )
 
-    val animatedGlintColor by animateColorAsState(
-        targetValue = glintColor,
-        animationSpec = tween(durationMillis = 500),
+    val glintColor by animateColorAsState(
+        targetValue = if (entryFormState.isExpense) sunderColors.expenseContainer else sunderColors.incomeContainer,
+        animationSpec = tween(durationMillis = 380),
         label = "GlintColorAnimation"
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(400.dp)
+                .height(340.dp)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            animatedGlintColor.copy(alpha = 0.5f),
+                            glintColor.copy(alpha = if (sunderColors.isDark) 0.45f else 0.55f),
                             Color.Transparent
                         )
                     )
@@ -106,14 +176,17 @@ fun CreateEntryScreen(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent
                     ),
-                    title = { Text(stringResource(R.string.new_entry)) },
+                    title = {
+                        Text(
+                            text = stringResource(R.string.new_entry),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(
-                                    R.string.back
-                                )
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back)
                             )
                         }
                     }
@@ -121,8 +194,8 @@ fun CreateEntryScreen(
             },
             bottomBar = {
                 Surface(
-                    tonalElevation = 3.dp,
-                    shadowElevation = 8.dp
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 2.dp
                 ) {
                     Button(
                         onClick = {
@@ -132,15 +205,15 @@ fun CreateEntryScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
                             .navigationBarsPadding()
                             .imePadding()
-                            .height(56.dp),
+                            .height(54.dp),
                         enabled = entryFormState.isFilled(),
-                        shape = MaterialTheme.shapes.extraLarge
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
-                            stringResource(R.string.create_entry),
+                            text = stringResource(R.string.create_entry),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -153,26 +226,22 @@ fun CreateEntryScreen(
                     .padding(padding)
                     .consumeWindowInsets(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp)
-                    ) {
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         SegmentedButton(
                             selected = entryFormState.isExpense,
                             onClick = { viewModel.updateForm(entryFormState.copy(isExpense = true)) },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                             colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.errorContainer,
-                                activeContentColor = MaterialTheme.colorScheme.onErrorContainer
+                                activeContainerColor = sunderColors.expenseContainer,
+                                activeContentColor = sunderColors.onExpenseContainer
                             )
                         ) {
                             Text(stringResource(R.string.expense))
@@ -182,8 +251,8 @@ fun CreateEntryScreen(
                             onClick = { viewModel.updateForm(entryFormState.copy(isExpense = false)) },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                             colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                activeContainerColor = sunderColors.incomeContainer,
+                                activeContentColor = sunderColors.onIncomeContainer
                             )
                         ) {
                             Text(stringResource(R.string.income))
@@ -191,60 +260,59 @@ fun CreateEntryScreen(
                     }
 
                     Text(
-                        stringResource(R.string.amount),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
+                        text = stringResource(R.string.amount),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accentColor,
+                        fontWeight = FontWeight.SemiBold
                     )
+
                     TextField(
                         value = amountInput,
                         onValueChange = { viewModel.updateAmount(it) },
                         textStyle = MaterialTheme.typography.displayLarge.copy(
                             textAlign = TextAlign.Center,
                             fontWeight = FontWeight.Bold,
-                            color = if (entryFormState.isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            color = accentColor
                         ),
                         placeholder = {
                             Text(
-                                "0.00",
+                                text = "0.00",
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center,
                                 style = MaterialTheme.typography.displayLarge.copy(
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
                                 )
                             )
                         },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Decimal
-                        ),
+                        visualTransformation = CentsAmountVisualTransformation,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
                             disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = if (entryFormState.isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant.copy(
-                                alpha = 0.5f
-                            ),
-                            cursorColor = if (entryFormState.isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            focusedIndicatorColor = accentColor,
+                            unfocusedIndicatorColor = sunderColors.cardBorder,
+                            cursorColor = accentColor
                         ),
                         singleLine = true
                     )
                 }
 
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    ),
-                    shape = MaterialTheme.shapes.extraLarge
+                // Account, Category, Date Selectors Card
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, sunderColors.cardBorder)
                 ) {
                     Column {
                         SelectorField(
                             label = stringResource(R.string.account),
                             selectedName = selectedAccount?.account?.name
                                 ?: stringResource(R.string.select_account),
-                            icon = Icons.Default.AccountBalance,
+                            isPlaceholder = selectedAccount == null,
+                            icon = Icons.Default.AccountBalanceWallet,
                             onClick = {
                                 selectionType = SelectionType.ACCOUNT
                                 showSheet = true
@@ -252,13 +320,15 @@ fun CreateEntryScreen(
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            color = sunderColors.cardBorder
                         )
                         SelectorField(
                             label = stringResource(R.string.category),
                             selectedName = selectedCategory?.title
                                 ?: stringResource(R.string.select_category),
+                            isPlaceholder = selectedCategory == null,
                             icon = Icons.Default.Category,
+                            badgeColor = selectedCategory?.let { parseHexColor(it.color) },
                             onClick = {
                                 selectionType = SelectionType.CATEGORY
                                 showSheet = true
@@ -266,20 +336,20 @@ fun CreateEntryScreen(
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            color = sunderColors.cardBorder
                         )
                         SelectorField(
                             label = stringResource(R.string.date),
                             selectedName = formattedDate,
+                            isPlaceholder = false,
                             icon = Icons.Default.CalendarToday,
-                            onClick = {
-                                showDatePicker = true
-                            }
+                            onClick = { showDatePicker = true }
                         )
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Title, Location, Note Card
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OutlinedTextField(
                         value = entryFormState.title,
                         onValueChange = { viewModel.updateForm(entryFormState.copy(title = it)) },
@@ -287,11 +357,30 @@ fun CreateEntryScreen(
                         placeholder = { Text(stringResource(R.string.what_is_this_for)) },
                         leadingIcon = { Icon(Icons.Default.Title, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.large,
+                        shape = RoundedCornerShape(16.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            unfocusedBorderColor = sunderColors.cardBorder
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = entryFormState.location,
+                        onValueChange = { viewModel.updateForm(entryFormState.copy(location = it)) },
+                        label = { Text(stringResource(R.string.location)) },
+                        placeholder = { Text(stringResource(R.string.location_placeholder)) },
+                        leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = sunderColors.cardBorder
                         )
                     )
 
@@ -303,7 +392,7 @@ fun CreateEntryScreen(
                         leadingIcon = {
                             Box(modifier = Modifier.fillMaxHeight()) {
                                 Icon(
-                                    Icons.Default.Description,
+                                    imageVector = Icons.Default.Description,
                                     contentDescription = null,
                                     modifier = Modifier
                                         .align(Alignment.TopCenter)
@@ -314,11 +403,13 @@ fun CreateEntryScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(IntrinsicSize.Min),
-                        shape = MaterialTheme.shapes.large,
+                        shape = RoundedCornerShape(16.dp),
                         minLines = 3,
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            unfocusedBorderColor = sunderColors.cardBorder
                         )
                     )
                 }
@@ -331,56 +422,41 @@ fun CreateEntryScreen(
                 sheetState = sheetState,
                 dragHandle = { BottomSheetDefaults.DragHandle() }
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 32.dp)
+                SelectionSheet(
+                    title = if (selectionType == SelectionType.ACCOUNT) {
+                        stringResource(R.string.select_account)
+                    } else {
+                        stringResource(R.string.select_category)
+                    },
+                    onAddClick = {
+                        showSheet = false
+                        if (selectionType == SelectionType.ACCOUNT) onAddAccount() else onAddCategory()
+                    }
                 ) {
-                    Text(
-                        text = if (selectionType == SelectionType.ACCOUNT) stringResource(R.string.select_account) else stringResource(
-                            R.string.select_category
-                        ),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                    )
-
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        item {
+                    if (selectionType == SelectionType.ACCOUNT) {
+                        items(accounts, key = { it.account.id }) { accountWithBalance ->
                             SelectionItem(
-                                label = stringResource(R.string.add_new),
-                                icon = Icons.Default.Add,
+                                label = accountWithBalance.account.name,
+                                supportingText = formatCurrencyAmount(accountWithBalance.balance),
+                                isSelected = accountWithBalance.account.id == entryFormState.accountId,
+                                icon = Icons.Default.AccountBalanceWallet,
                                 onClick = {
+                                    viewModel.updateForm(entryFormState.copy(accountId = accountWithBalance.account.id))
                                     showSheet = false
-                                    if (selectionType == SelectionType.ACCOUNT) onAddAccount() else onAddCategory()
-                                },
-                                isHighlight = true
+                                }
                             )
                         }
-
-                        if (selectionType == SelectionType.ACCOUNT) {
-                            items(accounts) { accountWithBalance ->
-                                SelectionItem(
-                                    label = accountWithBalance.account.name,
-                                    isSelected = accountWithBalance.account.id == entryFormState.accountId,
-                                    onClick = {
-                                        viewModel.updateForm(entryFormState.copy(accountId = accountWithBalance.account.id))
-                                        showSheet = false
-                                    }
-                                )
-                            }
-                        } else {
-                            items(categories) { category ->
-                                SelectionItem(
-                                    label = category.title,
-                                    isSelected = category.id == entryFormState.categoryId,
-                                    onClick = {
-                                        viewModel.updateForm(entryFormState.copy(categoryId = category.id))
-                                        showSheet = false
-                                    }
-                                )
-                            }
+                    } else {
+                        items(categories, key = { it.id }) { category ->
+                            SelectionItem(
+                                label = category.title,
+                                colorDot = parseHexColor(category.color),
+                                isSelected = category.id == entryFormState.categoryId,
+                                onClick = {
+                                    viewModel.updateForm(entryFormState.copy(categoryId = category.id))
+                                    showSheet = false
+                                }
+                            )
                         }
                     }
                 }
@@ -417,7 +493,9 @@ fun SelectorField(
     label: String,
     selectedName: String,
     icon: ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isPlaceholder: Boolean = false,
+    badgeColor: Color? = null
 ) {
     Surface(
         onClick = onClick,
@@ -426,39 +504,50 @@ fun SelectorField(
     ) {
         Row(
             modifier = Modifier
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.weight(1f)
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = MaterialTheme.shapes.medium,
+                    color = badgeColor?.copy(alpha = 0.18f)
+                        ?: MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.size(40.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        if (badgeColor != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(badgeColor)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
                 Column {
                     Text(
-                        label,
+                        text = label,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = selectedName,
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (selectedName.startsWith(stringResource(R.string.select))) {
+                        color = if (isPlaceholder) {
                             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         } else {
                             MaterialTheme.colorScheme.onSurface
@@ -467,9 +556,9 @@ fun SelectorField(
                 }
             }
             Icon(
-                Icons.Default.ChevronRight,
+                imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }

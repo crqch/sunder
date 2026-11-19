@@ -26,21 +26,29 @@ class SyncManager @Inject constructor(
         )
     }
 
-    fun schedulePeriodicSync() {
+    fun schedulePeriodicSync(
+        intervalMinutes: Long = 60L,
+        replaceExisting: Boolean = false
+    ) {
+        val safeMinutes = intervalMinutes.coerceAtLeast(15L)
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
         val periodicSyncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
-            java.time.Duration.ofHours(1)
+            java.time.Duration.ofMinutes(safeMinutes)
         )
             .setConstraints(constraints)
             .build()
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             "PeriodicSyncWork",
-            ExistingPeriodicWorkPolicy.KEEP,
+            if (replaceExisting) ExistingPeriodicWorkPolicy.UPDATE else ExistingPeriodicWorkPolicy.KEEP,
             periodicSyncRequest
         )
+    }
+
+    fun cancelPeriodicSync() {
+        WorkManager.getInstance(context).cancelUniqueWork("PeriodicSyncWork")
     }
 }

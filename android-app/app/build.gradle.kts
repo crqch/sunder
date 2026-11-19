@@ -9,7 +9,6 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     id("kotlin-parcelize")
-    id("org.openapi.generator") version "7.4.0"
 }
 
 android {
@@ -40,7 +39,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            val prodUrl = secrets["API_URL_RELEASE"]
+            val prodUrl = secrets["API_URL_RELEASE"] ?: "\"http://127.0.0.1:4000\""
             buildConfigField("String", "BASE_URL", prodUrl.toString())
             manifestPlaceholders["appName"] = "@string/app_name"
         }
@@ -49,7 +48,6 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             val debugUrl = secrets["API_URL_DEBUG"] ?: "\"http://127.0.0.1:4000\""
-            android.buildFeatures.buildConfig = true
             buildConfigField("String", "BASE_URL", debugUrl.toString())
             manifestPlaceholders["appName"] = "Sunder (Dev)"
         }
@@ -62,6 +60,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -112,26 +111,5 @@ dependencies {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
-    }
-}
-
-openApiGenerate {
-    generatorName.set("kotlin")
-    library.set("jvm-retrofit2")
-    inputSpec.set("$projectDir/openapi.json")
-    outputDir.set("$buildDir/generated/openapi")
-    apiPackage.set("dev.crqch.sunder.api")
-    modelPackage.set("dev.crqch.sunder.models")
-    configOptions.set(
-        mapOf(
-            "useCoroutines" to "true",
-            "serializationLibrary" to "moshi"
-        )
-    )
-}
-
-kotlin {
-    sourceSets.main {
-        kotlin.srcDir("$buildDir/generated/openapi/src/main/kotlin")
     }
 }
