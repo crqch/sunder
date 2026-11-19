@@ -30,6 +30,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,6 +46,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.crqch.sunder.R
+import dev.crqch.sunder.notifications.PaymentEntryDraft
 import dev.crqch.sunder.ui.accounts.AccountScreen
 import dev.crqch.sunder.ui.accounts.AccountsScreen
 import dev.crqch.sunder.ui.accounts.CreateAccountScreen
@@ -62,7 +64,17 @@ import kotlinx.serialization.Serializable
 
 sealed interface SubRoute {
     @Serializable
-    data class CreateEntry(val accountId: String?, val categoryId: String?) : SubRoute
+    data class CreateEntry(
+        val accountId: String? = null,
+        val categoryId: String? = null,
+        val initialTitle: String? = null,
+        val initialAmount: Float? = null,
+        val initialCurrencyCode: String? = null,
+        val initialIsExpense: Boolean? = null,
+        val initialDate: Long? = null,
+        val initialDescription: String? = null,
+        val draftId: String? = null
+    ) : SubRoute
 
     @Serializable
     object CreateCategory : SubRoute
@@ -370,9 +382,31 @@ fun AppNavHost(
 }
 
 @Composable
-fun BottomBarNavigation(modifier: Modifier = Modifier) {
+fun BottomBarNavigation(
+    modifier: Modifier = Modifier,
+    pendingPaymentDraft: PaymentEntryDraft? = null,
+    onConsumePaymentDraft: (PaymentEntryDraft) -> Unit = {}
+) {
     val navController = rememberNavController()
     val startDestination = TopLevelDestination.Home
+
+    LaunchedEffect(pendingPaymentDraft?.draftId) {
+        val draft = pendingPaymentDraft ?: return@LaunchedEffect
+        navController.navigate(
+            SubRoute.CreateEntry(
+                accountId = null,
+                categoryId = null,
+                initialTitle = draft.title,
+                initialAmount = draft.amount,
+                initialCurrencyCode = draft.currencyCode,
+                initialIsExpense = draft.isExpense,
+                initialDate = draft.date,
+                initialDescription = draft.description,
+                draftId = draft.draftId
+            )
+        )
+        onConsumePaymentDraft(draft)
+    }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination

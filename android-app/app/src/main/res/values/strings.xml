@@ -207,4 +207,35 @@
     <string name="invalid_days">Enter a positive number of days</string>
     <string name="operation_failed">Something went wrong. Please try again.</string>
     <string name="operation_failed_detail">Something went wrong: %1$s</string>
+
+    <!-- Payment notification detection -->
+    <string name="payment_listener_service_label">Sunder Payment Detector</string>
+    <string name="payment_prompt_channel_name">Payment Prompts</string>
+    <string name="payment_prompt_channel_desc">Notifications prompting you to add detected payments to Sunder.</string>
+    <string name="payment_prompt_title_expense">Add %1$s at %2$s?</string>
+    <string name="payment_prompt_title_income">Add +%1$s from %2$s?</string>
+    <string name="payment_prompt_body_with_source">Detected from %1$s · Tap to add to Sunder</string>
+    <string name="payment_prompt_body_generic">Payment detected · Tap to add to Sunder</string>
+    <string name="payment_prompt_action_add">Add entry</string>
+    <string name="payment_prompt_action_dismiss">Dismiss</string>
+    <string name="payment_test_merchant">Coffee Shop</string>
+    <string name="payment_test_description">Sample payment prompt from Sunder settings</string>
+
+    <string name="payment_notifications_title">Payment Notifications</string>
+    <string name="payment_detection_toggle">Detect Payment Notifications</string>
+    <string name="payment_detection_toggle_desc">Monitor notifications from PayPal, Google Wallet, and banking apps and prompt you to log entries in Sunder.</string>
+    <string name="payment_detection_include_incoming">Include incoming payments &amp; refunds</string>
+    <string name="payment_detection_include_incoming_desc">Also prompt when you receive money or a refund.</string>
+    <string name="payment_notification_access_title">Notification Access</string>
+    <string name="payment_notification_access_desc">Required so Sunder can read payment notifications locally on your device.</string>
+    <string name="payment_post_permission_title">Notification Permission</string>
+    <string name="payment_post_permission_desc">Required so Sunder can prompt you to add detected payments.</string>
+    <string name="permission_granted">Granted</string>
+    <string name="permission_required">Required</string>
+    <string name="open_notification_access">Open Access</string>
+    <string name="allow_notifications">Allow</string>
+    <string name="send_test_payment_prompt">Send Test Prompt</string>
+    <string name="test_payment_prompt_sent">Test payment prompt sent</string>
+    <string name="test_payment_prompt_permission_needed">Allow notifications first to test payment prompts</string>
+    <string name="payment_privacy_note">Notifications are parsed on-device only and never leave your phone unless you save an entry.</string>
 </resources>

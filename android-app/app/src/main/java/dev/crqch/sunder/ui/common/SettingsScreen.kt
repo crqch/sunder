@@ -1,6 +1,9 @@
 package dev.crqch.sunder.ui.common
 
+import android.Manifest
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -29,10 +32,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
@@ -61,6 +66,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -70,13 +76,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.crqch.sunder.R
 import dev.crqch.sunder.data.repositories.ThemeMode
+import dev.crqch.sunder.notifications.PaymentNotificationAccess
 import dev.crqch.sunder.ui.components.CurrencyPickerDialog
 import dev.crqch.sunder.ui.theme.sunderColors
 import dev.crqch.sunder.utils.CurrencyFormatter
@@ -89,6 +100,9 @@ fun SettingsScreen(
     onNavigateAdmin: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     val currentUser by viewModel.currentUser.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val currencyState by viewModel.currencyState.collectAsState()
@@ -102,11 +116,45 @@ fun SettingsScreen(
     var showCurrencyDialog by remember { mutableStateOf(false) }
     val defaultCurrency = currencyState.defaultCurrency
 
+    var hasNotificationAccess by remember {
+        mutableStateOf(PaymentNotificationAccess.isNotificationListenerEnabled(context))
+    }
+    var hasPostNotificationsPermission by remember {
+        mutableStateOf(PaymentNotificationAccess.canPostNotifications(context))
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPostNotificationsPermission =
+            granted && PaymentNotificationAccess.canPostNotifications(context)
+        if (!granted) {
+            PaymentNotificationAccess.openAppNotificationSettings(context)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasNotificationAccess =
+                    PaymentNotificationAccess.isNotificationListenerEnabled(context)
+                hasPostNotificationsPermission =
+                    PaymentNotificationAccess.canPostNotifications(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     val snackbarHostState = remember { SnackbarHostState() }
     val syncSuccessStr = stringResource(R.string.sync_success)
     val syncFailStr = stringResource(R.string.sync_failed)
     val ratesRefreshedStr = stringResource(R.string.rates_refreshed)
     val ratesFailedStr = stringResource(R.string.rates_refresh_failed)
+    val testPromptSentStr = stringResource(R.string.test_payment_prompt_sent)
+    val testPromptPermissionStr = stringResource(R.string.test_payment_prompt_permission_needed)
 
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
@@ -328,6 +376,137 @@ fun SettingsScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            // Payment Notifications Card
+            item(key = "payment_notifications_section") {
+                SettingsCard(title = stringResource(R.string.payment_notifications_title)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.payment_detection_toggle),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = stringResource(R.string.payment_detection_toggle_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = settings.paymentDetectionEnabled,
+                            onCheckedChange = { enabled ->
+                                viewModel.setPaymentDetectionEnabled(enabled)
+                                if (enabled && !hasPostNotificationsPermission) {
+                                    notificationPermissionLauncher.launch(
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    )
+                                }
+                            }
+                        )
+                    }
+
+                    AnimatedVisibility(visible = settings.paymentDetectionEnabled) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 14.dp),
+                                color = MaterialTheme.sunderColors.cardBorder
+                            )
+
+                            PermissionStatusRow(
+                                title = stringResource(R.string.payment_notification_access_title),
+                                description = stringResource(R.string.payment_notification_access_desc),
+                                granted = hasNotificationAccess,
+                                actionLabel = stringResource(R.string.open_notification_access),
+                                onActionClick = {
+                                    PaymentNotificationAccess.openNotificationListenerSettings(context)
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            PermissionStatusRow(
+                                title = stringResource(R.string.payment_post_permission_title),
+                                description = stringResource(R.string.payment_post_permission_desc),
+                                granted = hasPostNotificationsPermission,
+                                actionLabel = stringResource(R.string.allow_notifications),
+                                onActionClick = {
+                                    notificationPermissionLauncher.launch(
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    )
+                                }
+                            )
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 14.dp),
+                                color = MaterialTheme.sunderColors.cardBorder
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.payment_detection_include_incoming),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.payment_detection_include_incoming_desc),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Switch(
+                                    checked = settings.paymentDetectionIncludeIncoming,
+                                    onCheckedChange = {
+                                        viewModel.setPaymentDetectionIncludeIncoming(it)
+                                    }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.sendTestPaymentPrompt(
+                                        sentMessage = testPromptSentStr,
+                                        permissionNeededMessage = testPromptPermissionStr
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.NotificationsActive,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                                )
+                                Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+                                Text(stringResource(R.string.send_test_payment_prompt))
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = stringResource(R.string.payment_privacy_note),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -655,6 +834,77 @@ private fun SettingsCard(
             )
             Spacer(modifier = Modifier.height(14.dp))
             content()
+        }
+    }
+}
+
+@Composable
+private fun PermissionStatusRow(
+    title: String,
+    description: String,
+    granted: Boolean,
+    actionLabel: String,
+    onActionClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.sunderColors.cardBorder)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = if (granted) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (granted) MaterialTheme.sunderColors.income else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Text(
+                    text = if (granted) {
+                        stringResource(R.string.permission_granted)
+                    } else {
+                        stringResource(R.string.permission_required)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (granted) MaterialTheme.sunderColors.income else MaterialTheme.colorScheme.error
+                )
+            }
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!granted) {
+                FilledTonalButton(
+                    onClick = onActionClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(actionLabel)
+                }
+            }
         }
     }
 }

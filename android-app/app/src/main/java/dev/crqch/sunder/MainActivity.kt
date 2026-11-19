@@ -1,5 +1,6 @@
 package dev.crqch.sunder
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,26 +39,60 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import dev.crqch.sunder.data.repositories.ThemeMode
+import dev.crqch.sunder.notifications.PaymentEntryDraft
+import dev.crqch.sunder.notifications.PaymentNotificationIntent
+import dev.crqch.sunder.notifications.PaymentPromptNotifier
 import dev.crqch.sunder.ui.SunderApp
 import dev.crqch.sunder.ui.auth.AuthViewModel
 import dev.crqch.sunder.ui.theme.SunderMotion
 import dev.crqch.sunder.ui.theme.SunderTheme
 import dev.crqch.sunder.utils.CurrencyFormatConfig
 import dev.crqch.sunder.utils.LocalCurrencyConfig
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var paymentPromptNotifier: PaymentPromptNotifier
+
+    private var pendingPaymentDraft by mutableStateOf<PaymentEntryDraft?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIncomingIntent(intent)
         enableEdgeToEdge()
         setContent {
-            RootContainer()
+            RootContainer(
+                pendingPaymentDraft = pendingPaymentDraft,
+                onConsumePaymentDraft = { draft ->
+                    draft.notificationId?.let { paymentPromptNotifier.cancelPrompt(it) }
+                    if (pendingPaymentDraft?.draftId == draft.draftId) {
+                        pendingPaymentDraft = null
+                    }
+                }
+            )
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        val draft = PaymentNotificationIntent.extractDraft(intent) ?: return
+        draft.notificationId?.let { paymentPromptNotifier.cancelPrompt(it) }
+        pendingPaymentDraft = draft
+        PaymentNotificationIntent.clearDraftExtras(intent)
     }
 }
 
 @Composable
 fun RootContainer(
+    pendingPaymentDraft: PaymentEntryDraft? = null,
+    onConsumePaymentDraft: (PaymentEntryDraft) -> Unit = {},
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val isInitializing by viewModel.isInitializing.collectAsState()
@@ -129,7 +166,12 @@ fun RootContainer(
                             )
                         }
                     } else {
-                        SunderApp(viewModel, user)
+                        SunderApp(
+                            authViewModel = viewModel,
+                            user = user,
+                            pendingPaymentDraft = pendingPaymentDraft,
+                            onConsumePaymentDraft = onConsumePaymentDraft
+                        )
                     }
                 }
             }

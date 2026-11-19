@@ -34,7 +34,9 @@ data class AppSettings(
     val currencyAfter: Boolean = false,
     val defaultCurrencyCode: String = "USD",
     val autoSyncEnabled: Boolean = true,
-    val autoSyncIntervalMinutes: Long = 60L
+    val autoSyncIntervalMinutes: Long = 60L,
+    val paymentDetectionEnabled: Boolean = false,
+    val paymentDetectionIncludeIncoming: Boolean = true
 )
 
 @Singleton
@@ -53,6 +55,9 @@ class PreferencesRepository @Inject constructor(
             booleanPreferencesKey("pending_default_currency_sync")
         private val AUTO_SYNC_ENABLED = booleanPreferencesKey("auto_sync_enabled")
         private val AUTO_SYNC_INTERVAL = longPreferencesKey("auto_sync_interval")
+        private val PAYMENT_DETECTION_ENABLED = booleanPreferencesKey("payment_detection_enabled")
+        private val PAYMENT_DETECTION_INCLUDE_INCOMING =
+            booleanPreferencesKey("payment_detection_include_incoming")
     }
 
     val defaultCurrencyCode: Flow<String> = context.settingsDataStore.data
@@ -71,7 +76,9 @@ class PreferencesRepository @Inject constructor(
                 currencyAfter = prefs[CURRENCY_AFTER] ?: false,
                 defaultCurrencyCode = normalizeCurrencyCode(prefs[DEFAULT_CURRENCY_CODE]),
                 autoSyncEnabled = prefs[AUTO_SYNC_ENABLED] ?: true,
-                autoSyncIntervalMinutes = prefs[AUTO_SYNC_INTERVAL] ?: 60L
+                autoSyncIntervalMinutes = prefs[AUTO_SYNC_INTERVAL] ?: 60L,
+                paymentDetectionEnabled = prefs[PAYMENT_DETECTION_ENABLED] ?: false,
+                paymentDetectionIncludeIncoming = prefs[PAYMENT_DETECTION_INCLUDE_INCOMING] ?: true
             )
         }
         .stateIn(
@@ -130,5 +137,13 @@ class PreferencesRepository @Inject constructor(
 
     suspend fun setAutoSyncInterval(minutes: Long) {
         context.settingsDataStore.edit { it[AUTO_SYNC_INTERVAL] = minutes }
+    }
+
+    suspend fun setPaymentDetectionEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[PAYMENT_DETECTION_ENABLED] = enabled }
+    }
+
+    suspend fun setPaymentDetectionIncludeIncoming(includeIncoming: Boolean) {
+        context.settingsDataStore.edit { it[PAYMENT_DETECTION_INCLUDE_INCOMING] = includeIncoming }
     }
 }
