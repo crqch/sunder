@@ -12,8 +12,12 @@ import dev.crqch.sunder.data.local.AccountWithBalance
 import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.data.repositories.AccountRepository
 import dev.crqch.sunder.data.repositories.CategoryRepository
+import dev.crqch.sunder.data.repositories.CurrencyRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
 import dev.crqch.sunder.ui.SubRoute
+import dev.crqch.sunder.utils.CurrencyUiState
+import dev.crqch.sunder.utils.normalizeCurrencyCode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +26,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -36,6 +41,7 @@ data class EntriesFilterState(
     val query: String = "",
     val selectedAccountIds: Set<String> = emptySet(),
     val selectedCategoryIds: Set<String> = emptySet(),
+    val selectedCurrencyCodes: Set<String> = emptySet(),
     val typeFilter: EntryTypeFilter = EntryTypeFilter.ALL,
     val datePreset: DateRangePreset = DateRangePreset.ALL,
     val minAmountInput: String = "",
@@ -51,6 +57,7 @@ data class EntriesFilterState(
             var count = 0
             if (selectedAccountIds.isNotEmpty()) count++
             if (selectedCategoryIds.isNotEmpty()) count++
+            if (selectedCurrencyCodes.isNotEmpty()) count++
             if (typeFilter != EntryTypeFilter.ALL) count++
             if (datePreset != DateRangePreset.ALL) count++
             if (minAmount != null || maxAmount != null) count++
@@ -67,6 +74,7 @@ class EntriesViewModel @Inject constructor(
     private val entryRepository: EntryRepository,
     private val accountRepository: AccountRepository,
     private val categoryRepository: CategoryRepository,
+    private val currencyRepository: CurrencyRepository,
 ) : ViewModel() {
 
     private val entryRoute = try {
@@ -88,17 +96,49 @@ class EntriesViewModel @Inject constructor(
     )
         private set
 
+    /** True once the user explicitly picked a currency in the entry editor. */
+    var currencyTouched by mutableStateOf(false)
+        private set
+
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
+
     fun updateForm(state: EntryFormState) {
         entryFormState = state
     }
 
     fun updateAmount(input: String) {
-        val parsed = parseCentsAmountInput(input, entryFormState.isExpense)
+        val digits = currencyState.value.currency(entryFormState.currencyCode).decimalDigits
+        val parsed = parseCurrencyAmountInput(input, entryFormState.isExpense, digits)
         amountInput = parsed.digits
         entryFormState = entryFormState.copy(
             amount = parsed.amount,
             isExpense = parsed.isExpense
         )
+    }
+
+    /** Explicit user choice from the currency picker. */
+    fun selectCurrency(code: String) {
+        val currency = currencyState.value.currency(code)
+        currencyTouched = true
+        entryFormState = entryFormState.copy(currencyCode = currency.code)
+        amountInput = amountToCurrencyDigits(entryFormState.amount, currency.decimalDigits)
+    }
+
+    /**
+     * Adopts the account's currency (or the default display currency) until the user
+     * manually changes it. Switching accounts keeps the adopted currency in sync.
+     */
+    fun adoptCurrency(accountCurrencyCode: String?) {
+        if (currencyTouched) return
+        val targetCode = accountCurrencyCode ?: currencyState.value.defaultCurrencyCode
+        val currency = currencyState.value.currency(targetCode)
+        if (entryFormState.currencyCode == currency.code) return
+        entryFormState = entryFormState.copy(currencyCode = currency.code)
+        amountInput = amountToCurrencyDigits(entryFormState.amount, currency.decimalDigits)
     }
 
     private val _filterState = MutableStateFlow(EntriesFilterState())
@@ -152,6 +192,12 @@ class EntriesViewModel @Inject constructor(
                 }
 
                 if (filter.selectedCategoryIds.isNotEmpty() && e.categoryId !in filter.selectedCategoryIds) {
+                    return@filter false
+                }
+
+                if (filter.selectedCurrencyCodes.isNotEmpty() &&
+                    normalizeCurrencyCode(e.currencyCode) !in filter.selectedCurrencyCodes
+                ) {
                     return@filter false
                 }
 
@@ -226,6 +272,22 @@ class EntriesViewModel @Inject constructor(
         _filterState.update { it.copy(selectedCategoryIds = emptySet()) }
     }
 
+    fun toggleCurrencyFilter(code: String) {
+        val normalized = normalizeCurrencyCode(code)
+        _filterState.update { state ->
+            val updated = if (normalized in state.selectedCurrencyCodes) {
+                state.selectedCurrencyCodes - normalized
+            } else {
+                state.selectedCurrencyCodes + normalized
+            }
+            state.copy(selectedCurrencyCodes = updated)
+        }
+    }
+
+    fun clearCurrencyFilters() {
+        _filterState.update { it.copy(selectedCurrencyCodes = emptySet()) }
+    }
+
     fun setTypeFilter(type: EntryTypeFilter) {
         _filterState.update { it.copy(typeFilter = type) }
     }
@@ -265,7 +327,10 @@ class EntriesViewModel @Inject constructor(
 
     fun createEntry(entryFormState: EntryFormState, onComplete: () -> Unit) {
         viewModelScope.launch {
-            entryRepository.saveEntry(entryFormState)
+            entryRepository.saveEntry(
+                entryFormState,
+                currencyCode = entryFormState.currencyCode
+            )
             onComplete()
         }
     }
@@ -274,6 +339,22 @@ class EntriesViewModel @Inject constructor(
         viewModelScope.launch {
             entryRepository.deleteEntries(ids)
             onComplete()
+        }
+    }
+
+    /** Re-labels entries and refreshes rates best-effort so previews stay accurate. */
+    fun updateEntriesCurrency(
+        ids: List<String>,
+        currencyCode: String,
+        onComplete: (count: Int) -> Unit = {}
+    ) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            entryRepository.updateEntriesCurrency(ids, currencyCode)
+            onComplete(ids.size)
+            withContext(Dispatchers.IO) {
+                runCatching { currencyRepository.refreshRates() }
+            }
         }
     }
 }

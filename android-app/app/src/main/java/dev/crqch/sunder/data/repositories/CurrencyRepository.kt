@@ -19,8 +19,10 @@ import dev.crqch.sunder.data.local.ExchangeRateEntity
 import dev.crqch.sunder.data.local.SunderDatabase
 import dev.crqch.sunder.utils.CANONICAL_BASE_CURRENCY
 import dev.crqch.sunder.utils.CurrencyConverter
+import dev.crqch.sunder.utils.CurrencyUiState
 import dev.crqch.sunder.utils.normalizeCurrencyCode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -79,6 +81,19 @@ class CurrencyRepository @Inject constructor(
         .map { CurrencyConverter.ratesByDate(it) }
 
     val defaultCurrencyCode: Flow<String> = preferencesRepository.defaultCurrencyCode
+
+    /** Combined catalog, default currency, and rate cache consumed by every screen. */
+    val uiState: Flow<CurrencyUiState> = combine(
+        activeCurrencies,
+        defaultCurrencyCode,
+        ratesByDate
+    ) { currencies, defaultCode, rates ->
+        CurrencyUiState(
+            currencies = currencies,
+            defaultCurrencyCode = defaultCode,
+            ratesByDate = rates
+        )
+    }
 
     suspend fun getCurrency(code: String?): CurrencyEntity? =
         currencyDao.getCurrency(normalizeCurrencyCode(code))

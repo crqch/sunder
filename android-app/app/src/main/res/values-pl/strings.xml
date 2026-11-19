@@ -143,4 +143,69 @@
     <string name="sign_in_subtitle">Zaloguj się, aby uzyskać dostęp do swoich finansów.</string>
     <string name="create_your_account">Utwórz konto</string>
     <string name="sign_up_subtitle">Wprowadź kod zaproszenia, aby rozpocząć z Sunder.</string>
+
+    <!-- Multi-currency -->
+    <string name="select_currency">Wybierz walutę</string>
+    <string name="search_currency">Szukaj waluty…</string>
+    <string name="no_currency">Bez domyślnej waluty</string>
+    <string name="no_matching_currencies">Brak walut pasujących do wyszukiwania</string>
+    <string name="currency_label">Waluta</string>
+    <string name="change_currency">Zmień walutę</string>
+    <string name="currency_updated">Zaktualizowano walutę dla %1$d wpisów</string>
+    <string name="approx_amount">≈ %1$s</string>
+    <string name="filter_currencies">Waluty</string>
+    <string name="any_currency">Dowolna waluta</string>
+    <string name="default_display_currency">Domyślna waluta wyświetlania</string>
+    <string name="default_display_currency_desc">Używana do sum, sald i wykresów; synchronizowana między urządzeniami.</string>
+    <string name="currency_preview">Podgląd: %1$s</string>
+    <string name="currency_cache_stats">%1$d walut · %2$d dni kursów</string>
+    <string name="refresh_rates">Odśwież kursy</string>
+    <string name="refreshing_rates">Odświeżanie…</string>
+    <string name="rates_refreshed">Kursy walut zaktualizowane</string>
+    <string name="rates_refresh_failed">Nie udało się odświeżyć kursów walut</string>
+    <string name="admin">Administrator</string>
+    <string name="admin_currencies">Waluty i kursy wymiany</string>
+    <string name="admin_currencies_desc">Zarządzaj obsługiwanymi walutami i dziennymi kursami wymiany.</string>
+    <string name="default_currency">Domyślna waluta</string>
+    <string name="default_currency_none">Nie ustawiono</string>
+    <string name="default_currency_desc">Opcjonalnie. Nowe wpisy domyślnie używają tej waluty.</string>
+
+    <!-- Admin currencies -->
+    <string name="exchange_rates">Kursy wymiany</string>
+    <string name="sync_latest_rates">Pobierz najnowsze kursy</string>
+    <string name="sync_specific_date">Pobierz kursy dla wybranej daty</string>
+    <string name="rate_date">Data (RRRR-MM-DD)</string>
+    <string name="sync_date">Pobierz dla daty</string>
+    <string name="backfill_rates">Uzupełnij historię</string>
+    <string name="backfill_days">Dni</string>
+    <string name="backfill">Uzupełnij</string>
+    <string name="manual_rate_override">Ręczne nadpisanie kursu (1 USD = kurs)</string>
+    <string name="target_currency">Kod docelowy</string>
+    <string name="rate">Kurs</string>
+    <string name="optional">Opcjonalnie</string>
+    <string name="save_rate">Zapisz kurs</string>
+    <string name="supported_currencies">Obsługiwane waluty</string>
+    <string name="active_currency_count">Aktywne: %1$d z %2$d</string>
+    <string name="add_currency">Dodaj walutę</string>
+    <string name="active">Aktywna</string>
+    <string name="inactive">Nieaktywna</string>
+    <string name="edit_currency">Edytuj walutę %1$s</string>
+    <string name="currency_code">Kod</string>
+    <string name="currency_name">Nazwa</string>
+    <string name="currency_symbol">Symbol</string>
+    <string name="decimal_digits_short">Miejsca dziesiętne</string>
+    <string name="symbol_after">Symbol po kwocie</string>
+    <string name="save_currency">Zapisz walutę</string>
+    <string name="invalid_currency_code">Podaj trzyliterowy kod waluty</string>
+    <string name="invalid_currency_name">Podaj nazwę waluty</string>
+    <string name="invalid_decimal_digits">Miejsca dziesiętne muszą być w zakresie 0–6</string>
+    <string name="rates_synced">Kursy zsynchronizowane dla %1$s (zapisano %2$d)</string>
+    <string name="rate_saved">Zapisano kurs dla %1$s</string>
+    <string name="currency_saved">Zapisano walutę %1$s</string>
+    <string name="currency_toggle_status">Status %1$s: %2$s</string>
+    <string name="invalid_date">Podaj datę w formacie RRRR-MM-DD</string>
+    <string name="invalid_rate">Podaj dodatni kurs</string>
+    <string name="invalid_days">Podaj dodatnią liczbę dni</string>
+    <string name="operation_failed">Coś poszło nie tak. Spróbuj ponownie.</string>
+    <string name="operation_failed_detail">Coś poszło nie tak: %1$s</string>
 </resources>

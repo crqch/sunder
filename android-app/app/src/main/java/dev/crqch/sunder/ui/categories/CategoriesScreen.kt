@@ -60,7 +60,7 @@ import dev.crqch.sunder.ui.components.SelectionTopBar
 import dev.crqch.sunder.ui.components.SunderEmptyState
 import dev.crqch.sunder.ui.components.SunderSearchBar
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
 import dev.crqch.sunder.utils.parseHexColor
 import kotlinx.coroutines.launch
 
@@ -74,6 +74,8 @@ fun CategoriesScreen(
     val allCategories by viewModel.allCategoriesWithStats.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
+    val defaultCurrency = currencyState.defaultCurrency
 
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -293,7 +295,10 @@ fun CategoriesScreen(
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                         Text(
-                                            text = formatCurrencyAmount(item.totalAmount, showPlusSign = true),
+                                            text = CurrencyFormatter.formatSigned(
+                                                item.totalAmount.toDouble(),
+                                                defaultCurrency
+                                            ),
                                             style = MaterialTheme.typography.labelLarge,
                                             fontWeight = FontWeight.Bold,
                                             color = amountColor

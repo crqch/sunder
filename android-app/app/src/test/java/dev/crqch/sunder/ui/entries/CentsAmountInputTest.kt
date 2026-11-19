@@ -29,8 +29,7 @@ class CentsAmountInputTest {
     }
 
     @Test
-    fun parseCentsAmountInput_stripsLeadingZerosAndTogglesSign() {
-        val zeros = parseCentsAmountInput("000", currentIsExpense = true)
+    fun parseCentsAmountInput_stripsLeadingZerosAndTogglesSign() {        val zeros = parseCentsAmountInput("000", currentIsExpense = true)
         assertEquals("", zeros.digits)
         assertEquals(0f, zeros.amount, 0.0001f)
 
@@ -86,5 +85,32 @@ class CentsAmountInputTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun currencyDigits_respectZeroAndThreeDecimalCurrencies() {
+        assertEquals("5", amountToCurrencyDigits(5.23f, 0))
+        assertEquals("1234", amountToCurrencyDigits(1.234f, 3))
+        assertEquals("", amountToCurrencyDigits(0.004f, 2))
+
+        val yen = parseCurrencyAmountInput("1235", currentIsExpense = true, decimalDigits = 0)
+        assertEquals("1235", yen.digits)
+        assertEquals(1235f, yen.amount, 0.0001f)
+
+        val dinar = parseCurrencyAmountInput("1234", currentIsExpense = false, decimalDigits = 3)
+        assertEquals("1234", dinar.digits)
+        assertEquals(1.234f, dinar.amount, 0.0001f)
+        assertFalse(dinar.isExpense)
+    }
+
+    @Test
+    fun visualTransformation_handlesZeroDecimalCurrencies() {
+        val transformed = AmountVisualTransformation(0).filter(AnnotatedString("1235"))
+        assertEquals("1235", transformed.text.text)
+        assertEquals(4, transformed.offsetMapping.originalToTransformed(4))
+        assertEquals(4, transformed.offsetMapping.transformedToOriginal(4))
+
+        val threeDigits = AmountVisualTransformation(3).filter(AnnotatedString("1234"))
+        assertEquals("1.234", threeDigits.text.text)
     }
 }

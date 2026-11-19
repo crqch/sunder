@@ -41,9 +41,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.crqch.sunder.R
+import dev.crqch.sunder.data.local.CurrencyEntity
 import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
+import dev.crqch.sunder.utils.CurrencyUiState
 import dev.crqch.sunder.utils.formatDateShort
 import dev.crqch.sunder.utils.formatRelativeDay
 import dev.crqch.sunder.utils.parseHexColor
@@ -62,6 +64,7 @@ fun EntriesList(
     groupByDate: Boolean = true,
     selectedIds: Set<String> = emptySet(),
     onEntryLongPress: ((String) -> Unit)? = null,
+    currencyState: CurrencyUiState = CurrencyUiState(),
     contentPadding: PaddingValues = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
     headerContent: (LazyListScope.() -> Unit)? = null,
     emptyContent: (@Composable () -> Unit)? = null
@@ -100,9 +103,19 @@ fun EntriesList(
             }
         } else if (groupByDate) {
             groupedEntries.forEach { (date, dateEntries) ->
-                val dayNet = dateEntries.sumOf { it.entry.amount.toDouble() }.toFloat()
+                val dayNet = dateEntries.sumOf { item ->
+                    currencyState.convertOrSame(
+                        item.entry.amount.toDouble(),
+                        item.entry.currencyCode,
+                        item.entry.date
+                    )
+                }
                 stickyHeader(key = "date_$date") {
-                    DateSeparator(date = date, dayNet = dayNet)
+                    DateSeparator(
+                        date = date,
+                        dayNet = dayNet,
+                        currency = currencyState.defaultCurrency
+                    )
                 }
 
                 items(
@@ -118,7 +131,8 @@ fun EntriesList(
                         filteredAccountId = filteredAccountId,
                         filteredCategoryId = filteredCategoryId,
                         inSelectionMode = selectedIds.isNotEmpty(),
-                        isSelected = isSelected
+                        isSelected = isSelected,
+                        currencyState = currencyState
                     )
                 }
             }
@@ -137,7 +151,8 @@ fun EntriesList(
                     filteredCategoryId = filteredCategoryId,
                     inSelectionMode = selectedIds.isNotEmpty(),
                     isSelected = isSelected,
-                    showDate = true
+                    showDate = true,
+                    currencyState = currencyState
                 )
             }
         }
@@ -147,14 +162,15 @@ fun EntriesList(
 @Composable
 fun DateSeparator(
     date: LocalDate,
-    dayNet: Float,
+    dayNet: Double,
+    currency: CurrencyEntity,
     modifier: Modifier = Modifier
 ) {
     val label = remember(date) { formatRelativeDay(date) }
     val sunderColors = MaterialTheme.sunderColors
     val netColor = when {
-        dayNet > 0f -> sunderColors.income
-        dayNet < 0f -> sunderColors.expense
+        dayNet > 0.0 -> sunderColors.income
+        dayNet < 0.0 -> sunderColors.expense
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
@@ -176,7 +192,7 @@ fun DateSeparator(
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = formatCurrencyAmount(dayNet, showPlusSign = true),
+                text = CurrencyFormatter.formatSigned(dayNet, currency),
                 style = MaterialTheme.typography.labelMedium,
                 color = netColor.copy(alpha = 0.85f),
                 fontWeight = FontWeight.SemiBold
@@ -196,7 +212,8 @@ fun EntryCard(
     onLongClick: (() -> Unit)? = null,
     inSelectionMode: Boolean = false,
     isSelected: Boolean = false,
-    showDate: Boolean = false
+    showDate: Boolean = false,
+    currencyState: CurrencyUiState = CurrencyUiState()
 ) {
     val entry = entryWithDetails.entry
     val isNegative = entry.amount < 0f
@@ -205,6 +222,14 @@ fun EntryCard(
     val categoryColor = remember(entryWithDetails.category.color) {
         parseHexColor(entryWithDetails.category.color)
     }
+    val nativeCurrency = currencyState.currency(entry.currencyCode)
+    val nativeAmount = CurrencyFormatter.formatSigned(entry.amount.toDouble(), nativeCurrency)
+    val convertedPreview = currencyState.convertedPreview(
+        amount = entry.amount.toDouble(),
+        fromCode = entry.currencyCode,
+        dateMillis = entry.date
+    )
+    val showNonDefaultCode = !currencyState.isDefault(entry.currencyCode)
 
     val containerColor by animateColorAsState(
         targetValue = if (isSelected) {
@@ -357,11 +382,24 @@ fun EntryCard(
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = formatCurrencyAmount(entry.amount, showPlusSign = true),
+                    text = nativeAmount,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = amountColor
                 )
+                if (convertedPreview != null) {
+                    Text(
+                        text = stringResource(R.string.approx_amount, convertedPreview),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (showNonDefaultCode) {
+                    Text(
+                        text = nativeCurrency.code,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 if (showDate) {
                     Text(
                         text = formatDateShort(entry.date),
@@ -375,10 +413,32 @@ fun EntryCard(
 }
 
 @Composable
+fun CurrencyCodeBadge(
+    code: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.sunderColors.cardBorder)
+    ) {
+        Text(
+            text = code,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+        )
+    }
+}
+
+@Composable
 fun CompressedEntryCard(
     entryWithDetails: EntryWithDetails,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    currencyState: CurrencyUiState = CurrencyUiState()
 ) {
     EntryCard(
         entryWithDetails = entryWithDetails,
@@ -386,6 +446,7 @@ fun CompressedEntryCard(
         filteredAccountId = null,
         filteredCategoryId = null,
         modifier = modifier,
-        showDate = true
+        showDate = true,
+        currencyState = currencyState
     )
 }

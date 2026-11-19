@@ -64,8 +64,7 @@ class AccountRepository @Inject constructor(
             )
             accountDao.upsert(
                 updated.copy(
-                    currencyCode = (currencyCode ?: existing?.currencyCode)
-                        ?.let { normalizeCurrencyCode(it) }
+                    currencyCode = currencyCode?.let { normalizeCurrencyCode(it) }
                 )
             )
         }

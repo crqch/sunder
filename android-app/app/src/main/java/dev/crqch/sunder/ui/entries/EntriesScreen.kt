@@ -50,6 +50,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,10 +63,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,13 +76,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.components.ConfirmDeleteDialog
+import dev.crqch.sunder.ui.components.CurrencyPickerDialog
 import dev.crqch.sunder.ui.components.EntriesList
 import dev.crqch.sunder.ui.components.SelectionTopBar
 import dev.crqch.sunder.ui.components.SunderEmptyState
 import dev.crqch.sunder.ui.components.SunderSearchBar
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
+import dev.crqch.sunder.utils.normalizeCurrencyCode
 import dev.crqch.sunder.utils.parseHexColor
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -94,20 +101,37 @@ fun EntriesScreen(
     val allEntries by viewModel.allEntries.collectAsState()
     val entries by viewModel.entries.collectAsState()
     val filter by viewModel.filterState.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showFilterModal by remember { mutableStateOf(false) }
+    var showCurrencyDialog by remember { mutableStateOf(false) }
 
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
     val allSelected = entries.isNotEmpty() && selectedIds.size == entries.size
-    val filteredNet = remember(entries) {
-        entries.sumOf { it.entry.amount.toDouble() }.toFloat()
+    val filteredNet = remember(entries, currencyState) {
+        entries.sumOf { item ->
+            currencyState.convertOrSame(
+                item.entry.amount.toDouble(),
+                item.entry.currencyCode,
+                item.entry.date
+            )
+        }
+    }
+    val defaultCurrency = currencyState.defaultCurrency
+    val entryCurrencyCodes = remember(allEntries) {
+        allEntries.map { normalizeCurrencyCode(it.entry.currencyCode) }.distinct().sorted()
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -186,7 +210,8 @@ fun EntriesScreen(
                             selectedIds = if (allSelected) emptySet()
                             else entries.map { it.entry.id }.toSet()
                         },
-                        onDeleteSelected = { showDeleteDialog = true }
+                        onDeleteSelected = { showDeleteDialog = true },
+                        onChangeCurrency = { showCurrencyDialog = true }
                     )
                 } else {
                     SunderSearchBar(
@@ -301,6 +326,19 @@ fun EntriesScreen(
                         }
                     }
 
+                    filter.selectedCurrencyCodes.forEach { code ->
+                        item(key = "chip_currency_$code") {
+                            InputChip(
+                                selected = true,
+                                onClick = { viewModel.toggleCurrencyFilter(code) },
+                                label = { Text(code) },
+                                trailingIcon = {
+                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            )
+                        }
+                    }
+
                     item(key = "chip_clear") {
                         TextButton(onClick = { viewModel.clearAllFilters() }) {
                             Text(stringResource(R.string.clear_all))
@@ -313,8 +351,8 @@ fun EntriesScreen(
             if (entries.isNotEmpty() && selectedIds.isEmpty()) {
                 val sunderColors = MaterialTheme.sunderColors
                 val netColor = when {
-                    filteredNet > 0f -> sunderColors.income
-                    filteredNet < 0f -> sunderColors.expense
+                    filteredNet > 0.0 -> sunderColors.income
+                    filteredNet < 0.0 -> sunderColors.expense
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 }
                 Row(
@@ -330,7 +368,7 @@ fun EntriesScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = formatCurrencyAmount(filteredNet, showPlusSign = true),
+                        text = CurrencyFormatter.formatSigned(filteredNet, defaultCurrency),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = netColor
@@ -354,6 +392,7 @@ fun EntriesScreen(
                 filteredAccountId = filter.selectedAccountIds.singleOrNull(),
                 filteredCategoryId = filter.selectedCategoryIds.singleOrNull(),
                 groupByDate = filter.sortField == EntrySortField.DATE,
+                currencyState = currencyState,
                 emptyContent = {
                     if (allEntries.isEmpty()) {
                         SunderEmptyState(
@@ -621,6 +660,33 @@ fun EntriesScreen(
                     }
                 }
 
+                if (entryCurrencyCodes.size > 1) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(R.string.filter_currencies),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = filter.selectedCurrencyCodes.isEmpty(),
+                                onClick = { viewModel.clearCurrencyFilters() },
+                                label = { Text(stringResource(R.string.any_currency)) }
+                            )
+                            entryCurrencyCodes.forEach { code ->
+                                FilterChip(
+                                    selected = code in filter.selectedCurrencyCodes,
+                                    onClick = { viewModel.toggleCurrencyFilter(code) },
+                                    label = { Text(code) }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
@@ -648,6 +714,28 @@ fun EntriesScreen(
                 }
             }
         }
+    }
+
+    if (showCurrencyDialog) {
+        CurrencyPickerDialog(
+            currencies = currencyState.currencies,
+            selectedCode = null,
+            onSelect = { code ->
+                showCurrencyDialog = false
+                if (code != null) {
+                    val ids = selectedIds.toList()
+                    selectedIds = emptySet()
+                    viewModel.updateEntriesCurrency(ids, code) { count ->
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.currency_updated, count)
+                            )
+                        }
+                    }
+                }
+            },
+            onDismiss = { showCurrencyDialog = false }
+        )
     }
 
     if (showDeleteDialog) {

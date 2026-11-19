@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
@@ -123,7 +124,8 @@ fun SelectionTopBar(
     onClearSelection: () -> Unit,
     onToggleSelectAll: () -> Unit,
     onDeleteSelected: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onChangeCurrency: (() -> Unit)? = null
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -153,6 +155,15 @@ fun SelectionTopBar(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onChangeCurrency != null) {
+                    IconButton(onClick = onChangeCurrency) {
+                        Icon(
+                            imageVector = Icons.Default.CurrencyExchange,
+                            contentDescription = stringResource(R.string.change_currency),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
                 IconButton(onClick = onToggleSelectAll) {
                     Icon(
                         imageVector = Icons.Default.SelectAll,

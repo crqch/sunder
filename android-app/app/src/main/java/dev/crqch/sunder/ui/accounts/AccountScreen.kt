@@ -25,7 +25,9 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ButtonDefaults
@@ -59,11 +61,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.components.ConfirmDeleteDialog
+import dev.crqch.sunder.ui.components.CurrencyCodeBadge
+import dev.crqch.sunder.ui.components.CurrencyPickerDialog
 import dev.crqch.sunder.ui.components.EntriesList
 import dev.crqch.sunder.ui.components.SunderEmptyState
 import dev.crqch.sunder.ui.theme.SunderMotion
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,17 +80,40 @@ fun AccountScreen(
 ) {
     val account by viewModel.account.collectAsState()
     val entries by viewModel.entries.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
     val accountFormState = viewModel.accountFormState
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showCurrencyDialog by remember { mutableStateOf(false) }
 
-    val balance = remember(entries) {
-        entries.sumOf { it.entry.amount.toDouble() }.toFloat()
+    val defaultCurrency = currencyState.defaultCurrency
+    val balance = remember(entries, currencyState) {
+        entries.sumOf { item ->
+            currencyState.convertOrSame(
+                item.entry.amount.toDouble(),
+                item.entry.currencyCode,
+                item.entry.date
+            )
+        }
     }
-    val income = remember(entries) {
-        entries.filter { it.entry.amount > 0f }.sumOf { it.entry.amount.toDouble() }.toFloat()
+    val income = remember(entries, currencyState) {
+        entries.filter { it.entry.amount > 0f }.sumOf { item ->
+            currencyState.convertOrSame(
+                item.entry.amount.toDouble(),
+                item.entry.currencyCode,
+                item.entry.date
+            )
+        }
     }
-    val expenses = remember(entries) {
-        entries.filter { it.entry.amount < 0f }.sumOf { abs(it.entry.amount).toDouble() }.toFloat()
+    val expenses = remember(entries, currencyState) {
+        entries.filter { it.entry.amount < 0f }.sumOf { item ->
+            abs(
+                currencyState.convertOrSame(
+                    item.entry.amount.toDouble(),
+                    item.entry.currencyCode,
+                    item.entry.date
+                )
+            )
+        }
     }
 
     account?.let { currentAccount ->
@@ -216,6 +243,56 @@ fun AccountScreen(
                                         unfocusedBorderColor = MaterialTheme.sunderColors.cardBorder
                                     )
                                 )
+
+                                Text(
+                                    text = stringResource(R.string.default_currency_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                val formCurrency = accountFormState.currencyCode?.let {
+                                    currencyState.currency(it)
+                                }
+                                Surface(
+                                    onClick = { showCurrencyDialog = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                    border = BorderStroke(1.dp, MaterialTheme.sunderColors.cardBorder)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CurrencyExchange,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = stringResource(R.string.default_currency),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = formCurrency?.let {
+                                                    "${it.code} (${it.symbol}) · ${it.name}"
+                                                } ?: stringResource(R.string.default_currency_none),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.ChevronRight,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -243,8 +320,8 @@ fun AccountScreen(
                     }
                 } else {
                     val sunderColors = MaterialTheme.sunderColors
-                    val balanceColor = if (balance >= 0f) sunderColors.income else sunderColors.expense
-                    val heroGlow = if (balance >= 0f) {
+                    val balanceColor = if (balance >= 0.0) sunderColors.income else sunderColors.expense
+                    val heroGlow = if (balance >= 0.0) {
                         sunderColors.income.copy(alpha = if (sunderColors.isDark) 0.16f else 0.08f)
                     } else {
                         sunderColors.expense.copy(alpha = if (sunderColors.isDark) 0.16f else 0.08f)
@@ -255,6 +332,7 @@ fun AccountScreen(
                         onEntrySelect = onEntryClick,
                         filteredAccountId = currentAccount.id,
                         filteredCategoryId = null,
+                        currencyState = currencyState,
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
                         headerContent = {
                             item(key = "account_balance_hero") {
@@ -278,13 +356,21 @@ fun AccountScreen(
                                             verticalArrangement = Arrangement.spacedBy(14.dp)
                                         ) {
                                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = stringResource(R.string.current_balance),
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    currentAccount.currencyCode?.let { code ->
+                                                        CurrencyCodeBadge(code = code)
+                                                    }
+                                                }
                                                 Text(
-                                                    text = stringResource(R.string.current_balance),
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = formatCurrencyAmount(balance),
+                                                    text = CurrencyFormatter.format(balance, defaultCurrency),
                                                     style = MaterialTheme.typography.displaySmall,
                                                     fontWeight = FontWeight.Bold,
                                                     color = balanceColor
@@ -296,13 +382,21 @@ fun AccountScreen(
                                             ) {
                                                 AccountMiniStat(
                                                     label = stringResource(R.string.income),
-                                                    value = formatCurrencyAmount(income, showPlusSign = income > 0f),
+                                                    value = CurrencyFormatter.format(
+                                                        income,
+                                                        defaultCurrency,
+                                                        showPlusSign = income > 0.0
+                                                    ),
                                                     valueColor = sunderColors.income,
                                                     modifier = Modifier.weight(1f)
                                                 )
                                                 AccountMiniStat(
                                                     label = stringResource(R.string.expenses),
-                                                    value = formatCurrencyAmount(-expenses, showMinusSign = expenses > 0f),
+                                                    value = CurrencyFormatter.format(
+                                                        -expenses,
+                                                        defaultCurrency,
+                                                        showMinusSign = expenses > 0.0
+                                                    ),
                                                     valueColor = sunderColors.expense,
                                                     modifier = Modifier.weight(1f)
                                                 )
@@ -346,6 +440,19 @@ fun AccountScreen(
                 }
             }
         }
+    }
+
+    if (showCurrencyDialog) {
+        CurrencyPickerDialog(
+            currencies = currencyState.currencies,
+            selectedCode = accountFormState.currencyCode,
+            allowNullOption = true,
+            onSelect = { code ->
+                viewModel.selectCurrency(code)
+                showCurrencyDialog = false
+            },
+            onDismiss = { showCurrencyDialog = false }
+        )
     }
 
     if (showDeleteDialog) {

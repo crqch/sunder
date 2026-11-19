@@ -10,8 +10,10 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.CategoryEntity
 import dev.crqch.sunder.data.repositories.CategoryRepository
+import dev.crqch.sunder.data.repositories.CurrencyRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
 import dev.crqch.sunder.ui.SubRoute
+import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,11 +54,18 @@ data class CategoryFormState(
 class CategoryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val categoryRepository: CategoryRepository,
-    private val entryRepository: EntryRepository
+    private val entryRepository: EntryRepository,
+    private val currencyRepository: CurrencyRepository
 ) : ViewModel() {
 
     var isEditMode by mutableStateOf(false)
         private set
+
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
 
     private val categoryRoute = try {
         savedStateHandle.toRoute<SubRoute.Category>()

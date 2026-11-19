@@ -5,22 +5,62 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.AccountWithBalance
 import dev.crqch.sunder.data.repositories.AccountRepository
+import dev.crqch.sunder.data.repositories.CurrencyRepository
+import dev.crqch.sunder.data.repositories.EntryRepository
+import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class AccountsViewModel @Inject constructor(
-    private val accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val entryRepository: EntryRepository,
+    private val currencyRepository: CurrencyRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
+
+    /** Per-account balance, converting every entry on its own date. */
+    val convertedBalances: StateFlow<Map<String, Double>> = combine(
+        entryRepository.allEntries,
+        currencyRepository.uiState
+    ) { entries, currency ->
+        entries.groupBy { it.entry.accountId }.mapValues { (_, accountEntries) ->
+            accountEntries.sumOf { item ->
+                currency.convertOrSame(
+                    item.entry.amount.toDouble(),
+                    item.entry.currencyCode,
+                    item.entry.date
+                )
+            }
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyMap()
+    )
+
+    val totalBalance: StateFlow<Double> = convertedBalances
+        .map { balances -> balances.values.sum() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0.0
+        )
 
     val allAccounts: StateFlow<List<AccountWithBalance>> =
         accountRepository.accountsWithBalance.stateIn(
@@ -43,9 +83,9 @@ class AccountsViewModel @Inject constructor(
         _searchQuery.value = query
     }
 
-    fun createAccount(name: String, onComplete: () -> Unit) {
+    fun createAccount(name: String, currencyCode: String? = null, onComplete: () -> Unit) {
         viewModelScope.launch {
-            accountRepository.createAccount(name.trim())
+            accountRepository.createAccount(name.trim(), currencyCode)
             onComplete()
         }
     }
