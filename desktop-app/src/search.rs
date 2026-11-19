@@ -525,6 +525,7 @@ const KEY_SUGGESTIONS: &[(&str, &str)] = &[
     ("location", "Match the location"),
     ("category", "Filter by category"),
     ("account", "Filter by account"),
+    ("currency", "Filter by currency code"),
     ("amount", "Filter by amount, e.g. amount:>50"),
     ("type", "Income or expense"),
     ("date", "A year, month or day"),
@@ -539,6 +540,7 @@ fn canonical_key(key: &str) -> &str {
         "place" | "where" => "location",
         "cat" => "category",
         "acc" => "account",
+        "cur" => "currency",
         "amt" | "value" => "amount",
         "status" | "kind" | "is" => "type",
         "on" | "month" => "date",
@@ -584,6 +586,7 @@ pub fn suggestions(
     cursor: usize,
     categories: &[String],
     accounts: &[String],
+    currencies: &[String],
     titles: &[String],
     locations: &[String],
     show_all_keys: bool,
@@ -619,6 +622,7 @@ pub fn suggestions(
         "location" => locations.to_vec(),
         "category" => categories.to_vec(),
         "account" => accounts.to_vec(),
+        "currency" => currencies.to_vec(),
         "type" => vec!["Income".to_string(), "Expense".to_string()],
         "amount" => vec![
             ">10".to_string(),
@@ -656,6 +660,11 @@ pub fn suggestions(
                 .filter(|candidate| candidate.to_lowercase().contains(&lower))
                 .cloned()
                 .collect(),
+            "currency" => currencies
+                .iter()
+                .filter(|candidate| candidate.to_lowercase().contains(&lower))
+                .cloned()
+                .collect(),
             _ => Vec::new(),
         };
     }
@@ -686,7 +695,7 @@ mod suggestion_tests {
 
     #[test]
     fn suggests_keys_after_a_prefix() {
-        let list = suggestions("tit", 3, &[], &[], &[], &[], false);
+        let list = suggestions("tit", 3, &[], &[], &[], &[], &[], false);
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].badge, "title");
         assert_eq!(list[0].insert, "title:");
@@ -696,7 +705,7 @@ mod suggestion_tests {
     #[test]
     fn suggests_category_values_and_quotes_spaces() {
         let categories = vec!["Eating out".to_string(), "Groceries".to_string()];
-        let list = suggestions("category:Ea", 11, &categories, &[], &[], &[], false);
+        let list = suggestions("category:Ea", 11, &categories, &[], &[], &[], &[], false);
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].label, "Eating out");
         assert_eq!(list[0].insert, "category:\"Eating out\" ");
@@ -704,16 +713,16 @@ mod suggestion_tests {
 
     #[test]
     fn ctrl_space_can_show_all_keys_for_an_empty_word() {
-        let list = suggestions("", 0, &[], &[], &[], &[], true);
+        let list = suggestions("", 0, &[], &[], &[], &[], &[], true);
         assert_eq!(list.len(), KEY_SUGGESTIONS.len());
         assert_eq!(list[0].badge, "title");
-        assert!(suggestions("", 0, &[], &[], &[], &[], false).is_empty());
+        assert!(suggestions("", 0, &[], &[], &[], &[], &[], false).is_empty());
     }
 
     #[test]
     fn suggests_existing_titles() {
         let titles = vec!["Coffee".to_string(), "Coffee beans".to_string()];
-        let list = suggestions("title:co", 8, &[], &[], &titles, &[], false);
+        let list = suggestions("title:co", 8, &[], &[], &[], &titles, &[], false);
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].insert, "title:Coffee ");
         assert_eq!(list[1].insert, "title:\"Coffee beans\" ");
@@ -721,11 +730,26 @@ mod suggestion_tests {
 
     #[test]
     fn suggests_types_and_amounts() {
-        let list = suggestions("type:in", 7, &[], &[], &[], &[], false);
+        let list = suggestions("type:in", 7, &[], &[], &[], &[], &[], false);
         assert_eq!(list[0].label, "Income");
         assert_eq!(list[0].insert, "type:Income ");
 
-        let list = suggestions("amount:>", 9, &[], &[], &[], &[], false);
+        let list = suggestions("amount:>", 9, &[], &[], &[], &[], &[], false);
         assert!(list.iter().any(|item| item.label == ">50"));
+    }
+
+    #[test]
+    fn suggests_currency_key_and_values() {
+        let currencies = vec!["EUR".to_string(), "PLN".to_string(), "USD".to_string()];
+        let key_list = suggestions("cur", 3, &[], &[], &currencies, &[], &[], false);
+        assert_eq!(key_list.len(), 1);
+        assert_eq!(key_list[0].badge, "currency");
+        assert_eq!(key_list[0].insert, "currency:");
+
+        let value_list = suggestions("cur:eu", 6, &[], &[], &currencies, &[], &[], false);
+        assert_eq!(value_list.len(), 1);
+        assert_eq!(value_list[0].badge, "currency");
+        assert_eq!(value_list[0].label, "EUR");
+        assert_eq!(value_list[0].insert, "currency:EUR ");
     }
 }

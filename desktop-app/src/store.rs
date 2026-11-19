@@ -182,6 +182,30 @@ impl Snapshot {
         list
     }
 
+    /// Merge freshly fetched active currencies into the local cache while keeping
+    /// previously cached currencies that are no longer returned marked inactive so
+    /// historical entries retain their symbol, name, and decimal digits.
+    pub fn merge_currencies(&mut self, incoming: Vec<Currency>) {
+        if incoming.is_empty() {
+            return;
+        }
+        let mut merged: HashMap<String, Currency> = HashMap::new();
+        for mut existing in std::mem::take(&mut self.currencies) {
+            let code = normalize_currency_code(&existing.code);
+            existing.code = code.clone();
+            existing.is_active = false;
+            merged.insert(code, existing);
+        }
+        for mut currency in incoming {
+            let code = normalize_currency_code(&currency.code);
+            currency.code = code.clone();
+            merged.insert(code, currency);
+        }
+        let mut list: Vec<Currency> = merged.into_values().collect();
+        list.sort_by(|a, b| a.code.cmp(&b.code));
+        self.currencies = list;
+    }
+
     pub fn merge_rates(&mut self, date: String, rates: HashMap<String, f64>) {
         if date.trim().is_empty() || rates.is_empty() {
             return;
@@ -201,32 +225,44 @@ impl Snapshot {
         }
     }
 
+    /// Find the USD -> `code` rate for `date_ymd`, searching nearest earlier date first,
+    /// then falling back to nearest later date, independently per currency so a sparse
+    /// rate day (such as a single manual admin override) cannot shadow earlier full days.
+    fn find_usd_rate_for_currency(&self, code: &str, date_ymd: &str) -> Option<f64> {
+        if code == DEFAULT_CURRENCY_CODE {
+            return Some(1.0);
+        }
+        let key = date_ymd.to_string();
+        for (_, rates) in self.exchange_rates.range(..=key.clone()).rev() {
+            if let Some(&rate) = rates.get(code)
+                && rate.is_finite()
+                && rate > 0.0
+            {
+                return Some(rate);
+            }
+        }
+        for (_, rates) in self.exchange_rates.range(key..) {
+            if let Some(&rate) = rates.get(code)
+                && rate.is_finite()
+                && rate > 0.0
+            {
+                return Some(rate);
+            }
+        }
+        None
+    }
+
     /// Look up the conversion rate from `from` to `to` on `date_ymd` (YYYY-MM-DD),
-    /// using exact date match, or nearest earlier cached date, or earliest available
-    /// date as fallback.
+    /// resolving each currency independently via exact date, nearest earlier cached date,
+    /// or nearest later cached date as fallback.
     pub fn rate_for(&self, from: &str, to: &str, date_ymd: &str) -> Option<f64> {
         let from = normalize_currency_code(from);
         let to = normalize_currency_code(to);
         if from == to {
             return Some(1.0);
         }
-        let table = self
-            .exchange_rates
-            .range(..=date_ymd.to_string())
-            .next_back()
-            .or_else(|| self.exchange_rates.iter().next())
-            .map(|(_, rates)| rates)?;
-
-        let rate_from = if from == DEFAULT_CURRENCY_CODE {
-            1.0
-        } else {
-            *table.get(&from)?
-        };
-        let rate_to = if to == DEFAULT_CURRENCY_CODE {
-            1.0
-        } else {
-            *table.get(&to)?
-        };
+        let rate_from = self.find_usd_rate_for_currency(&from, date_ymd)?;
+        let rate_to = self.find_usd_rate_for_currency(&to, date_ymd)?;
         if rate_from <= 0.0 || rate_to <= 0.0 {
             return None;
         }
@@ -240,7 +276,7 @@ impl Snapshot {
     pub fn convert_entry_amount(&self, entry: &Entry, target_currency: &str) -> f64 {
         let from = entry.normalized_currency_code();
         let date = entry.date_ymd();
-        self.convert_amount(entry.amount, from, target_currency, &date)
+        self.convert_amount(entry.amount, &from, target_currency, &date)
             .unwrap_or(entry.amount)
     }
 
@@ -691,6 +727,68 @@ mod tests {
         let snapshot: Snapshot = serde_json::from_str(raw).unwrap();
         assert_eq!(snapshot.entries[0].currency_code, "USD");
         assert_eq!(snapshot.accounts[0].currency_code, None);
+    }
+
+    #[test]
+    fn sparse_rate_day_does_not_shadow_earlier_rates_and_missing_returns_none() {
+        let mut snapshot = Snapshot::default();
+        // Full rate day on Jan 1
+        snapshot.merge_rates(
+            "2026-01-01".into(),
+            HashMap::from([("EUR".into(), 0.8), ("PLN".into(), 4.0)]),
+        );
+        // Sparse manual override day on Jan 5 (only EUR)
+        snapshot.merge_rates("2026-01-05".into(), HashMap::from([("EUR".into(), 0.9)]));
+
+        // On Jan 6, EUR comes from Jan 5 (0.9) and PLN falls back to Jan 1 (4.0)
+        let eur_to_pln = snapshot.rate_for("EUR", "PLN", "2026-01-06").unwrap();
+        assert!((eur_to_pln - (4.0 / 0.9)).abs() < 1e-6);
+
+        // Earlier than any cached date falls back to nearest later date per currency
+        let earlier = snapshot.rate_for("EUR", "USD", "2025-12-20").unwrap();
+        assert!((earlier - (1.0 / 0.8)).abs() < 1e-6);
+
+        // Currency absent everywhere returns None
+        assert_eq!(snapshot.rate_for("JPY", "USD", "2026-01-06"), None);
+        assert_eq!(snapshot.convert_amount(100.0, "JPY", "USD", "2026-01-06"), None);
+    }
+
+    #[test]
+    fn merge_currencies_keeps_deactivated_currency_metadata() {
+        let mut snapshot = Snapshot::default();
+        snapshot.currencies = vec![
+            Currency {
+                code: "USD".into(),
+                name: "US Dollar".into(),
+                symbol: "$".into(),
+                symbol_after: false,
+                decimal_digits: 2,
+                is_active: true,
+            },
+            Currency {
+                code: "PLN".into(),
+                name: "Polish Zloty".into(),
+                symbol: "zł".into(),
+                symbol_after: true,
+                decimal_digits: 2,
+                is_active: true,
+            },
+        ];
+
+        // Server refresh returns only active USD
+        snapshot.merge_currencies(vec![Currency {
+            code: "USD".into(),
+            name: "US Dollar".into(),
+            symbol: "$".into(),
+            symbol_after: false,
+            decimal_digits: 2,
+            is_active: true,
+        }]);
+
+        assert_eq!(snapshot.active_currencies().len(), 1);
+        let pln = snapshot.currency("PLN");
+        assert_eq!(pln.symbol, "zł");
+        assert!(!pln.is_active);
     }
 }
 

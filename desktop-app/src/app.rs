@@ -1423,8 +1423,8 @@ impl SunderApp {
     }
 
     pub fn admin_sync_date_rates(&mut self, cx: &mut Context<Self>) {
-        let date = self.admin_rate_date.read(cx).text().trim().to_string();
-        if crate::format::parse_date(&date).is_none() {
+        let raw_date = self.admin_rate_date.read(cx).text().trim().to_string();
+        let Some(parsed) = crate::format::parse_date(&raw_date) else {
             self.toast(
                 ToastKind::Error,
                 "Enter a valid YYYY-MM-DD date to sync.".into(),
@@ -1432,7 +1432,8 @@ impl SunderApp {
                 cx,
             );
             return;
-        }
+        };
+        let date = parsed.format("%Y-%m-%d").to_string();
         self.admin_sync_rates_impl(Some(date), None, false, cx);
     }
 
@@ -1556,8 +1557,8 @@ impl SunderApp {
         }
         let rate_date = if date_raw.is_empty() {
             None
-        } else if crate::format::parse_date(&date_raw).is_some() {
-            Some(date_raw)
+        } else if let Some(parsed) = crate::format::parse_date(&date_raw) {
+            Some(parsed.format("%Y-%m-%d").to_string())
         } else {
             self.toast(
                 ToastKind::Error,
@@ -1590,6 +1591,7 @@ impl SunderApp {
                     app.persist(cx);
                     app.admin_manual_rate
                         .update(cx, |input, cx| input.clear(cx));
+                    app.refresh_currencies_and_rates(false, cx);
                     app.toast(
                         ToastKind::Success,
                         format!(
@@ -2072,7 +2074,7 @@ impl SunderApp {
 
                 match currencies_result {
                     Ok(currencies) if !currencies.is_empty() => {
-                        app.snapshot.currencies = currencies;
+                        app.snapshot.merge_currencies(currencies);
                         updated = true;
                     }
                     Ok(_) => {}
@@ -2088,7 +2090,7 @@ impl SunderApp {
                         } else {
                             latest.requested_date
                         };
-                        if !date.is_empty() {
+                        if !date.is_empty() && !latest.rates.is_empty() {
                             app.snapshot.merge_rates(date, latest.rates);
                             updated = true;
                         }
@@ -2101,8 +2103,10 @@ impl SunderApp {
                 }
 
                 for chunk in history_chunks {
-                    app.snapshot.merge_rates_history(chunk);
-                    updated = true;
+                    if !chunk.is_empty() {
+                        app.snapshot.merge_rates_history(chunk);
+                        updated = true;
+                    }
                 }
 
                 if updated {
@@ -2179,7 +2183,12 @@ impl SunderApp {
         if entry_code == default_code {
             return None;
         }
-        let converted = self.convert_entry_amount(entry);
+        let converted = self.snapshot.convert_amount(
+            entry.amount,
+            &entry_code,
+            &default_code,
+            &entry.date_ymd(),
+        )?;
         Some(format!("≈ {}", self.signed_money(converted)))
     }
 
@@ -2638,6 +2647,18 @@ impl SunderApp {
             .into_iter()
             .map(|account| account.name.clone())
             .collect::<Vec<_>>();
+        let mut currencies = Vec::new();
+        for entry in self.snapshot.active_entries() {
+            let code = entry.normalized_currency_code();
+            if !currencies.contains(&code) {
+                currencies.push(code);
+            }
+        }
+        for currency in self.snapshot.active_currencies() {
+            if !currencies.contains(&currency.code) {
+                currencies.push(currency.code.clone());
+            }
+        }
         let mut titles = Vec::new();
         let mut locations = Vec::new();
         for entry in self.snapshot.active_entries() {
@@ -2660,6 +2681,7 @@ impl SunderApp {
             cursor,
             &categories,
             &accounts,
+            &currencies,
             &titles,
             &locations,
             self.search_menu_all,
@@ -2761,6 +2783,7 @@ impl SunderApp {
             .active_entries()
             .into_iter()
             .filter(|entry| {
+                let entry_code = entry.normalized_currency_code();
                 (self.filter.account_ids.is_empty()
                     || self.filter.account_ids.contains(&entry.account_id))
                     && (self.filter.category_ids.is_empty()
@@ -2770,7 +2793,7 @@ impl SunderApp {
                             .filter
                             .currency_codes
                             .iter()
-                            .any(|code| code == entry.normalized_currency_code()))
+                            .any(|code| code == &entry_code))
             })
             .filter(|entry| {
                 let amount = entry.amount.abs();

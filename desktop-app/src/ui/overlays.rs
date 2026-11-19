@@ -933,6 +933,7 @@ impl SunderApp {
         if updated > 0 {
             self.persist(cx);
             self.schedule_sync(cx);
+            self.refresh_currencies_and_rates(false, cx);
             self.toast(
                 ToastKind::Success,
                 format!(

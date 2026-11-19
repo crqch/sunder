@@ -236,13 +236,8 @@ impl Entry {
         self.deleted_at.is_none()
     }
 
-    pub fn normalized_currency_code(&self) -> &str {
-        let trimmed = self.currency_code.trim();
-        if trimmed.is_empty() {
-            DEFAULT_CURRENCY_CODE
-        } else {
-            trimmed
-        }
+    pub fn normalized_currency_code(&self) -> String {
+        normalize_currency_code(&self.currency_code)
     }
 
     pub fn occurred_at(&self) -> &str {
