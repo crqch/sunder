@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.CategoryEntity
 import dev.crqch.sunder.data.repositories.CategoryRepository
+import dev.crqch.sunder.data.repositories.CurrencyRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
+import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,23 +26,37 @@ data class CategoryWithStats(
 @HiltViewModel
 class CategoriesViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
-    private val entryRepository: EntryRepository
+    private val entryRepository: EntryRepository,
+    private val currencyRepository: CurrencyRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
+
     val allCategoriesWithStats: StateFlow<List<CategoryWithStats>> = combine(
         categoryRepository.allCategories,
-        entryRepository.allEntries
-    ) { cats, entries ->
+        entryRepository.allEntries,
+        currencyRepository.uiState
+    ) { cats, entries, currency ->
         val byCat = entries.groupBy { it.entry.categoryId }
         cats.map { cat ->
             val catEntries = byCat[cat.id].orEmpty()
             CategoryWithStats(
                 category = cat,
                 entryCount = catEntries.size,
-                totalAmount = catEntries.sumOf { it.entry.amount.toDouble() }.toFloat()
+                totalAmount = catEntries.sumOf { item ->
+                    currency.convertOrSame(
+                        item.entry.amount.toDouble(),
+                        item.entry.currencyCode,
+                        item.entry.date
+                    )
+                }.toFloat()
             )
         }
     }.stateIn(

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -89,10 +90,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.components.ConfirmDeleteDialog
+import dev.crqch.sunder.ui.components.CurrencyPickerDialog
 import dev.crqch.sunder.ui.components.SelectionItem
 import dev.crqch.sunder.ui.components.SelectionSheet
 import dev.crqch.sunder.ui.theme.SunderMotion
 import dev.crqch.sunder.ui.theme.sunderColors
+import dev.crqch.sunder.utils.CurrencyFormatter
 import dev.crqch.sunder.utils.formatCurrencyAmount
 import dev.crqch.sunder.utils.parseHexColor
 import java.time.Instant
@@ -113,6 +116,7 @@ fun EntryScreen(
     val entryFormState = viewModel.entryFormState
     val accounts by viewModel.availableAccounts.collectAsState()
     val categories by viewModel.categories.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
 
     val amountInput = viewModel.amountInput
     val sunderColors = MaterialTheme.sunderColors
@@ -123,12 +127,22 @@ fun EntryScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
+    var showCurrencyDialog by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = entryFormState.date
     )
 
     val selectedAccount = accounts.find { it.account.id == entryFormState.accountId }
     val selectedCategory = categories.find { it.id == entryFormState.categoryId }
+    val selectedCurrency = currencyState.currency(
+        entryFormState.currencyCode.ifBlank { currencyState.defaultCurrencyCode }
+    )
+    val decimalDigits = selectedCurrency.decimalDigits.coerceIn(0, 6)
+    val amountPlaceholder = if (decimalDigits > 0) {
+        "0." + "0".repeat(decimalDigits)
+    } else {
+        "0"
+    }
 
     val dateFormatter = remember { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM) }
     val formattedDate = remember(entryFormState.date) {
@@ -151,6 +165,15 @@ fun EntryScreen(
     )
 
     val signedAmount = if (entryFormState.isExpense) -entryFormState.amount else entryFormState.amount
+    val convertedAmount = if (currencyState.isDefault(entryFormState.currencyCode)) {
+        null
+    } else {
+        currencyState.convert(
+            amount = signedAmount.toDouble(),
+            fromCode = entryFormState.currencyCode,
+            dateMillis = entryFormState.date
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -301,7 +324,7 @@ fun EntryScreen(
                                 ),
                                 placeholder = {
                                     Text(
-                                        text = "0.00",
+                                        text = amountPlaceholder,
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center,
                                         style = MaterialTheme.typography.displayLarge.copy(
@@ -310,7 +333,7 @@ fun EntryScreen(
                                         )
                                     )
                                 },
-                                visualTransformation = CentsAmountVisualTransformation,
+                                visualTransformation = AmountVisualTransformation(decimalDigits),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = TextFieldDefaults.colors(
@@ -368,6 +391,17 @@ fun EntryScreen(
                                     isPlaceholder = false,
                                     icon = Icons.Default.CalendarToday,
                                     onClick = { showDatePicker = true }
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    color = sunderColors.cardBorder
+                                )
+                                SelectorField(
+                                    label = stringResource(R.string.currency_label),
+                                    selectedName = "${selectedCurrency.code} (${selectedCurrency.symbol}) · ${selectedCurrency.name}",
+                                    isPlaceholder = false,
+                                    icon = Icons.Default.CurrencyExchange,
+                                    onClick = { showCurrencyDialog = true }
                                 )
                             }
                         }
@@ -498,11 +532,28 @@ fun EntryScreen(
                                 )
 
                                 Text(
-                                    text = formatCurrencyAmount(signedAmount, showPlusSign = true),
+                                    text = CurrencyFormatter.formatSigned(
+                                        signedAmount.toDouble(),
+                                        selectedCurrency
+                                    ),
                                     style = MaterialTheme.typography.displayMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = accentColor
                                 )
+
+                                if (convertedAmount != null) {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.approx_amount,
+                                            CurrencyFormatter.formatSigned(
+                                                convertedAmount,
+                                                currencyState.defaultCurrency
+                                            )
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
 
                                 Text(
                                     text = formattedDate,
@@ -538,6 +589,15 @@ fun EntryScreen(
                                     onClick = if (entryFormState.categoryId.isNotBlank()) {
                                         { visitCategory(entryFormState.categoryId) }
                                     } else null
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    color = sunderColors.cardBorder
+                                )
+                                EntryDetailRow(
+                                    label = stringResource(R.string.currency_label),
+                                    value = "${selectedCurrency.code} · ${selectedCurrency.name}",
+                                    onClick = null
                                 )
                                 if (entryFormState.location.isNotBlank()) {
                                     HorizontalDivider(
@@ -625,6 +685,18 @@ fun EntryScreen(
                     }
                 }
             }
+        }
+
+        if (showCurrencyDialog) {
+            CurrencyPickerDialog(
+                currencies = currencyState.currencies,
+                selectedCode = selectedCurrency.code,
+                onSelect = { code ->
+                    showCurrencyDialog = false
+                    code?.let { viewModel.selectCurrency(it) }
+                },
+                onDismiss = { showCurrencyDialog = false }
+            )
         }
 
         if (showDatePicker) {

@@ -43,11 +43,78 @@ pub fn new_id() -> String {
     cuid2::create_id()
 }
 
+pub const DEFAULT_CURRENCY_CODE: &str = "USD";
+
+pub fn default_currency_code() -> String {
+    DEFAULT_CURRENCY_CODE.to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_decimal_digits() -> u8 {
+    2
+}
+
+pub fn normalize_currency_code(code: &str) -> String {
+    let trimmed = code.trim().to_ascii_uppercase();
+    if trimmed.is_empty() {
+        DEFAULT_CURRENCY_CODE.to_string()
+    } else {
+        trimmed
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Currency {
+    pub code: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub symbol: String,
+    #[serde(default)]
+    pub symbol_after: bool,
+    #[serde(default = "default_decimal_digits")]
+    pub decimal_digits: u8,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
+}
+
+impl Currency {
+    /// Display fallback used only when a currency code hasn't been fetched from
+    /// the server yet (e.g., offline startup before the first catalog sync).
+    pub fn fallback(code: &str) -> Self {
+        let code = normalize_currency_code(code);
+        if code == DEFAULT_CURRENCY_CODE {
+            Self {
+                code,
+                name: "US Dollar".into(),
+                symbol: "$".into(),
+                symbol_after: false,
+                decimal_digits: 2,
+                is_active: true,
+            }
+        } else {
+            Self {
+                name: code.clone(),
+                symbol: code.clone(),
+                code,
+                symbol_after: true,
+                decimal_digits: 2,
+                is_active: true,
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Account {
     pub id: String,
     #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    pub currency_code: Option<String>,
     #[serde(default)]
     pub deleted_at: Option<String>,
     #[serde(default, alias = "created_at")]
@@ -62,6 +129,7 @@ impl Account {
         Self {
             id: new_id(),
             name: name.into(),
+            currency_code: None,
             deleted_at: None,
             inserted_at: stamp.clone(),
             updated_at: stamp,
@@ -70,6 +138,14 @@ impl Account {
 
     pub fn is_active(&self) -> bool {
         self.deleted_at.is_none()
+    }
+
+    pub fn normalized_currency_code(&self) -> Option<String> {
+        self.currency_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|code| !code.is_empty())
+            .map(|code| code.to_ascii_uppercase())
     }
 }
 
@@ -109,7 +185,7 @@ impl Category {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Entry {
     pub id: String,
     #[serde(default)]
@@ -124,6 +200,8 @@ pub struct Entry {
     pub location: Option<String>,
     #[serde(default)]
     pub amount: f64,
+    #[serde(default = "default_currency_code")]
+    pub currency_code: String,
     #[serde(default)]
     pub date: String,
     #[serde(default)]
@@ -134,9 +212,32 @@ pub struct Entry {
     pub updated_at: String,
 }
 
+impl Default for Entry {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            account_id: String::new(),
+            category_id: String::new(),
+            title: String::new(),
+            description: None,
+            location: None,
+            amount: 0.0,
+            currency_code: default_currency_code(),
+            date: String::new(),
+            deleted_at: None,
+            inserted_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+}
+
 impl Entry {
     pub fn is_active(&self) -> bool {
         self.deleted_at.is_none()
+    }
+
+    pub fn normalized_currency_code(&self) -> String {
+        normalize_currency_code(&self.currency_code)
     }
 
     pub fn occurred_at(&self) -> &str {
@@ -154,12 +255,18 @@ impl Entry {
             .or_else(|| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
     }
 
+    pub fn date_ymd(&self) -> String {
+        self.date_naive()
+            .map(|date| date.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(today)
+    }
+
     pub fn month_key(&self) -> Option<(i32, u32)> {
         self.date_naive().map(|d| (d.year(), d.month()))
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     #[serde(default)]
     pub username: String,
@@ -167,6 +274,19 @@ pub struct User {
     pub email: String,
     #[serde(default)]
     pub flags: Vec<String>,
+    #[serde(default = "default_currency_code")]
+    pub default_currency_code: String,
+}
+
+impl Default for User {
+    fn default() -> Self {
+        Self {
+            username: String::new(),
+            email: String::new(),
+            flags: Vec::new(),
+            default_currency_code: default_currency_code(),
+        }
+    }
 }
 
 impl User {
@@ -199,6 +319,8 @@ pub struct SyncResponse {
     pub categories: Vec<Category>,
     #[serde(default)]
     pub entries: Vec<Entry>,
+    #[serde(default)]
+    pub default_currency_code: Option<String>,
 }
 
 /// A single point on the monthly cash-flow chart.
@@ -213,6 +335,16 @@ pub struct MonthFlow {
 /// Turn a list of entries into the six most recent calendar months, including
 /// empty months so the chart never collapses or reorders itself.
 pub fn monthly_flow(entries: &[Entry], months: usize) -> Vec<MonthFlow> {
+    monthly_flow_converted(entries, months, |entry| entry.amount)
+}
+
+/// Like [`monthly_flow`], but projects each entry's signed amount through a
+/// caller-supplied currency converter (typically using historical rates on the
+/// entry's date).
+pub fn monthly_flow_converted<F>(entries: &[Entry], months: usize, convert: F) -> Vec<MonthFlow>
+where
+    F: Fn(&Entry) -> f64,
+{
     let today = chrono::Local::now().date_naive();
     let mut buckets: Vec<MonthFlow> = Vec::with_capacity(months);
 
@@ -242,10 +374,11 @@ pub fn monthly_flow(entries: &[Entry], months: usize) -> Vec<MonthFlow> {
             .iter_mut()
             .find(|bucket| bucket.year == year && bucket.month == month)
         {
-            if entry.amount >= 0.0 {
-                bucket.income += entry.amount;
+            let value = convert(entry);
+            if value >= 0.0 {
+                bucket.income += value;
             } else {
-                bucket.expenses += entry.amount.abs();
+                bucket.expenses += value.abs();
             }
         }
     }

@@ -48,6 +48,7 @@ import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.accounts.AccountScreen
 import dev.crqch.sunder.ui.accounts.AccountsScreen
 import dev.crqch.sunder.ui.accounts.CreateAccountScreen
+import dev.crqch.sunder.ui.admin.AdminCurrenciesScreen
 import dev.crqch.sunder.ui.categories.CategoriesScreen
 import dev.crqch.sunder.ui.categories.CategoryScreen
 import dev.crqch.sunder.ui.categories.CreateCategoryScreen
@@ -80,6 +81,9 @@ sealed interface SubRoute {
 
     @Serializable
     object Settings : SubRoute
+
+    @Serializable
+    object AdminCurrencies : SubRoute
 }
 
 sealed class TopLevelDestination {
@@ -290,6 +294,13 @@ fun AppNavHost(
 
         composable<SubRoute.Settings> {
             SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateAdmin = { navController.navigate(SubRoute.AdminCurrencies) }
+            )
+        }
+
+        composable<SubRoute.AdminCurrencies> {
+            AdminCurrenciesScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

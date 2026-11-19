@@ -19,12 +19,13 @@ defmodule SunderWeb.DataController do
     categories = Repo.all(from c in Category, where: c.eco_user_id == ^eco_user.id and is_nil(c.deleted_at))
     entries = Repo.all(from e in Entry, where: e.eco_user_id == ^eco_user.id and is_nil(e.deleted_at))
 
-    clean_accounts = Enum.map(accounts, fn a -> %{id: a.id, name: a.name} end)
+    clean_accounts = Enum.map(accounts, fn a -> %{id: a.id, name: a.name, currency_code: a.currency_code} end)
     clean_categories = Enum.map(categories, fn c -> %{id: c.id, title: c.title, color: c.color, description: c.description} end)
-    clean_entries = Enum.map(entries, fn e -> 
+    clean_entries = Enum.map(entries, fn e ->
       %{
         date: e.date,
         amount: e.amount,
+        currency_code: e.currency_code,
         title: e.title,
         description: e.description,
         location: e.location,
@@ -34,8 +35,9 @@ defmodule SunderWeb.DataController do
     end)
 
     data = %{
-      version: 1,
+      version: 2,
       format: "sunder",
+      default_currency_code: eco_user.default_currency_code,
       accounts: clean_accounts,
       categories: clean_categories,
       entries: clean_entries

@@ -53,12 +53,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.ui.components.ConfirmDeleteDialog
+import dev.crqch.sunder.ui.components.CurrencyCodeBadge
 import dev.crqch.sunder.ui.components.SelectionCheckCircle
 import dev.crqch.sunder.ui.components.SelectionTopBar
 import dev.crqch.sunder.ui.components.SunderEmptyState
 import dev.crqch.sunder.ui.components.SunderSearchBar
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -70,13 +71,14 @@ fun AccountsScreen(
     val allAccounts by viewModel.allAccounts.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
+    val convertedBalances by viewModel.convertedBalances.collectAsState()
+    val totalBalance by viewModel.totalBalance.collectAsState()
+    val defaultCurrency = currencyState.defaultCurrency
 
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    val totalBalance = remember(allAccounts) {
-        allAccounts.sumOf { it.balance.toDouble() }.toFloat()
-    }
     val allSelected = accounts.isNotEmpty() && selectedIds.size == accounts.size
 
     Scaffold(
@@ -165,7 +167,7 @@ fun AccountsScreen(
                     if (searchQuery.isBlank() && selectedIds.isEmpty()) {
                         item(key = "accounts_total_banner") {
                             val sunderColors = MaterialTheme.sunderColors
-                            val balColor = if (totalBalance >= 0f) sunderColors.income else sunderColors.expense
+                            val balColor = if (totalBalance >= 0.0) sunderColors.income else sunderColors.expense
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = MaterialTheme.shapes.large,
@@ -199,7 +201,7 @@ fun AccountsScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
-                                                text = formatCurrencyAmount(totalBalance),
+                                                text = CurrencyFormatter.format(totalBalance, defaultCurrency),
                                                 style = MaterialTheme.typography.headlineMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = balColor
@@ -236,7 +238,9 @@ fun AccountsScreen(
                             val account = accountWithBalance.account
                             val isSelected = selectedIds.contains(account.id)
                             val sunderColors = MaterialTheme.sunderColors
-                            val balanceColor = if (accountWithBalance.balance >= 0f) {
+                            val accountBalance = convertedBalances[account.id]
+                                ?: accountWithBalance.balance.toDouble()
+                            val balanceColor = if (accountBalance >= 0.0) {
                                 sunderColors.income
                             } else {
                                 sunderColors.expense
@@ -313,13 +317,22 @@ fun AccountsScreen(
                                     Spacer(modifier = Modifier.width(14.dp))
 
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = account.name,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = account.name,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            account.currencyCode?.let { code ->
+                                                CurrencyCodeBadge(code = code)
+                                            }
+                                        }
                                         Text(
                                             text = stringResource(R.string.current_balance),
                                             style = MaterialTheme.typography.labelSmall,
@@ -330,7 +343,7 @@ fun AccountsScreen(
                                     Spacer(modifier = Modifier.width(10.dp))
 
                                     Text(
-                                        text = formatCurrencyAmount(accountWithBalance.balance),
+                                        text = CurrencyFormatter.format(accountBalance, defaultCurrency),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = balanceColor

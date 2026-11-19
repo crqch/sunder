@@ -4,7 +4,9 @@ import { apiFetch } from '$lib/api';
 export interface User {
   id: string;
   username: string;
+  email?: string;
   flags?: string[];
+  default_currency_code?: string;
 }
 
 export interface AuthState {
@@ -122,6 +124,10 @@ export async function refreshAccessToken() {
 
   const profileData = await profileRes.json();
 
+  if (typeof window !== 'undefined' && profileData.default_currency_code) {
+    localStorage.setItem('sunder_default_currency', profileData.default_currency_code);
+  }
+
   authStore.update((s) => ({
     ...s,
     isAuthenticated: true,
@@ -129,7 +135,9 @@ export async function refreshAccessToken() {
     user: {
       id: profileData.id,
       username: profileData.username,
-      flags: profileData.flags
+      email: profileData.email,
+      flags: profileData.flags,
+      default_currency_code: profileData.default_currency_code
     },
     loading: false
   }));
@@ -138,6 +146,7 @@ export async function refreshAccessToken() {
 export function logout() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('sunder_refresh_token');
+    localStorage.removeItem('sunder_default_currency');
     if (!window.location.pathname.startsWith('/auth/')) {
       window.location.href = '/auth/sign-in';
     }

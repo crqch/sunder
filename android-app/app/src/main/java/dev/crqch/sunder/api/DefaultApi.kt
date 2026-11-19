@@ -43,7 +43,8 @@ data class DashboardUserResponse(
     @Json(name = "id") val id: String? = null,
     @Json(name = "username") val username: String? = null,
     @Json(name = "email") val email: String? = null,
-    @Json(name = "flags") val flags: List<String>? = null
+    @Json(name = "flags") val flags: List<String>? = null,
+    @Json(name = "default_currency_code") val defaultCurrencyCode: String? = null
 )
 
 interface DefaultApi {

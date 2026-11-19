@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.SunderDatabase
 import dev.crqch.sunder.data.repositories.AppSettings
+import dev.crqch.sunder.data.repositories.CurrencyRepository
 import dev.crqch.sunder.data.repositories.PreferencesRepository
 import dev.crqch.sunder.data.repositories.SyncRepository
 import dev.crqch.sunder.data.repositories.ThemeMode
 import dev.crqch.sunder.data.repositories.UserRepository
 import dev.crqch.sunder.data.sync.SyncManager
+import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,12 +28,22 @@ class SettingsViewModel @Inject constructor(
     private val syncRepository: SyncRepository,
     private val syncManager: SyncManager,
     private val userRepository: UserRepository,
+    private val currencyRepository: CurrencyRepository,
     private val database: SunderDatabase
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = preferencesRepository.settings
     val currentUser = userRepository.currentUser
     val isSyncing = syncRepository.isSyncing
+
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
+
+    private val _isRefreshingRates = MutableStateFlow(false)
+    val isRefreshingRates: StateFlow<Boolean> = _isRefreshingRates.asStateFlow()
 
     val lastSyncedAt: StateFlow<Long?> = syncRepository.lastSyncedAt.stateIn(
         scope = viewModelScope,
@@ -72,15 +84,27 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setCurrencySymbol(symbol: String) {
+    fun setDefaultCurrency(code: String) {
         viewModelScope.launch {
-            preferencesRepository.setCurrencySymbol(symbol)
+            withContext(Dispatchers.IO) {
+                currencyRepository.setDefaultCurrency(code)
+                runCatching { currencyRepository.refreshRates() }
+            }
         }
     }
 
-    fun setCurrencyAfter(after: Boolean) {
+    fun refreshRates(successMessage: String, failureMessage: String) {
+        if (_isRefreshingRates.value) return
         viewModelScope.launch {
-            preferencesRepository.setCurrencyAfter(after)
+            _isRefreshingRates.value = true
+            val success = withContext(Dispatchers.IO) {
+                runCatching {
+                    currencyRepository.refreshCurrencies()
+                    currencyRepository.refreshRates(force = true)
+                }.getOrDefault(false)
+            }
+            _isRefreshingRates.value = false
+            _snackbarMessage.value = if (success) successMessage else failureMessage
         }
     }
 

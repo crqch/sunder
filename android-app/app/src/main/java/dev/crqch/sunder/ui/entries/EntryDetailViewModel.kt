@@ -12,8 +12,10 @@ import dev.crqch.sunder.data.local.AccountWithBalance
 import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.data.repositories.AccountRepository
 import dev.crqch.sunder.data.repositories.CategoryRepository
+import dev.crqch.sunder.data.repositories.CurrencyRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
 import dev.crqch.sunder.ui.SubRoute
+import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -25,7 +27,8 @@ class EntryDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val entryRepository: EntryRepository,
     private val accountRepository: AccountRepository,
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val currencyRepository: CurrencyRepository
 ) : ViewModel() {
 
     var isEditMode by mutableStateOf(false)
@@ -40,6 +43,7 @@ class EntryDetailViewModel @Inject constructor(
     val entryId = entryRoute?.entryId
 
     private var lastLoadedEntity: EntryEntity? = null
+    private var decimalDigits = 2
 
     var entryFormState by mutableStateOf(EntryFormState())
         private set
@@ -47,7 +51,24 @@ class EntryDetailViewModel @Inject constructor(
     var amountInput by mutableStateOf("")
         private set
 
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
+
     init {
+        viewModelScope.launch {
+            currencyRepository.uiState.collect { state ->
+                val code = entryFormState.currencyCode
+                val digits = state.currency(code).decimalDigits
+                if (!isEditMode && digits != decimalDigits) {
+                    decimalDigits = digits
+                    amountInput = amountToCurrencyDigits(entryFormState.amount, digits)
+                }
+            }
+        }
+
         entryId?.let { id ->
             viewModelScope.launch {
                 entryRepository.getEntry(id).collect { entity ->
@@ -64,7 +85,8 @@ class EntryDetailViewModel @Inject constructor(
 
     private fun applyEntity(entity: EntryEntity) {
         entryFormState = EntryFormState.ofEntity(entity)
-        amountInput = amountToCentsDigits(entryFormState.amount)
+        decimalDigits = currencyState.value.currency(entity.currencyCode).decimalDigits
+        amountInput = amountToCurrencyDigits(entryFormState.amount, decimalDigits)
     }
 
     val availableAccounts: StateFlow<List<AccountWithBalance>> =
@@ -85,12 +107,20 @@ class EntryDetailViewModel @Inject constructor(
     }
 
     fun updateAmount(input: String) {
-        val parsed = parseCentsAmountInput(input, entryFormState.isExpense)
+        val parsed = parseCurrencyAmountInput(input, entryFormState.isExpense, decimalDigits)
         amountInput = parsed.digits
         entryFormState = entryFormState.copy(
             amount = parsed.amount,
             isExpense = parsed.isExpense
         )
+    }
+
+    /** Explicit currency change while editing an existing entry. */
+    fun selectCurrency(code: String) {
+        val currency = currencyState.value.currency(code)
+        decimalDigits = currency.decimalDigits
+        entryFormState = entryFormState.copy(currencyCode = currency.code)
+        amountInput = amountToCurrencyDigits(entryFormState.amount, decimalDigits)
     }
 
     fun startEdit() {
@@ -106,8 +136,16 @@ class EntryDetailViewModel @Inject constructor(
     fun saveEdit() {
         if (!entryFormState.isFilled()) return
         viewModelScope.launch {
-            entryRepository.saveEntry(entryFormState, entryId)
-            isEditMode = false
+            val saved = runCatching {
+                entryRepository.saveEntry(
+                    state = entryFormState,
+                    id = entryId,
+                    currencyCode = entryFormState.currencyCode
+                )
+            }
+            if (saved.isSuccess) {
+                isEditMode = false
+            }
         }
     }
 

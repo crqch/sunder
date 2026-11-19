@@ -1,8 +1,12 @@
 use crate::api::{
-    AdminInvite, AdminUser, ApiClient, ApiError, ImportKind, LoginResponse, ProfileResponse,
+    AdminCurrencyPatch, AdminInvite, AdminUser, ApiClient, ApiError, ImportKind, LoginResponse,
+    ProfileResponse,
 };
 use crate::format;
-use crate::model::{Account, Category, Entry, SyncPayload, SyncResponse, User, monthly_flow, now};
+use crate::model::{
+    Account, Category, Currency, Entry, SyncPayload, SyncResponse, User, monthly_flow_converted,
+    normalize_currency_code, now,
+};
 use crate::search::{EntryQuery, SearchKind, SearchSuggestion, SearchTerm};
 use crate::store::{Paths, Settings, Snapshot};
 use crate::theme::{Theme, set_theme, theme};
@@ -180,6 +184,7 @@ pub enum SortField {
 pub struct EntryFilter {
     pub account_ids: Vec<String>,
     pub category_ids: Vec<String>,
+    pub currency_codes: Vec<String>,
     pub sort: SortField,
     pub descending: bool,
 }
@@ -189,6 +194,7 @@ impl Default for EntryFilter {
         Self {
             account_ids: Vec::new(),
             category_ids: Vec::new(),
+            currency_codes: Vec::new(),
             sort: SortField::Date,
             descending: true,
         }
@@ -202,6 +208,11 @@ impl EntryFilter {
 
     pub fn toggle_category(&mut self, id: &str) {
         toggle_value(&mut self.category_ids, id);
+    }
+
+    pub fn toggle_currency(&mut self, code: &str) {
+        let code = normalize_currency_code(code);
+        toggle_value(&mut self.currency_codes, &code);
     }
 }
 
@@ -251,10 +262,22 @@ pub struct HistoryEntry {
     pub detail: Option<DetailView>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AdminCurrencyFilter {
+    #[default]
+    All,
+    Active,
+    Inactive,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct AdminState {
     pub users: Vec<AdminUser>,
     pub invites: Vec<AdminInvite>,
+    pub currencies: Vec<Currency>,
+    pub currency_filter: AdminCurrencyFilter,
+    pub syncing_rates: bool,
+    pub last_sync_summary: Option<String>,
     pub loading: bool,
     pub loaded: bool,
     pub error: Option<String>,
@@ -286,6 +309,7 @@ pub struct SunderApp {
     pub auto_sync_started: bool,
     pub profile_loaded: bool,
     pub session_generation: u64,
+    pub currencies_loading: bool,
     pub search: Entity<TextInput>,
     pub account_search: Entity<TextInput>,
     pub category_search: Entity<TextInput>,
@@ -311,8 +335,17 @@ pub struct SunderApp {
     pub history_index: usize,
     pub admin: AdminState,
     pub admin_editor: Option<crate::ui::overlays::AdminEditor>,
+    pub admin_currency_editor: Option<crate::ui::overlays::AdminCurrencyEditor>,
     pub admin_invite: Entity<TextInput>,
+    pub admin_currency_search: Entity<TextInput>,
+    pub admin_rate_date: Entity<TextInput>,
+    pub admin_backfill_days: Entity<TextInput>,
+    pub admin_manual_target: Entity<TextInput>,
+    pub admin_manual_rate: Entity<TextInput>,
+    pub admin_manual_date: Entity<TextInput>,
     pub currency_input: Entity<TextInput>,
+    pub settings_currency_open: bool,
+    pub settings_currency_search: Entity<TextInput>,
     pub show_shortcuts: bool,
     pub logout_dialog: bool,
     pub logout_unsynced: usize,
@@ -326,6 +359,7 @@ pub struct SunderApp {
     pub editor: Option<crate::ui::overlays::EntryEditor>,
     pub account_editor: Option<crate::ui::overlays::AccountEditor>,
     pub category_editor: Option<crate::ui::overlays::CategoryEditor>,
+    pub bulk_currency_editor: Option<crate::ui::overlays::BulkCurrencyEditor>,
     pub confirm: Option<ConfirmDialog>,
     pub(super) _auto_sync: Option<Task<()>>,
 }
@@ -430,6 +464,24 @@ impl SunderApp {
                 cx,
             )
         });
+        let admin_currency_search = cx.new(|cx| {
+            TextInput::new("Search currencies (code, name, symbol)…", "", InputStyle::compact(), cx)
+                .with_prefix(crate::assets::Icon::Search)
+        });
+        let admin_rate_date = cx.new(|cx| {
+            TextInput::new("YYYY-MM-DD", "", InputStyle::compact(), cx)
+                .with_prefix(crate::assets::Icon::Calendar)
+        });
+        let admin_backfill_days =
+            cx.new(|cx| TextInput::new("Days (e.g. 30)", "30", InputStyle::compact(), cx));
+        let admin_manual_target =
+            cx.new(|cx| TextInput::new("Target (e.g. EUR)", "", InputStyle::compact(), cx));
+        let admin_manual_rate =
+            cx.new(|cx| TextInput::new("Rate per 1 USD", "", InputStyle::compact(), cx));
+        let admin_manual_date = cx.new(|cx| {
+            TextInput::new("YYYY-MM-DD (optional)", "", InputStyle::compact(), cx)
+                .with_prefix(crate::assets::Icon::Calendar)
+        });
         let currency_input = cx.new(|cx| {
             TextInput::new(
                 "$",
@@ -437,6 +489,10 @@ impl SunderApp {
                 InputStyle::compact(),
                 cx,
             )
+        });
+        let settings_currency_search = cx.new(|cx| {
+            TextInput::new("Search currency…", "", InputStyle::compact(), cx)
+                .with_prefix(crate::assets::Icon::Search)
         });
 
         let initial_boot = Boot::Login;
@@ -473,6 +529,7 @@ impl SunderApp {
             auto_sync_started: false,
             profile_loaded: false,
             session_generation: 0,
+            currencies_loading: false,
             search,
             account_search,
             category_search,
@@ -498,8 +555,17 @@ impl SunderApp {
             history_index: 0,
             admin: AdminState::default(),
             admin_editor: None,
+            admin_currency_editor: None,
             admin_invite,
+            admin_currency_search,
+            admin_rate_date,
+            admin_backfill_days,
+            admin_manual_target,
+            admin_manual_rate,
+            admin_manual_date,
             currency_input,
+            settings_currency_open: false,
+            settings_currency_search,
             show_shortcuts: false,
             logout_dialog: false,
             logout_unsynced: 0,
@@ -513,6 +579,7 @@ impl SunderApp {
             editor: None,
             account_editor: None,
             category_editor: None,
+            bulk_currency_editor: None,
             confirm: None,
             _auto_sync: None,
         };
@@ -598,6 +665,13 @@ impl SunderApp {
             self.filter_start.clone(),
             self.filter_end.clone(),
             self.admin_invite.clone(),
+            self.admin_currency_search.clone(),
+            self.admin_rate_date.clone(),
+            self.admin_backfill_days.clone(),
+            self.admin_manual_target.clone(),
+            self.admin_manual_rate.clone(),
+            self.admin_manual_date.clone(),
+            self.settings_currency_search.clone(),
         ] {
             cx.subscribe(&field, |_, _, event, cx| {
                 if matches!(event, TextInputEvent::Change) {
@@ -622,6 +696,7 @@ impl SunderApp {
             username: self.settings.username.clone(),
             email: self.settings.email.clone(),
             flags: self.settings.user_flags.clone(),
+            default_currency_code: self.settings.default_currency_code.clone(),
         });
         self.start_auto_sync(cx);
         self.sync_now(false, cx);
@@ -760,6 +835,7 @@ impl SunderApp {
             self.settings.email = user.email.clone();
         }
         self.settings.user_flags = user.flags.clone();
+        self.settings.default_currency_code = normalize_currency_code(&user.default_currency_code);
         self.user = Some(user);
         self.profile_loaded = true;
         self.boot = Boot::Ready;
@@ -768,6 +844,7 @@ impl SunderApp {
         let _ = self.settings.save(&self.paths.settings_file);
         self.start_auto_sync(cx);
         self.sync_now(false, cx);
+        self.refresh_currencies_and_rates(false, cx);
         cx.notify();
     }
 
@@ -998,6 +1075,10 @@ impl SunderApp {
         self.account_editor = None;
         self.category_editor = None;
         self.admin_editor = None;
+        self.admin_currency_editor = None;
+        self.bulk_currency_editor = None;
+        self.settings_currency_open = false;
+        self.currencies_loading = false;
         self.confirm = None;
         self.calendar = None;
         self.show_filters = false;
@@ -1036,6 +1117,10 @@ impl SunderApp {
         self.account_editor = None;
         self.category_editor = None;
         self.admin_editor = None;
+        self.admin_currency_editor = None;
+        self.bulk_currency_editor = None;
+        self.settings_currency_open = false;
+        self.currencies_loading = false;
         self.confirm = None;
         self.calendar = None;
         self.show_filters = false;
@@ -1062,18 +1147,20 @@ impl SunderApp {
             let result = with_access(api, access, refresh, |api, token| {
                 Box::pin(async move {
                     let users = api.admin_users(token.clone()).await?;
-                    let invites = api.admin_invites(token).await?;
-                    Ok((users, invites))
+                    let invites = api.admin_invites(token.clone()).await?;
+                    let currencies = api.admin_currencies(token).await?;
+                    Ok((users, invites, currencies))
                 })
             })
             .await;
             this.update(cx, |app, cx| {
                 app.admin.loading = false;
                 match result {
-                    Ok(((users, invites), token)) => {
+                    Ok(((users, invites, currencies), token)) => {
                         app.access_token = Some(token);
                         app.admin.users = users;
                         app.admin.invites = invites;
+                        app.admin.currencies = currencies;
                         app.admin.loaded = true;
                         app.admin.error = None;
                     }
@@ -1231,6 +1318,311 @@ impl SunderApp {
         cx.notify();
     }
 
+    pub fn filtered_admin_currencies(&self, cx: &App) -> Vec<&Currency> {
+        let query = self
+            .admin_currency_search
+            .read(cx)
+            .text()
+            .trim()
+            .to_lowercase();
+        let mut currencies: Vec<&Currency> = self
+            .admin
+            .currencies
+            .iter()
+            .filter(|currency| match self.admin.currency_filter {
+                AdminCurrencyFilter::All => true,
+                AdminCurrencyFilter::Active => currency.is_active,
+                AdminCurrencyFilter::Inactive => !currency.is_active,
+            })
+            .filter(|currency| {
+                query.is_empty()
+                    || currency.code.to_lowercase().contains(&query)
+                    || currency.name.to_lowercase().contains(&query)
+                    || currency.symbol.to_lowercase().contains(&query)
+            })
+            .collect();
+        currencies.sort_by(|a, b| a.code.cmp(&b.code));
+        currencies
+    }
+
+    pub fn admin_toggle_currency_active(
+        &mut self,
+        code: String,
+        is_active: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let api = self.api.clone();
+        let access = self.access_token.clone();
+        let refresh = self.settings.refresh_token.clone();
+        let normalized = normalize_currency_code(&code);
+        cx.spawn(async move |this, cx| {
+            let result = with_access(api, access, refresh, move |api, token| {
+                let code = normalized.clone();
+                Box::pin(async move {
+                    api.admin_update_currency(
+                        token,
+                        code,
+                        AdminCurrencyPatch {
+                            is_active: Some(is_active),
+                            ..AdminCurrencyPatch::default()
+                        },
+                    )
+                    .await
+                })
+            })
+            .await;
+            this.update(cx, |app, cx| match result {
+                Ok((currency, token)) => {
+                    app.access_token = Some(token);
+                    if let Some(existing) = app
+                        .admin
+                        .currencies
+                        .iter_mut()
+                        .find(|item| item.code.eq_ignore_ascii_case(&currency.code))
+                    {
+                        *existing = currency.clone();
+                    } else {
+                        app.admin.currencies.push(currency.clone());
+                    }
+                    app.refresh_currencies_and_rates(false, cx);
+                    app.toast(
+                        ToastKind::Success,
+                        format!(
+                            "{} {}.",
+                            currency.code,
+                            if currency.is_active {
+                                "activated"
+                            } else {
+                                "deactivated"
+                            }
+                        ),
+                        None,
+                        cx,
+                    );
+                }
+                Err(error) => {
+                    if error.status == Some(401) {
+                        app.session_expired(cx);
+                    } else {
+                        app.toast(
+                            ToastKind::Error,
+                            format!("Couldn't update currency.\n{}", error.message),
+                            None,
+                            cx,
+                        );
+                    }
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn admin_sync_latest_rates(&mut self, cx: &mut Context<Self>) {
+        self.admin_sync_rates_impl(None, None, false, cx);
+    }
+
+    pub fn admin_sync_date_rates(&mut self, cx: &mut Context<Self>) {
+        let raw_date = self.admin_rate_date.read(cx).text().trim().to_string();
+        let Some(parsed) = crate::format::parse_date(&raw_date) else {
+            self.toast(
+                ToastKind::Error,
+                "Enter a valid YYYY-MM-DD date to sync.".into(),
+                None,
+                cx,
+            );
+            return;
+        };
+        let date = parsed.format("%Y-%m-%d").to_string();
+        self.admin_sync_rates_impl(Some(date), None, false, cx);
+    }
+
+    pub fn admin_backfill_rates(&mut self, cx: &mut Context<Self>) {
+        let raw = self.admin_backfill_days.read(cx).text().trim().to_string();
+        let Ok(days) = raw.parse::<u32>() else {
+            self.toast(
+                ToastKind::Error,
+                "Enter a number of days between 1 and 366.".into(),
+                None,
+                cx,
+            );
+            return;
+        };
+        if !(1..=366).contains(&days) {
+            self.toast(
+                ToastKind::Error,
+                "Backfill days must be between 1 and 366.".into(),
+                None,
+                cx,
+            );
+            return;
+        }
+        self.admin_sync_rates_impl(None, Some(days), false, cx);
+    }
+
+    fn admin_sync_rates_impl(
+        &mut self,
+        date: Option<String>,
+        days: Option<u32>,
+        force: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.admin.syncing_rates {
+            return;
+        }
+        self.admin.syncing_rates = true;
+        cx.notify();
+        let api = self.api.clone();
+        let access = self.access_token.clone();
+        let refresh = self.settings.refresh_token.clone();
+        cx.spawn(async move |this, cx| {
+            let result = with_access(api, access, refresh, move |api, token| {
+                let date = date.clone();
+                Box::pin(async move { api.admin_sync_rates(token, date, days, force).await })
+            })
+            .await;
+            this.update(cx, |app, cx| {
+                app.admin.syncing_rates = false;
+                match result {
+                    Ok((resp, token)) => {
+                        app.access_token = Some(token);
+                        let summary = if let Some(stats) = resp.stats {
+                            format!(
+                                "Backfill finished ({} synced, {} skipped, {} failed).",
+                                stats.synced, stats.skipped, stats.failed
+                            )
+                        } else if let Some(count) = resp.stored_count {
+                            let label = resp
+                                .date
+                                .or(resp.fetched_date)
+                                .unwrap_or_else(|| "latest".into());
+                            format!("Stored {count} exchange rates for {label}.")
+                        } else {
+                            "Exchange rates synced.".into()
+                        };
+                        app.admin.last_sync_summary = Some(summary.clone());
+                        app.toast(ToastKind::Success, summary, None, cx);
+                        app.refresh_currencies_and_rates(false, cx);
+                    }
+                    Err(error) => {
+                        if error.status == Some(401) {
+                            app.session_expired(cx);
+                        } else {
+                            app.toast(
+                                ToastKind::Error,
+                                format!("Rate sync failed.\n{}", error.message),
+                                None,
+                                cx,
+                            );
+                        }
+                    }
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn admin_save_manual_rate(&mut self, cx: &mut Context<Self>) {
+        let target = normalize_currency_code(self.admin_manual_target.read(cx).text());
+        let rate_raw = self.admin_manual_rate.read(cx).text().trim().to_string();
+        let date_raw = self.admin_manual_date.read(cx).text().trim().to_string();
+        if target.len() < 3 {
+            self.toast(
+                ToastKind::Error,
+                "Enter a target currency code (e.g. EUR).".into(),
+                None,
+                cx,
+            );
+            return;
+        }
+        let Ok(rate) = rate_raw.replace(',', ".").parse::<f64>() else {
+            self.toast(
+                ToastKind::Error,
+                "Enter a positive numeric exchange rate.".into(),
+                None,
+                cx,
+            );
+            return;
+        };
+        if !rate.is_finite() || rate <= 0.0 {
+            self.toast(
+                ToastKind::Error,
+                "Exchange rate must be greater than zero.".into(),
+                None,
+                cx,
+            );
+            return;
+        }
+        let rate_date = if date_raw.is_empty() {
+            None
+        } else if let Some(parsed) = crate::format::parse_date(&date_raw) {
+            Some(parsed.format("%Y-%m-%d").to_string())
+        } else {
+            self.toast(
+                ToastKind::Error,
+                "Use YYYY-MM-DD for the manual rate date.".into(),
+                None,
+                cx,
+            );
+            return;
+        };
+
+        let api = self.api.clone();
+        let access = self.access_token.clone();
+        let refresh = self.settings.refresh_token.clone();
+        cx.spawn(async move |this, cx| {
+            let result = with_access(api, access, refresh, move |api, token| {
+                let target = target.clone();
+                let rate_date = rate_date.clone();
+                Box::pin(async move {
+                    api.admin_upsert_rate(token, Some("USD".into()), target, rate, rate_date)
+                        .await
+                })
+            })
+            .await;
+            this.update(cx, |app, cx| match result {
+                Ok((saved, token)) => {
+                    app.access_token = Some(token);
+                    let mut map = HashMap::new();
+                    map.insert(saved.target_currency_code.clone(), saved.rate);
+                    app.snapshot.merge_rates(saved.rate_date.clone(), map);
+                    app.persist(cx);
+                    app.admin_manual_rate
+                        .update(cx, |input, cx| input.clear(cx));
+                    app.refresh_currencies_and_rates(false, cx);
+                    app.toast(
+                        ToastKind::Success,
+                        format!(
+                            "Saved 1 {} = {} {} for {}.",
+                            saved.base_currency_code,
+                            saved.rate,
+                            saved.target_currency_code,
+                            saved.rate_date
+                        ),
+                        None,
+                        cx,
+                    );
+                }
+                Err(error) => {
+                    if error.status == Some(401) {
+                        app.session_expired(cx);
+                    } else {
+                        app.toast(
+                            ToastKind::Error,
+                            format!("Couldn't save manual rate.\n{}", error.message),
+                            None,
+                            cx,
+                        );
+                    }
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     /// True when the currently focused element is one of Sunder's text fields.
     /// Mirrors the web client's KeybindListener, which ignores registered
     /// shortcuts while an input, textarea, or select has focus.
@@ -1271,10 +1663,21 @@ impl SunderApp {
                             handles.push(self.category_search.read(cx).focus());
                         }
                         Screen::Admin => {
-                            handles.push(self.admin_invite.read(cx).focus());
+                            handles.extend([
+                                self.admin_invite.read(cx).focus(),
+                                self.admin_currency_search.read(cx).focus(),
+                                self.admin_rate_date.read(cx).focus(),
+                                self.admin_backfill_days.read(cx).focus(),
+                                self.admin_manual_target.read(cx).focus(),
+                                self.admin_manual_rate.read(cx).focus(),
+                                self.admin_manual_date.read(cx).focus(),
+                            ]);
                         }
                         Screen::Settings => {
                             handles.push(self.currency_input.read(cx).focus());
+                            if self.settings_currency_open {
+                                handles.push(self.settings_currency_search.read(cx).focus());
+                            }
                         }
                         _ => {}
                     }
@@ -1288,10 +1691,14 @@ impl SunderApp {
                 editor.date.read(cx).focus(),
                 editor.description.read(cx).focus(),
                 editor.location.read(cx).focus(),
+                editor.currency_search.read(cx).focus(),
             ]);
         }
         if let Some(editor) = &self.account_editor {
-            handles.push(editor.name.read(cx).focus());
+            handles.extend([
+                editor.name.read(cx).focus(),
+                editor.currency_search.read(cx).focus(),
+            ]);
         }
         if let Some(editor) = &self.category_editor {
             handles.extend([
@@ -1308,6 +1715,17 @@ impl SunderApp {
                 editor.password.read(cx).focus(),
             ]);
         }
+        if let Some(editor) = &self.admin_currency_editor {
+            handles.extend([
+                editor.code.read(cx).focus(),
+                editor.name.read(cx).focus(),
+                editor.symbol.read(cx).focus(),
+                editor.decimal_digits.read(cx).focus(),
+            ]);
+        }
+        if let Some(editor) = &self.bulk_currency_editor {
+            handles.push(editor.search.read(cx).focus());
+        }
         handles.contains(&focused)
     }
 
@@ -1316,6 +1734,8 @@ impl SunderApp {
             || self.account_editor.is_some()
             || self.category_editor.is_some()
             || self.admin_editor.is_some()
+            || self.admin_currency_editor.is_some()
+            || self.bulk_currency_editor.is_some()
             || self.confirm.is_some()
             || self.show_shortcuts
             || self.logout_dialog
@@ -1354,6 +1774,9 @@ impl SunderApp {
         self.account_editor = None;
         self.category_editor = None;
         self.admin_editor = None;
+        self.admin_currency_editor = None;
+        self.bulk_currency_editor = None;
+        self.settings_currency_open = false;
         self.confirm = None;
         self.show_shortcuts = false;
         self.logout_dialog = false;
@@ -1425,6 +1848,9 @@ impl SunderApp {
         self.editor = None;
         self.account_editor = None;
         self.category_editor = None;
+        self.admin_currency_editor = None;
+        self.bulk_currency_editor = None;
+        self.settings_currency_open = false;
         self.confirm = None;
         self.selected_entries.clear();
         self.selected_accounts.clear();
@@ -1509,25 +1935,209 @@ impl SunderApp {
         cx.notify();
     }
 
-    pub fn set_currency(&mut self, symbol: &str, cx: &mut Context<Self>) {
-        self.settings.currency_symbol = symbol.to_string();
-        self.currency_input
-            .update(cx, |input, cx| input.set_text(symbol.to_string(), cx));
-        let _ = self.settings.save(&self.paths.settings_file);
-        cx.notify();
+    pub fn default_currency_code(&self) -> String {
+        normalize_currency_code(&self.settings.default_currency_code)
     }
 
-    pub fn set_currency_position(
-        &mut self,
-        position: crate::format::CurrencyPosition,
-        cx: &mut Context<Self>,
-    ) {
-        if self.settings.currency_position == position {
+    pub fn default_currency(&self) -> Currency {
+        self.snapshot.currency(&self.default_currency_code())
+    }
+
+    pub fn currency(&self, code: &str) -> Currency {
+        self.snapshot.currency(code)
+    }
+
+    pub fn set_default_currency(&mut self, code: &str, cx: &mut Context<Self>) {
+        let normalized = normalize_currency_code(code);
+        self.settings.default_currency_code = normalized.clone();
+        if let Some(user) = self.user.as_mut() {
+            user.default_currency_code = normalized.clone();
+        }
+        let meta = self.snapshot.currency(&normalized);
+        self.settings.currency_symbol = meta.symbol.clone();
+        self.settings.currency_position = if meta.symbol_after {
+            crate::format::CurrencyPosition::After
+        } else {
+            crate::format::CurrencyPosition::Before
+        };
+        let _ = self.settings.save(&self.paths.settings_file);
+        self.settings_currency_open = false;
+        self.settings_currency_search
+            .update(cx, |input, cx| input.clear(cx));
+        cx.notify();
+
+        if self.boot == Boot::Ready
+            && (self.access_token.is_some() || self.settings.refresh_token.is_some())
+        {
+            let api = self.api.clone();
+            let access = self.access_token.clone();
+            let refresh = self.settings.refresh_token.clone();
+            let code_for_req = normalized.clone();
+            cx.spawn(async move |this, cx| {
+                let result = with_access(api, access, refresh, move |api, token| {
+                    let code = code_for_req.clone();
+                    Box::pin(async move { api.update_preferences(token, code).await })
+                })
+                .await;
+                this.update(cx, |app, cx| match result {
+                    Ok((prefs, token)) => {
+                        app.access_token = Some(token);
+                        let code = normalize_currency_code(&prefs.default_currency_code);
+                        app.settings.default_currency_code = code.clone();
+                        if let Some(user) = app.user.as_mut() {
+                            user.default_currency_code = code;
+                        }
+                        if let Some(currency) = prefs.default_currency {
+                            if let Some(existing) = app
+                                .snapshot
+                                .currencies
+                                .iter_mut()
+                                .find(|c| c.code.eq_ignore_ascii_case(&currency.code))
+                            {
+                                *existing = currency;
+                            } else {
+                                app.snapshot.currencies.push(currency);
+                            }
+                        }
+                        app.persist(cx);
+                        cx.notify();
+                    }
+                    Err(error) => {
+                        if error.status == Some(401) {
+                            app.session_expired(cx);
+                        } else {
+                            app.toast(
+                                ToastKind::Error,
+                                format!(
+                                    "Saved default currency locally, but couldn't sync preference.\n{}",
+                                    error.message
+                                ),
+                                None,
+                                cx,
+                            );
+                        }
+                    }
+                })
+                .ok();
+            })
+            .detach();
+        }
+    }
+
+    pub fn refresh_currencies_and_rates(&mut self, manual: bool, cx: &mut Context<Self>) {
+        if self.currencies_loading {
             return;
         }
-        self.settings.currency_position = position;
-        let _ = self.settings.save(&self.paths.settings_file);
+        self.currencies_loading = true;
         cx.notify();
+
+        let api = self.api.clone();
+        let bounds = self.snapshot.rate_date_bounds();
+        let generation = self.session_generation;
+
+        cx.spawn(async move |this, cx| {
+            let currencies_result = api.list_currencies().await;
+            let latest_result = api.rates(Some("USD".into()), None).await;
+
+            let mut history_chunks: Vec<HashMap<String, HashMap<String, f64>>> = Vec::new();
+            if let Some((from_str, to_str)) = bounds
+                && let (Some(mut cursor), Some(end)) = (
+                    crate::format::parse_date(&from_str),
+                    crate::format::parse_date(&to_str),
+                )
+            {
+                let today = chrono::Local::now().date_naive();
+                let end = end.max(today);
+                while cursor <= end {
+                    let window_end = (cursor + chrono::Duration::days(364)).min(end);
+                    if let Ok(history) = api
+                        .rates_history(
+                            Some("USD".into()),
+                            cursor.format("%Y-%m-%d").to_string(),
+                            Some(window_end.format("%Y-%m-%d").to_string()),
+                        )
+                        .await
+                    {
+                        history_chunks.push(history.rates);
+                    }
+                    cursor = window_end + chrono::Duration::days(1);
+                }
+            }
+
+            this.update(cx, |app, cx| {
+                app.currencies_loading = false;
+                if generation != app.session_generation {
+                    return;
+                }
+                let mut updated = false;
+                let mut error_msg: Option<String> = None;
+
+                match currencies_result {
+                    Ok(currencies) if !currencies.is_empty() => {
+                        app.snapshot.merge_currencies(currencies);
+                        updated = true;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        error_msg = Some(error.message);
+                    }
+                }
+
+                match latest_result {
+                    Ok(latest) => {
+                        let date = if !latest.date.is_empty() {
+                            latest.date
+                        } else {
+                            latest.requested_date
+                        };
+                        if !date.is_empty() && !latest.rates.is_empty() {
+                            app.snapshot.merge_rates(date, latest.rates);
+                            updated = true;
+                        }
+                    }
+                    Err(error) => {
+                        if error_msg.is_none() {
+                            error_msg = Some(error.message);
+                        }
+                    }
+                }
+
+                for chunk in history_chunks {
+                    if !chunk.is_empty() {
+                        app.snapshot.merge_rates_history(chunk);
+                        updated = true;
+                    }
+                }
+
+                if updated {
+                    app.persist(cx);
+                }
+                if manual {
+                    if let Some(msg) = error_msg {
+                        app.toast(
+                            ToastKind::Error,
+                            format!("Couldn't refresh currencies & rates.\n{msg}"),
+                            None,
+                            cx,
+                        );
+                    } else {
+                        app.toast(
+                            ToastKind::Success,
+                            format!(
+                                "Updated {} currencies and {} rate days.",
+                                app.snapshot.active_currencies().len(),
+                                app.snapshot.exchange_rates.len()
+                            ),
+                            None,
+                            cx,
+                        );
+                    }
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub fn set_reduce_motion(&mut self, reduce: bool, cx: &mut Context<Self>) {
@@ -1542,24 +2152,44 @@ impl SunderApp {
         cx.notify();
     }
 
-    pub fn symbol(&self) -> &str {
-        &self.settings.currency_symbol
-    }
-
-    pub fn currency_position(&self) -> crate::format::CurrencyPosition {
-        self.settings.currency_position
-    }
-
     pub fn money(&self, value: f64) -> String {
-        format::money(value, self.symbol(), self.currency_position())
+        format::money_in(value, &self.default_currency())
     }
 
     pub fn signed_money(&self, value: f64) -> String {
-        format::signed_money(value, self.symbol(), self.currency_position())
+        format::signed_money_in(value, &self.default_currency())
     }
 
     pub fn compact_money(&self, value: f64) -> String {
-        format::compact_money(value, self.symbol(), self.currency_position())
+        format::compact_money_in(value, &self.default_currency())
+    }
+
+    pub fn money_in(&self, value: f64, code: &str) -> String {
+        format::money_in(value, &self.currency(code))
+    }
+
+    pub fn signed_money_in(&self, value: f64, code: &str) -> String {
+        format::signed_money_in(value, &self.currency(code))
+    }
+
+    pub fn convert_entry_amount(&self, entry: &Entry) -> f64 {
+        self.snapshot
+            .convert_entry_amount(entry, &self.default_currency_code())
+    }
+
+    pub fn entry_converted_preview(&self, entry: &Entry) -> Option<String> {
+        let entry_code = entry.normalized_currency_code();
+        let default_code = self.default_currency_code();
+        if entry_code == default_code {
+            return None;
+        }
+        let converted = self.snapshot.convert_amount(
+            entry.amount,
+            &entry_code,
+            &default_code,
+            &entry.date_ymd(),
+        )?;
+        Some(format!("≈ {}", self.signed_money(converted)))
     }
 
     pub fn export_data(&mut self, cx: &mut Context<Self>) {
@@ -2017,6 +2647,18 @@ impl SunderApp {
             .into_iter()
             .map(|account| account.name.clone())
             .collect::<Vec<_>>();
+        let mut currencies = Vec::new();
+        for entry in self.snapshot.active_entries() {
+            let code = entry.normalized_currency_code();
+            if !currencies.contains(&code) {
+                currencies.push(code);
+            }
+        }
+        for currency in self.snapshot.active_currencies() {
+            if !currencies.contains(&currency.code) {
+                currencies.push(currency.code.clone());
+            }
+        }
         let mut titles = Vec::new();
         let mut locations = Vec::new();
         for entry in self.snapshot.active_entries() {
@@ -2039,6 +2681,7 @@ impl SunderApp {
             cursor,
             &categories,
             &accounts,
+            &currencies,
             &titles,
             &locations,
             self.search_menu_all,
@@ -2140,10 +2783,17 @@ impl SunderApp {
             .active_entries()
             .into_iter()
             .filter(|entry| {
+                let entry_code = entry.normalized_currency_code();
                 (self.filter.account_ids.is_empty()
                     || self.filter.account_ids.contains(&entry.account_id))
                     && (self.filter.category_ids.is_empty()
                         || self.filter.category_ids.contains(&entry.category_id))
+                    && (self.filter.currency_codes.is_empty()
+                        || self
+                            .filter
+                            .currency_codes
+                            .iter()
+                            .any(|code| code == &entry_code))
             })
             .filter(|entry| {
                 let amount = entry.amount.abs();
@@ -2165,10 +2815,10 @@ impl SunderApp {
                 SortField::Date => {
                     crate::model::compare_timestamps(a.occurred_at(), b.occurred_at())
                 }
-                SortField::Amount => a
-                    .amount
+                SortField::Amount => self
+                    .convert_entry_amount(a)
                     .abs()
-                    .partial_cmp(&b.amount.abs())
+                    .partial_cmp(&self.convert_entry_amount(b).abs())
                     .unwrap_or(std::cmp::Ordering::Equal),
                 SortField::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
             };
@@ -2188,6 +2838,9 @@ impl SunderApp {
             count += 1;
         }
         if !self.filter.category_ids.is_empty() {
+            count += 1;
+        }
+        if !self.filter.currency_codes.is_empty() {
             count += 1;
         }
         if !self.filter_min.read(cx).text().trim().is_empty() {
@@ -2223,7 +2876,8 @@ impl SunderApp {
             .filter(|entry| entry.is_active())
         {
             if entry.amount < 0.0 {
-                *by_category.entry(entry.category_id.clone()).or_default() += entry.amount.abs();
+                *by_category.entry(entry.category_id.clone()).or_default() +=
+                    self.convert_entry_amount(entry).abs();
             }
         }
         let mut categories: Vec<_> = by_category
@@ -2251,7 +2905,9 @@ impl SunderApp {
     }
 
     pub fn current_month_flow(&self) -> (f64, f64) {
-        let flows = monthly_flow(&self.snapshot.entries, 1);
+        let flows = monthly_flow_converted(&self.snapshot.entries, 1, |entry| {
+            self.convert_entry_amount(entry)
+        });
         flows
             .last()
             .map(|flow| (flow.income, flow.expenses))
@@ -2335,18 +2991,33 @@ impl SunderApp {
                 }
                 if let Some(profile) = profile {
                     self.settings.username = profile.username.clone();
-                    let email = self
-                        .user
-                        .as_ref()
-                        .map(|user| user.email.clone())
-                        .unwrap_or_else(|| self.settings.email.clone());
+                    let email = if !profile.email.is_empty() {
+                        profile.email.clone()
+                    } else {
+                        self.user
+                            .as_ref()
+                            .map(|user| user.email.clone())
+                            .unwrap_or_else(|| self.settings.email.clone())
+                    };
+                    self.settings.email = email.clone();
                     self.settings.user_flags = profile.flags.clone();
+                    let default_currency_code =
+                        crate::model::normalize_currency_code(&profile.default_currency_code);
+                    self.settings.default_currency_code = default_currency_code.clone();
                     self.user = Some(crate::model::User {
                         username: profile.username,
                         email,
                         flags: profile.flags,
+                        default_currency_code,
                     });
                     self.profile_loaded = true;
+                }
+                if let Some(code) = response.default_currency_code.clone() {
+                    let normalized = crate::model::normalize_currency_code(&code);
+                    self.settings.default_currency_code = normalized.clone();
+                    if let Some(user) = self.user.as_mut() {
+                        user.default_currency_code = normalized;
+                    }
                 }
                 self.snapshot.apply_sync_response(response);
                 self.settings.last_sync = Some(sync_start);
@@ -2364,6 +3035,12 @@ impl SunderApp {
                 if self.logout_after_sync {
                     self.complete_logout(cx);
                     return;
+                }
+                if manual
+                    || self.snapshot.currencies.is_empty()
+                    || self.snapshot.exchange_rates.is_empty()
+                {
+                    self.refresh_currencies_and_rates(false, cx);
                 }
             }
             Err(error) => {
@@ -2549,14 +3226,21 @@ impl SunderApp {
             self.logout_dialog = false;
         } else if self.confirm.is_some() {
             self.confirm = None;
+        } else if self.admin_currency_editor.is_some() {
+            self.admin_currency_editor = None;
         } else if self.admin_editor.is_some() {
             self.admin_editor = None;
+        } else if self.bulk_currency_editor.is_some() {
+            self.bulk_currency_editor = None;
         } else if self.account_editor.is_some() {
             self.account_editor = None;
         } else if self.category_editor.is_some() {
             self.category_editor = None;
         } else if self.editor.is_some() {
             self.editor = None;
+        } else if self.settings_currency_open {
+            self.settings_currency_open = false;
+            modal_closed = false;
         } else if self.show_filters {
             self.show_filters = false;
             modal_closed = false;
@@ -2570,6 +3254,8 @@ impl SunderApp {
             && self.editor.is_none()
             && self.account_editor.is_none()
             && self.category_editor.is_none()
+            && self.bulk_currency_editor.is_none()
+            && self.admin_currency_editor.is_none()
             && (!self.search.read(cx).text().is_empty() || !self.search_tokens.is_empty())
         {
             self.search_tokens.clear();
@@ -3188,8 +3874,12 @@ impl SunderApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.admin_editor.is_some() {
+        if self.admin_currency_editor.is_some() {
+            self.save_admin_currency(window, cx);
+        } else if self.admin_editor.is_some() {
             self.save_admin_user(window, cx);
+        } else if self.bulk_currency_editor.is_some() {
+            self.apply_bulk_currency_change(window, cx);
         } else if self.account_editor.is_some() {
             self.save_account(window, cx);
         } else if self.category_editor.is_some() {

@@ -1,11 +1,13 @@
 use crate::format::CurrencyPosition;
 use crate::model::{
-    Account, Category, Entry, SyncPayload, SyncResponse, compare_timestamps, timestamp_is_newer,
+    Account, Category, Currency, DEFAULT_CURRENCY_CODE, Entry, SyncPayload, SyncResponse,
+    compare_timestamps, default_currency_code, normalize_currency_code, timestamp_is_newer, today,
 };
 use crate::theme::ThemeMode;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -29,6 +31,9 @@ pub struct Settings {
     pub owner_base_url: String,
     pub last_sync: Option<String>,
     pub theme: ThemeMode,
+    /// User's chosen default display currency code (synced with server preferences).
+    #[serde(default = "default_currency_code")]
+    pub default_currency_code: String,
     pub currency_symbol: String,
     pub currency_position: CurrencyPosition,
     pub reduce_motion: bool,
@@ -51,6 +56,7 @@ impl Default for Settings {
             owner_base_url: String::new(),
             last_sync: None,
             theme: ThemeMode::Light,
+            default_currency_code: default_currency_code(),
             currency_symbol: "$".into(),
             currency_position: CurrencyPosition::Before,
             reduce_motion: false,
@@ -99,6 +105,12 @@ pub struct Snapshot {
     pub accounts: Vec<Account>,
     pub categories: Vec<Category>,
     pub entries: Vec<Entry>,
+    /// Server-managed active currency catalog cached for offline use.
+    #[serde(default)]
+    pub currencies: Vec<Currency>,
+    /// Historical USD-based exchange rates keyed by YYYY-MM-DD -> (CODE -> rate per 1 USD).
+    #[serde(default)]
+    pub exchange_rates: BTreeMap<String, HashMap<String, f64>>,
 }
 
 impl Snapshot {
@@ -155,6 +167,138 @@ impl Snapshot {
         self.entries.iter().find(|entry| entry.id == id)
     }
 
+    pub fn currency(&self, code: &str) -> Currency {
+        let code = normalize_currency_code(code);
+        self.currencies
+            .iter()
+            .find(|currency| currency.code.eq_ignore_ascii_case(&code))
+            .cloned()
+            .unwrap_or_else(|| Currency::fallback(&code))
+    }
+
+    pub fn active_currencies(&self) -> Vec<&Currency> {
+        let mut list: Vec<_> = self.currencies.iter().filter(|c| c.is_active).collect();
+        list.sort_by(|a, b| a.code.cmp(&b.code));
+        list
+    }
+
+    /// Merge freshly fetched active currencies into the local cache while keeping
+    /// previously cached currencies that are no longer returned marked inactive so
+    /// historical entries retain their symbol, name, and decimal digits.
+    pub fn merge_currencies(&mut self, incoming: Vec<Currency>) {
+        if incoming.is_empty() {
+            return;
+        }
+        let mut merged: HashMap<String, Currency> = HashMap::new();
+        for mut existing in std::mem::take(&mut self.currencies) {
+            let code = normalize_currency_code(&existing.code);
+            existing.code = code.clone();
+            existing.is_active = false;
+            merged.insert(code, existing);
+        }
+        for mut currency in incoming {
+            let code = normalize_currency_code(&currency.code);
+            currency.code = code.clone();
+            merged.insert(code, currency);
+        }
+        let mut list: Vec<Currency> = merged.into_values().collect();
+        list.sort_by(|a, b| a.code.cmp(&b.code));
+        self.currencies = list;
+    }
+
+    pub fn merge_rates(&mut self, date: String, rates: HashMap<String, f64>) {
+        if date.trim().is_empty() || rates.is_empty() {
+            return;
+        }
+        let bucket = self.exchange_rates.entry(date).or_default();
+        for (code, rate) in rates {
+            if rate.is_finite() && rate > 0.0 {
+                bucket.insert(normalize_currency_code(&code), rate);
+            }
+        }
+        bucket.insert(DEFAULT_CURRENCY_CODE.to_string(), 1.0);
+    }
+
+    pub fn merge_rates_history(&mut self, history: HashMap<String, HashMap<String, f64>>) {
+        for (date, rates) in history {
+            self.merge_rates(date, rates);
+        }
+    }
+
+    /// Find the USD -> `code` rate for `date_ymd`, searching nearest earlier date first,
+    /// then falling back to nearest later date, independently per currency so a sparse
+    /// rate day (such as a single manual admin override) cannot shadow earlier full days.
+    fn find_usd_rate_for_currency(&self, code: &str, date_ymd: &str) -> Option<f64> {
+        if code == DEFAULT_CURRENCY_CODE {
+            return Some(1.0);
+        }
+        let key = date_ymd.to_string();
+        for (_, rates) in self.exchange_rates.range(..=key.clone()).rev() {
+            if let Some(&rate) = rates.get(code)
+                && rate.is_finite()
+                && rate > 0.0
+            {
+                return Some(rate);
+            }
+        }
+        for (_, rates) in self.exchange_rates.range(key..) {
+            if let Some(&rate) = rates.get(code)
+                && rate.is_finite()
+                && rate > 0.0
+            {
+                return Some(rate);
+            }
+        }
+        None
+    }
+
+    /// Look up the conversion rate from `from` to `to` on `date_ymd` (YYYY-MM-DD),
+    /// resolving each currency independently via exact date, nearest earlier cached date,
+    /// or nearest later cached date as fallback.
+    pub fn rate_for(&self, from: &str, to: &str, date_ymd: &str) -> Option<f64> {
+        let from = normalize_currency_code(from);
+        let to = normalize_currency_code(to);
+        if from == to {
+            return Some(1.0);
+        }
+        let rate_from = self.find_usd_rate_for_currency(&from, date_ymd)?;
+        let rate_to = self.find_usd_rate_for_currency(&to, date_ymd)?;
+        if rate_from <= 0.0 || rate_to <= 0.0 {
+            return None;
+        }
+        Some(rate_to / rate_from)
+    }
+
+    pub fn convert_amount(&self, amount: f64, from: &str, to: &str, date_ymd: &str) -> Option<f64> {
+        self.rate_for(from, to, date_ymd).map(|rate| amount * rate)
+    }
+
+    pub fn convert_entry_amount(&self, entry: &Entry, target_currency: &str) -> f64 {
+        let from = entry.normalized_currency_code();
+        let date = entry.date_ymd();
+        self.convert_amount(entry.amount, &from, target_currency, &date)
+            .unwrap_or(entry.amount)
+    }
+
+    /// Date bounds covering all active entries (capped to today) for fetching historical rates.
+    pub fn rate_date_bounds(&self) -> Option<(String, String)> {
+        let today_ymd = today();
+        let mut earliest: Option<String> = None;
+        for entry in self.entries.iter().filter(|entry| entry.is_active()) {
+            let ymd = entry.date_ymd();
+            if earliest.as_ref().is_none_or(|cur| ymd < *cur) {
+                earliest = Some(ymd);
+            }
+        }
+        let from = earliest.unwrap_or_else(|| today_ymd.clone());
+        let from = if from > today_ymd {
+            today_ymd.clone()
+        } else {
+            from
+        };
+        Some((from, today_ymd))
+    }
+
     pub fn account_name(&self, id: &str) -> String {
         self.account(id)
             .map(|account| account.name.clone())
@@ -181,11 +325,27 @@ impl Snapshot {
             .sum()
     }
 
+    pub fn converted_balance(&self, target_currency: &str) -> f64 {
+        self.entries
+            .iter()
+            .filter(|entry| entry.is_active())
+            .map(|entry| self.convert_entry_amount(entry, target_currency))
+            .sum()
+    }
+
     pub fn income(&self) -> f64 {
         self.entries
             .iter()
             .filter(|entry| entry.is_active() && entry.amount > 0.0)
             .map(|entry| entry.amount)
+            .sum()
+    }
+
+    pub fn converted_income(&self, target_currency: &str) -> f64 {
+        self.entries
+            .iter()
+            .filter(|entry| entry.is_active() && entry.amount > 0.0)
+            .map(|entry| self.convert_entry_amount(entry, target_currency))
             .sum()
     }
 
@@ -197,11 +357,27 @@ impl Snapshot {
             .sum()
     }
 
+    pub fn converted_expenses(&self, target_currency: &str) -> f64 {
+        self.entries
+            .iter()
+            .filter(|entry| entry.is_active() && entry.amount < 0.0)
+            .map(|entry| self.convert_entry_amount(entry, target_currency).abs())
+            .sum()
+    }
+
     pub fn account_balance(&self, account_id: &str) -> f64 {
         self.entries
             .iter()
             .filter(|entry| entry.is_active() && entry.account_id == account_id)
             .map(|entry| entry.amount)
+            .sum()
+    }
+
+    pub fn converted_account_balance(&self, account_id: &str, target_currency: &str) -> f64 {
+        self.entries
+            .iter()
+            .filter(|entry| entry.is_active() && entry.account_id == account_id)
+            .map(|entry| self.convert_entry_amount(entry, target_currency))
             .sum()
     }
 
@@ -219,6 +395,16 @@ impl Snapshot {
                 entry.is_active() && entry.category_id == category_id && entry.amount < 0.0
             })
             .map(|entry| entry.amount.abs())
+            .sum()
+    }
+
+    pub fn converted_category_spend(&self, category_id: &str, target_currency: &str) -> f64 {
+        self.entries
+            .iter()
+            .filter(|entry| {
+                entry.is_active() && entry.category_id == category_id && entry.amount < 0.0
+            })
+            .map(|entry| self.convert_entry_amount(entry, target_currency).abs())
             .sum()
     }
 
@@ -507,6 +693,102 @@ mod tests {
         assert_eq!(loaded.entries.len(), 1);
         assert_eq!(loaded.entries[0].id, "one");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn converts_multi_currency_entries_using_historical_rates() {
+        let mut snapshot = Snapshot::default();
+        snapshot.merge_rates(
+            "2026-01-01".into(),
+            HashMap::from([("EUR".into(), 0.8), ("PLN".into(), 4.0)]),
+        );
+        snapshot.merge_rates(
+            "2026-01-10".into(),
+            HashMap::from([("EUR".into(), 0.9), ("PLN".into(), 4.5)]),
+        );
+
+        let mut e1 = entry("e1", "2026-01-05T12:00:00", -80.0);
+        e1.currency_code = "EUR".into();
+        let mut e2 = entry("e2", "2026-01-12T12:00:00", 100.0);
+        e2.currency_code = "USD".into();
+        snapshot.entries.extend([e1, e2]);
+
+        // On 2026-01-05, nearest earlier rate is 2026-01-01 (EUR=0.8 -> -80 EUR = -100 USD).
+        // On 2026-01-12, +100 USD = +100 USD. Net in USD = 0.0.
+        assert!((snapshot.converted_balance("USD") - 0.0).abs() < 1e-6);
+
+        // In PLN: -80 EUR on Jan 5 -> -80 * (4.0/0.8) = -400 PLN; +100 USD on Jan 12 -> +450 PLN; net = +50 PLN.
+        assert!((snapshot.converted_balance("PLN") - 50.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn legacy_snapshot_defaults_entry_currency_to_usd() {
+        let raw = r#"{"accounts":[{"id":"a1","name":"Cash"}],"categories":[],"entries":[{"id":"e1","account_id":"a1","category_id":"c1","title":"Old","amount":-5.0,"date":"2026-01-01T12:00:00"}]}"#;
+        let snapshot: Snapshot = serde_json::from_str(raw).unwrap();
+        assert_eq!(snapshot.entries[0].currency_code, "USD");
+        assert_eq!(snapshot.accounts[0].currency_code, None);
+    }
+
+    #[test]
+    fn sparse_rate_day_does_not_shadow_earlier_rates_and_missing_returns_none() {
+        let mut snapshot = Snapshot::default();
+        // Full rate day on Jan 1
+        snapshot.merge_rates(
+            "2026-01-01".into(),
+            HashMap::from([("EUR".into(), 0.8), ("PLN".into(), 4.0)]),
+        );
+        // Sparse manual override day on Jan 5 (only EUR)
+        snapshot.merge_rates("2026-01-05".into(), HashMap::from([("EUR".into(), 0.9)]));
+
+        // On Jan 6, EUR comes from Jan 5 (0.9) and PLN falls back to Jan 1 (4.0)
+        let eur_to_pln = snapshot.rate_for("EUR", "PLN", "2026-01-06").unwrap();
+        assert!((eur_to_pln - (4.0 / 0.9)).abs() < 1e-6);
+
+        // Earlier than any cached date falls back to nearest later date per currency
+        let earlier = snapshot.rate_for("EUR", "USD", "2025-12-20").unwrap();
+        assert!((earlier - (1.0 / 0.8)).abs() < 1e-6);
+
+        // Currency absent everywhere returns None
+        assert_eq!(snapshot.rate_for("JPY", "USD", "2026-01-06"), None);
+        assert_eq!(snapshot.convert_amount(100.0, "JPY", "USD", "2026-01-06"), None);
+    }
+
+    #[test]
+    fn merge_currencies_keeps_deactivated_currency_metadata() {
+        let mut snapshot = Snapshot::default();
+        snapshot.currencies = vec![
+            Currency {
+                code: "USD".into(),
+                name: "US Dollar".into(),
+                symbol: "$".into(),
+                symbol_after: false,
+                decimal_digits: 2,
+                is_active: true,
+            },
+            Currency {
+                code: "PLN".into(),
+                name: "Polish Zloty".into(),
+                symbol: "zł".into(),
+                symbol_after: true,
+                decimal_digits: 2,
+                is_active: true,
+            },
+        ];
+
+        // Server refresh returns only active USD
+        snapshot.merge_currencies(vec![Currency {
+            code: "USD".into(),
+            name: "US Dollar".into(),
+            symbol: "$".into(),
+            symbol_after: false,
+            decimal_digits: 2,
+            is_active: true,
+        }]);
+
+        assert_eq!(snapshot.active_currencies().len(), 1);
+        let pln = snapshot.currency("PLN");
+        assert_eq!(pln.symbol, "zł");
+        assert!(!pln.is_active);
     }
 }
 

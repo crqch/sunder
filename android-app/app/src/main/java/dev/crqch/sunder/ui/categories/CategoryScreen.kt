@@ -74,7 +74,7 @@ import dev.crqch.sunder.ui.components.EntriesList
 import dev.crqch.sunder.ui.components.SunderEmptyState
 import dev.crqch.sunder.ui.theme.SunderMotion
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
 import dev.crqch.sunder.utils.parseHexColor
 import kotlinx.coroutines.launch
 
@@ -88,6 +88,8 @@ fun CategoryScreen(
 ) {
     val category by viewModel.category.collectAsState()
     val entries by viewModel.entries.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
+    val defaultCurrency = currencyState.defaultCurrency
     val categoryFormState = viewModel.categoryFormState
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -95,8 +97,14 @@ fun CategoryScreen(
     val scope = rememberCoroutineScope()
 
     val blockedDeleteMessage = stringResource(R.string.cannot_delete_category_with_entries, entries.size)
-    val totalAmount = remember(entries) {
-        entries.sumOf { it.entry.amount.toDouble() }.toFloat()
+    val totalAmount = remember(entries, currencyState) {
+        entries.sumOf { item ->
+            currencyState.convertOrSame(
+                item.entry.amount.toDouble(),
+                item.entry.currencyCode,
+                item.entry.date
+            )
+        }
     }
 
     fun requestDelete() {
@@ -309,8 +317,8 @@ fun CategoryScreen(
                 } else {
                     val sunderColors = MaterialTheme.sunderColors
                     val totalColor = when {
-                        totalAmount > 0f -> sunderColors.income
-                        totalAmount < 0f -> sunderColors.expense
+                        totalAmount > 0.0 -> sunderColors.income
+                        totalAmount < 0.0 -> sunderColors.expense
                         else -> MaterialTheme.colorScheme.onSurface
                     }
 
@@ -319,6 +327,7 @@ fun CategoryScreen(
                         onEntrySelect = onEntryClick,
                         filteredAccountId = null,
                         filteredCategoryId = currentCategory.id,
+                        currencyState = currencyState,
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
                         headerContent = {
                             item(key = "category_hero_card") {
@@ -377,7 +386,7 @@ fun CategoryScreen(
                                             }
 
                                             Text(
-                                                text = formatCurrencyAmount(totalAmount, showPlusSign = true),
+                                                text = CurrencyFormatter.formatSigned(totalAmount, defaultCurrency),
                                                 style = MaterialTheme.typography.displaySmall,
                                                 fontWeight = FontWeight.Bold,
                                                 color = totalColor

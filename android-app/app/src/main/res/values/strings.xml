@@ -142,4 +142,69 @@
     <string name="sign_in_subtitle">Sign in to access your local-first finances.</string>
     <string name="create_your_account">Create your account</string>
     <string name="sign_up_subtitle">Enter your invite code to get started with Sunder.</string>
+
+    <!-- Multi-currency -->
+    <string name="select_currency">Select currency</string>
+    <string name="search_currency">Search currency…</string>
+    <string name="no_currency">No default currency</string>
+    <string name="no_matching_currencies">No currencies match your search</string>
+    <string name="currency_label">Currency</string>
+    <string name="change_currency">Change currency</string>
+    <string name="currency_updated">Currency updated for %1$d entries</string>
+    <string name="approx_amount">≈ %1$s</string>
+    <string name="filter_currencies">Currencies</string>
+    <string name="any_currency">Any currency</string>
+    <string name="default_display_currency">Default Display Currency</string>
+    <string name="default_display_currency_desc">Used for totals, balances, charts, and synced across devices.</string>
+    <string name="currency_preview">Preview: %1$s</string>
+    <string name="currency_cache_stats">%1$d currencies · %2$d rate days</string>
+    <string name="refresh_rates">Refresh rates</string>
+    <string name="refreshing_rates">Refreshing…</string>
+    <string name="rates_refreshed">Exchange rates updated</string>
+    <string name="rates_refresh_failed">Could not refresh exchange rates</string>
+    <string name="admin">Admin</string>
+    <string name="admin_currencies">Currencies &amp; Exchange Rates</string>
+    <string name="admin_currencies_desc">Manage supported currencies and daily exchange rates.</string>
+    <string name="default_currency">Default Currency</string>
+    <string name="default_currency_none">Not set</string>
+    <string name="default_currency_desc">Optional. New entries default to this currency.</string>
+
+    <!-- Admin currencies -->
+    <string name="exchange_rates">Exchange Rates</string>
+    <string name="sync_latest_rates">Sync latest rates</string>
+    <string name="sync_specific_date">Sync a specific date</string>
+    <string name="rate_date">Date (YYYY-MM-DD)</string>
+    <string name="sync_date">Sync date</string>
+    <string name="backfill_rates">Backfill history</string>
+    <string name="backfill_days">Days</string>
+    <string name="backfill">Backfill</string>
+    <string name="manual_rate_override">Manual rate override (1 USD = rate)</string>
+    <string name="target_currency">Target code</string>
+    <string name="rate">Rate</string>
+    <string name="optional">Optional</string>
+    <string name="save_rate">Save rate</string>
+    <string name="supported_currencies">Supported Currencies</string>
+    <string name="active_currency_count">%1$d of %2$d active</string>
+    <string name="add_currency">Add currency</string>
+    <string name="active">Active</string>
+    <string name="inactive">Inactive</string>
+    <string name="edit_currency">Edit currency %1$s</string>
+    <string name="currency_code">Code</string>
+    <string name="currency_name">Name</string>
+    <string name="currency_symbol">Symbol</string>
+    <string name="decimal_digits_short">Digits</string>
+    <string name="symbol_after">Symbol after amount</string>
+    <string name="save_currency">Save currency</string>
+    <string name="invalid_currency_code">Enter a 3-letter currency code</string>
+    <string name="invalid_currency_name">Enter a currency name</string>
+    <string name="invalid_decimal_digits">Decimal digits must be between 0 and 6</string>
+    <string name="rates_synced">Rates synced for %1$s (%2$d stored)</string>
+    <string name="rate_saved">Saved rate for %1$s</string>
+    <string name="currency_saved">Saved currency %1$s</string>
+    <string name="currency_toggle_status">%1$s is now %2$s</string>
+    <string name="invalid_date">Enter a date as YYYY-MM-DD</string>
+    <string name="invalid_rate">Enter a positive rate</string>
+    <string name="invalid_days">Enter a positive number of days</string>
+    <string name="operation_failed">Something went wrong. Please try again.</string>
+    <string name="operation_failed_detail">Something went wrong: %1$s</string>
 </resources>

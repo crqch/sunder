@@ -1,4 +1,4 @@
-use crate::model::{MonthFlow, parse_timestamp};
+use crate::model::{Currency, MonthFlow, parse_timestamp};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
@@ -18,14 +18,7 @@ fn with_symbol(number: String, symbol: &str, position: CurrencyPosition) -> Stri
     }
 }
 
-/// Format a value with grouped thousands and exactly two decimal places.
-pub fn number(value: f64) -> String {
-    let negative = value < 0.0;
-    let absolute = value.abs();
-    let rounded_cents = (absolute * 100.0).round() as u64;
-    let whole = rounded_cents / 100;
-    let cents = rounded_cents % 100;
-
+fn group_whole(whole: u64) -> String {
     let mut grouped = String::new();
     let digits = whole.to_string();
     for (index, ch) in digits.chars().enumerate() {
@@ -34,13 +27,37 @@ pub fn number(value: f64) -> String {
         }
         grouped.push(ch);
     }
+    grouped
+}
 
-    format!(
-        "{}{}.{:02}",
-        if negative { "-" } else { "" },
-        grouped,
-        cents
-    )
+/// Format a value with grouped thousands and `decimal_digits` decimal places.
+pub fn number_with_digits(value: f64, decimal_digits: u8) -> String {
+    let digits = (decimal_digits as usize).min(6);
+    let negative = value < 0.0;
+    let absolute = value.abs();
+    let scale = 10_f64.powi(digits as i32);
+    let rounded = (absolute * scale).round() as u64;
+    let divisor = 10_u64.pow(digits as u32);
+    let whole = rounded / divisor;
+    let frac = rounded % divisor;
+
+    let grouped = group_whole(whole);
+    if digits == 0 {
+        format!("{}{}", if negative { "-" } else { "" }, grouped)
+    } else {
+        format!(
+            "{}{}.{:0width$}",
+            if negative { "-" } else { "" },
+            grouped,
+            frac,
+            width = digits
+        )
+    }
+}
+
+/// Format a value with grouped thousands and exactly two decimal places.
+pub fn number(value: f64) -> String {
+    number_with_digits(value, 2)
 }
 
 pub fn money(value: f64, symbol: &str, position: CurrencyPosition) -> String {
@@ -74,10 +91,46 @@ pub fn compact_money(value: f64, symbol: &str, position: CurrencyPosition) -> St
     format!("{sign}{}", with_symbol(body, symbol, position))
 }
 
+fn currency_position(currency: &Currency) -> CurrencyPosition {
+    if currency.symbol_after {
+        CurrencyPosition::After
+    } else {
+        CurrencyPosition::Before
+    }
+}
+
+pub fn money_in(value: f64, currency: &Currency) -> String {
+    with_symbol(
+        number_with_digits(value.abs(), currency.decimal_digits),
+        &currency.symbol,
+        currency_position(currency),
+    )
+}
+
+pub fn signed_money_in(value: f64, currency: &Currency) -> String {
+    let sign = if value > 0.0 {
+        "+"
+    } else if value < 0.0 {
+        "-"
+    } else {
+        ""
+    };
+    let body = with_symbol(
+        number_with_digits(value.abs(), currency.decimal_digits),
+        &currency.symbol,
+        currency_position(currency),
+    );
+    format!("{sign}{body}")
+}
+
+pub fn compact_money_in(value: f64, currency: &Currency) -> String {
+    compact_money(value, &currency.symbol, currency_position(currency))
+}
+
 /// Amounts are stored as signed floats. The editor captures a positive number
 /// plus an Expense/Income toggle, so we strip anything that is not a digit or a
 /// decimal point before parsing.
-pub fn parse_amount(value: &str) -> Option<f64> {
+pub fn parse_amount_with_digits(value: &str, decimal_digits: u8) -> Option<f64> {
     let cleaned: String = value
         .chars()
         .filter(|ch| ch.is_ascii_digit() || *ch == '.')
@@ -88,12 +141,22 @@ pub fn parse_amount(value: &str) -> Option<f64> {
     let mut parts = cleaned.split('.');
     let whole = parts.next().unwrap_or("0");
     let fraction = parts.next().unwrap_or("");
+    let digits = (decimal_digits as usize).min(6);
+    if digits == 0 {
+        return if whole.is_empty() { "0" } else { whole }
+            .parse::<f64>()
+            .ok();
+    }
     let normalized = format!(
         "{}.{}",
         if whole.is_empty() { "0" } else { whole },
-        fraction.chars().take(2).collect::<String>()
+        fraction.chars().take(digits).collect::<String>()
     );
     normalized.parse::<f64>().ok()
+}
+
+pub fn parse_amount(value: &str) -> Option<f64> {
+    parse_amount_with_digits(value, 2)
 }
 
 pub fn parse_date(value: &str) -> Option<NaiveDate> {
@@ -232,5 +295,38 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 11, 12)
         );
         assert_eq!(parse_date("nope"), None);
+    }
+
+    #[test]
+    fn formats_currency_metadata_with_digits_and_symbol_position() {
+        let jpy = Currency {
+            code: "JPY".into(),
+            name: "Japanese Yen".into(),
+            symbol: "¥".into(),
+            symbol_after: false,
+            decimal_digits: 0,
+            is_active: true,
+        };
+        let pln = Currency {
+            code: "PLN".into(),
+            name: "Polish Zloty".into(),
+            symbol: "zł".into(),
+            symbol_after: true,
+            decimal_digits: 2,
+            is_active: true,
+        };
+        let kwd = Currency {
+            code: "KWD".into(),
+            name: "Kuwaiti Dinar".into(),
+            symbol: "KD".into(),
+            symbol_after: true,
+            decimal_digits: 3,
+            is_active: true,
+        };
+        assert_eq!(money_in(1234.6, &jpy), "¥1,235");
+        assert_eq!(signed_money_in(-1234.6, &jpy), "-¥1,235");
+        assert_eq!(money_in(42.5, &pln), "42.50 zł");
+        assert_eq!(signed_money_in(42.5, &pln), "+42.50 zł");
+        assert_eq!(money_in(1.2345, &kwd), "1.235 KD");
     }
 }

@@ -1,6 +1,9 @@
-use crate::model::{SyncPayload, SyncResponse, User};
+use crate::model::{
+    Currency, SyncPayload, SyncResponse, User, default_currency_code, normalize_currency_code,
+};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -125,16 +128,25 @@ pub struct RefreshResponse {
 pub struct ProfileResponse {
     #[serde(default)]
     pub username: String,
+    #[serde(default)]
+    pub email: String,
     #[serde(default, deserialize_with = "null_to_default")]
     pub flags: Vec<String>,
+    #[serde(default = "default_currency_code")]
+    pub default_currency_code: String,
 }
 
 impl ProfileResponse {
     pub fn into_user(self, email: String) -> User {
         User {
             username: self.username,
-            email,
+            email: if self.email.is_empty() {
+                email
+            } else {
+                self.email
+            },
             flags: self.flags,
+            default_currency_code: normalize_currency_code(&self.default_currency_code),
         }
     }
 }
@@ -552,6 +564,133 @@ mod tests {
         assert_eq!(error.message, "Invalid email or password.");
         server.join().unwrap();
     }
+
+    #[test]
+    fn lists_server_allowed_currencies() {
+        let (base, server) = mock_server(|request| {
+            assert!(request.starts_with("GET /currencies "));
+            (
+                200,
+                r#"{"currencies":[{"code":"USD","name":"US Dollar","symbol":"$","symbol_after":false,"decimal_digits":2},{"code":"PLN","name":"Polish Zloty","symbol":"zł","symbol_after":true,"decimal_digits":2}]}"#,
+            )
+        });
+        let client = ApiClient::new(base);
+        let currencies = block_on(client.list_currencies()).unwrap();
+        assert_eq!(currencies.len(), 2);
+        assert_eq!(currencies[1].code, "PLN");
+        assert!(currencies[1].symbol_after);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn fetches_rates_history_and_updates_preferences() {
+        let (base, server) = mock_server(|request| {
+            assert!(request.starts_with("GET /currencies/rates/history?from=2026-01-01&base=USD&to=2026-01-10 "));
+            (
+                200,
+                r#"{"base":"USD","from":"2026-01-01","to":"2026-01-10","rates":{"2026-01-01":{"EUR":0.85,"USD":1.0}}}"#,
+            )
+        });
+        let client = ApiClient::new(base);
+        let history = block_on(client.rates_history(
+            Some("USD".into()),
+            "2026-01-01".into(),
+            Some("2026-01-10".into()),
+        ))
+        .unwrap();
+        assert_eq!(history.rates["2026-01-01"]["EUR"], 0.85);
+        server.join().unwrap();
+
+        let (base, server) = mock_server(|request| {
+            assert!(request.starts_with("PUT /dashboard/eco/preferences "));
+            assert!(request.contains("authorization: Bearer access-1"));
+            assert!(request.contains(r#""default_currency_code":"EUR""#));
+            (200, r#"{"default_currency_code":"EUR","default_currency":{"code":"EUR","name":"Euro","symbol":"€","symbol_after":false,"decimal_digits":2}}"#)
+        });
+        let client = ApiClient::new(base);
+        let prefs = block_on(client.update_preferences("access-1".into(), "eur".into())).unwrap();
+        assert_eq!(prefs.default_currency_code, "EUR");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn admin_currency_and_rate_endpoints_match_contract() {
+        let (base, server) = mock_server(|request| {
+            assert!(request.starts_with("GET /admin/currencies "));
+            assert!(request.contains("authorization: Bearer access-1"));
+            (
+                200,
+                r#"{"currencies":[{"code":"USD","name":"US Dollar","symbol":"$","symbol_after":false,"decimal_digits":2,"is_active":true}]}"#,
+            )
+        });
+        let client = ApiClient::new(base);
+        let list = block_on(client.admin_currencies("access-1".into())).unwrap();
+        assert_eq!(list.len(), 1);
+        assert!(list[0].is_active);
+        server.join().unwrap();
+
+        let (base, server) = mock_server(|request| {
+            assert!(request.starts_with("PUT /admin/currencies/EUR "));
+            assert!(request.contains(r#""is_active":false"#));
+            (
+                200,
+                r#"{"success":true,"currency":{"code":"EUR","name":"Euro","symbol":"€","symbol_after":false,"decimal_digits":2,"is_active":false}}"#,
+            )
+        });
+        let client = ApiClient::new(base);
+        let updated = block_on(client.admin_update_currency(
+            "access-1".into(),
+            "eur".into(),
+            AdminCurrencyPatch {
+                is_active: Some(false),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+        assert!(!updated.is_active);
+        server.join().unwrap();
+
+        let (base, server) = mock_server(|request| {
+            assert!(request.starts_with("POST /admin/currencies/sync-rates?days=7&force=true "));
+            (
+                200,
+                r#"{"success":true,"from":"2026-01-01","to":"2026-01-07","stats":{"total":7,"synced":7,"skipped":0,"failed":0}}"#,
+            )
+        });
+        let client = ApiClient::new(base);
+        let sync_res = block_on(client.admin_sync_rates(
+            "access-1".into(),
+            None,
+            Some(7),
+            true,
+        ))
+        .unwrap();
+        assert!(sync_res.success);
+        assert_eq!(sync_res.stats.unwrap().synced, 7);
+        server.join().unwrap();
+
+        let (base, server) = mock_server(|request| {
+            assert!(request.starts_with("PUT /admin/currencies/rates "));
+            assert!(request.contains(r#""target_currency_code":"PLN""#));
+            assert!(request.contains(r#""rate":4.05"#));
+            (
+                200,
+                r#"{"success":true,"rate":{"base_currency_code":"USD","target_currency_code":"PLN","rate":4.05,"rate_date":"2026-01-07","source":"manual"}}"#,
+            )
+        });
+        let client = ApiClient::new(base);
+        let manual = block_on(client.admin_upsert_rate(
+            "access-1".into(),
+            None,
+            "pln".into(),
+            4.05,
+            Some("2026-01-07".into()),
+        ))
+        .unwrap();
+        assert_eq!(manual.target_currency_code, "PLN");
+        assert_eq!(manual.rate, 4.05);
+        server.join().unwrap();
+    }
 }
 
 /// Treat an explicit JSON `null` like a missing field for collection fields.
@@ -822,6 +961,390 @@ impl ApiClient {
                 .map_err(|error| ApiError::network(&base_url, error))?;
             let payload: ImportResponse = decode(response, &base_url).await?;
             Ok(payload.stats)
+        })
+        .await
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct RatesSnapshotResponse {
+    #[serde(default = "default_currency_code")]
+    pub base: String,
+    #[serde(default)]
+    pub date: String,
+    #[serde(default)]
+    pub requested_date: String,
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub rates: HashMap<String, f64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct RatesHistoryResponse {
+    #[serde(default = "default_currency_code")]
+    pub base: String,
+    #[serde(default)]
+    pub from: String,
+    #[serde(default)]
+    pub to: String,
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub rates: HashMap<String, HashMap<String, f64>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct PreferencesResponse {
+    #[serde(default = "default_currency_code")]
+    pub default_currency_code: String,
+    #[serde(default)]
+    pub default_currency: Option<Currency>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct AdminBackfillStats {
+    #[serde(default)]
+    pub total: usize,
+    #[serde(default)]
+    pub synced: usize,
+    #[serde(default)]
+    pub skipped: usize,
+    #[serde(default)]
+    pub failed: usize,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct AdminSyncRatesResponse {
+    #[serde(default)]
+    pub success: bool,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub fetched_date: Option<String>,
+    #[serde(default)]
+    pub from: Option<String>,
+    #[serde(default)]
+    pub to: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub stored_count: Option<usize>,
+    #[serde(default)]
+    pub stats: Option<AdminBackfillStats>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct AdminManualRate {
+    #[serde(default = "default_currency_code")]
+    pub base_currency_code: String,
+    #[serde(default)]
+    pub target_currency_code: String,
+    #[serde(default)]
+    pub rate: f64,
+    #[serde(default)]
+    pub rate_date: String,
+    #[serde(default)]
+    pub source: String,
+}
+
+#[derive(Deserialize)]
+struct CurrenciesResponse {
+    #[serde(default)]
+    currencies: Option<Vec<Currency>>,
+}
+
+#[derive(Deserialize)]
+struct CurrencyMutationResponse {
+    #[serde(default)]
+    currency: Option<Currency>,
+}
+
+#[derive(Deserialize)]
+struct UpsertRateResponse {
+    #[serde(default)]
+    rate: Option<AdminManualRate>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct AdminCurrencyPatch {
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub symbol_after: Option<bool>,
+    pub decimal_digits: Option<u8>,
+    pub is_active: Option<bool>,
+}
+
+impl ApiClient {
+    pub async fn list_currencies(&self) -> Result<Vec<Currency>, ApiError> {
+        let url = format!("{}/currencies", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let response = client
+                .get(url)
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            let payload: CurrenciesResponse = decode(response, &base_url).await?;
+            Ok(payload.currencies.unwrap_or_default())
+        })
+        .await
+    }
+
+    pub async fn rates(
+        &self,
+        base: Option<String>,
+        date: Option<String>,
+    ) -> Result<RatesSnapshotResponse, ApiError> {
+        let url = format!("{}/currencies/rates", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let mut query: Vec<(&str, String)> = Vec::new();
+            if let Some(base) = base.filter(|b| !b.trim().is_empty()) {
+                query.push(("base", normalize_currency_code(&base)));
+            }
+            if let Some(date) = date.filter(|d| !d.trim().is_empty()) {
+                query.push(("date", date));
+            }
+            let response = client
+                .get(url)
+                .query(&query)
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            decode(response, &base_url).await
+        })
+        .await
+    }
+
+    pub async fn rates_history(
+        &self,
+        base: Option<String>,
+        from: String,
+        to: Option<String>,
+    ) -> Result<RatesHistoryResponse, ApiError> {
+        let url = format!("{}/currencies/rates/history", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let mut query: Vec<(&str, String)> = vec![("from", from)];
+            if let Some(base) = base.filter(|b| !b.trim().is_empty()) {
+                query.push(("base", normalize_currency_code(&base)));
+            }
+            if let Some(to) = to.filter(|t| !t.trim().is_empty()) {
+                query.push(("to", to));
+            }
+            let response = client
+                .get(url)
+                .query(&query)
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            decode(response, &base_url).await
+        })
+        .await
+    }
+
+    pub async fn get_preferences(
+        &self,
+        access_token: String,
+    ) -> Result<PreferencesResponse, ApiError> {
+        let url = format!("{}/dashboard/eco/preferences", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let response = client
+                .get(url)
+                .bearer_auth(access_token)
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            decode(response, &base_url).await
+        })
+        .await
+    }
+
+    pub async fn update_preferences(
+        &self,
+        access_token: String,
+        default_currency_code: String,
+    ) -> Result<PreferencesResponse, ApiError> {
+        let url = format!("{}/dashboard/eco/preferences", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        let code = normalize_currency_code(&default_currency_code);
+        self.run(async move {
+            let response = client
+                .put(url)
+                .bearer_auth(access_token)
+                .json(&serde_json::json!({ "default_currency_code": code }))
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            decode(response, &base_url).await
+        })
+        .await
+    }
+
+    pub async fn admin_currencies(
+        &self,
+        access_token: String,
+    ) -> Result<Vec<Currency>, ApiError> {
+        let url = format!("{}/admin/currencies", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let response = client
+                .get(url)
+                .bearer_auth(access_token)
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            let payload: CurrenciesResponse = decode(response, &base_url).await?;
+            Ok(payload.currencies.unwrap_or_default())
+        })
+        .await
+    }
+
+    pub async fn admin_create_currency(
+        &self,
+        access_token: String,
+        currency: Currency,
+    ) -> Result<Currency, ApiError> {
+        let url = format!("{}/admin/currencies", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let response = client
+                .post(url)
+                .bearer_auth(access_token)
+                .json(&serde_json::json!({
+                    "code": normalize_currency_code(&currency.code),
+                    "name": currency.name,
+                    "symbol": currency.symbol,
+                    "symbol_after": currency.symbol_after,
+                    "decimal_digits": currency.decimal_digits,
+                    "is_active": currency.is_active,
+                }))
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            let payload: CurrencyMutationResponse = decode(response, &base_url).await?;
+            payload.currency.ok_or_else(|| ApiError {
+                message: "The server created the currency but returned no record.".into(),
+                status: Some(500),
+            })
+        })
+        .await
+    }
+
+    pub async fn admin_update_currency(
+        &self,
+        access_token: String,
+        code: String,
+        patch: AdminCurrencyPatch,
+    ) -> Result<Currency, ApiError> {
+        let code = normalize_currency_code(&code);
+        let url = format!("{}/admin/currencies/{}", self.base_url, urlencode(&code));
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let mut body = serde_json::Map::new();
+            if let Some(name) = patch.name {
+                body.insert("name".into(), Value::String(name));
+            }
+            if let Some(symbol) = patch.symbol {
+                body.insert("symbol".into(), Value::String(symbol));
+            }
+            if let Some(symbol_after) = patch.symbol_after {
+                body.insert("symbol_after".into(), Value::Bool(symbol_after));
+            }
+            if let Some(decimal_digits) = patch.decimal_digits {
+                body.insert("decimal_digits".into(), Value::from(decimal_digits));
+            }
+            if let Some(is_active) = patch.is_active {
+                body.insert("is_active".into(), Value::Bool(is_active));
+            }
+            let response = client
+                .put(url)
+                .bearer_auth(access_token)
+                .json(&Value::Object(body))
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            let payload: CurrencyMutationResponse = decode(response, &base_url).await?;
+            payload.currency.ok_or_else(|| ApiError {
+                message: "The server updated the currency but returned no record.".into(),
+                status: Some(500),
+            })
+        })
+        .await
+    }
+
+    pub async fn admin_sync_rates(
+        &self,
+        access_token: String,
+        date: Option<String>,
+        days: Option<u32>,
+        force: bool,
+    ) -> Result<AdminSyncRatesResponse, ApiError> {
+        let url = format!("{}/admin/currencies/sync-rates", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let mut query: Vec<(&str, String)> = Vec::new();
+            if let Some(date) = date.filter(|d| !d.trim().is_empty()) {
+                query.push(("date", date));
+            } else if let Some(days) = days {
+                query.push(("days", days.to_string()));
+                if force {
+                    query.push(("force", "true".into()));
+                }
+            }
+            let response = client
+                .post(url)
+                .bearer_auth(access_token)
+                .query(&query)
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            decode(response, &base_url).await
+        })
+        .await
+    }
+
+    pub async fn admin_upsert_rate(
+        &self,
+        access_token: String,
+        base_currency_code: Option<String>,
+        target_currency_code: String,
+        rate: f64,
+        rate_date: Option<String>,
+    ) -> Result<AdminManualRate, ApiError> {
+        let url = format!("{}/admin/currencies/rates", self.base_url);
+        let base_url = self.base_url.clone();
+        let client = self.client.clone();
+        self.run(async move {
+            let mut body = serde_json::json!({
+                "target_currency_code": normalize_currency_code(&target_currency_code),
+                "rate": rate,
+            });
+            if let Some(base) = base_currency_code.filter(|b| !b.trim().is_empty()) {
+                body["base_currency_code"] = Value::String(normalize_currency_code(&base));
+            }
+            if let Some(date) = rate_date.filter(|d| !d.trim().is_empty()) {
+                body["rate_date"] = Value::String(date);
+            }
+            let response = client
+                .put(url)
+                .bearer_auth(access_token)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|error| ApiError::network(&base_url, error))?;
+            let payload: UpsertRateResponse = decode(response, &base_url).await?;
+            payload.rate.ok_or_else(|| ApiError {
+                message: "The server saved the rate but returned no record.".into(),
+                status: Some(500),
+            })
         })
         .await
     }

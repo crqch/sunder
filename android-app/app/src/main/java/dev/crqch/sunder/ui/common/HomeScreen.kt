@@ -71,11 +71,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
+import dev.crqch.sunder.data.local.CurrencyEntity
 import dev.crqch.sunder.ui.components.EntryCard
 import dev.crqch.sunder.ui.components.SunderEmptyState
 import dev.crqch.sunder.ui.theme.SunderMotion
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatCurrencyAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
 import dev.crqch.sunder.utils.parseHexColor
 import kotlin.math.roundToInt
 
@@ -92,6 +93,7 @@ fun HomeScreen(
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
     val state by viewModel.dashboardState.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val unsyncedCount by viewModel.unsyncedCount.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
@@ -188,7 +190,8 @@ fun HomeScreen(
                 DashboardBalanceHero(
                     totalBalance = state.totalBalance,
                     totalIncome = state.totalIncome,
-                    totalExpenses = state.totalExpenses
+                    totalExpenses = state.totalExpenses,
+                    currency = currencyState.defaultCurrency
                 )
             }
 
@@ -243,6 +246,7 @@ fun HomeScreen(
                 item(key = "top_spending") {
                     TopSpendingCard(
                         items = state.topCategories,
+                        currency = currencyState.defaultCurrency,
                         onCategoryClick = onCategoryClick
                     )
                 }
@@ -297,7 +301,8 @@ fun HomeScreen(
                         onClick = { onEntryClick(entryWithDetails.entry.id) },
                         filteredAccountId = null,
                         filteredCategoryId = null,
-                        showDate = true
+                        showDate = true,
+                        currencyState = currencyState
                     )
                 }
             }
@@ -309,7 +314,8 @@ fun HomeScreen(
 private fun DashboardBalanceHero(
     totalBalance: Float,
     totalIncome: Float,
-    totalExpenses: Float
+    totalExpenses: Float,
+    currency: CurrencyEntity
 ) {
     val sunderColors = MaterialTheme.sunderColors
     val balanceColor = if (totalBalance >= 0f) sunderColors.income else sunderColors.expense
@@ -349,7 +355,7 @@ private fun DashboardBalanceHero(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = formatCurrencyAmount(totalBalance, showPlusSign = false),
+                        text = CurrencyFormatter.format(totalBalance.toDouble(), currency),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                         color = balanceColor,
@@ -364,7 +370,11 @@ private fun DashboardBalanceHero(
                 ) {
                     SummaryMetricTile(
                         label = stringResource(R.string.total_income),
-                        value = formatCurrencyAmount(totalIncome, showPlusSign = totalIncome > 0f),
+                        value = CurrencyFormatter.format(
+                            totalIncome.toDouble(),
+                            currency,
+                            showPlusSign = totalIncome > 0f
+                        ),
                         accentColor = sunderColors.income,
                         containerColor = sunderColors.incomeContainer.copy(alpha = if (sunderColors.isDark) 0.45f else 0.6f),
                         icon = Icons.Default.ArrowDownward,
@@ -372,7 +382,11 @@ private fun DashboardBalanceHero(
                     )
                     SummaryMetricTile(
                         label = stringResource(R.string.total_expenses),
-                        value = formatCurrencyAmount(-totalExpenses, showMinusSign = totalExpenses > 0f),
+                        value = CurrencyFormatter.format(
+                            -totalExpenses.toDouble(),
+                            currency,
+                            showMinusSign = totalExpenses > 0f
+                        ),
                         accentColor = sunderColors.expense,
                         containerColor = sunderColors.expenseContainer.copy(alpha = if (sunderColors.isDark) 0.45f else 0.6f),
                         icon = Icons.Default.ArrowUpward,
@@ -442,6 +456,7 @@ private fun SummaryMetricTile(
 @Composable
 private fun TopSpendingCard(
     items: List<CategorySpendingItem>,
+    currency: CurrencyEntity,
     onCategoryClick: (String) -> Unit
 ) {
     Surface(
@@ -510,7 +525,7 @@ private fun TopSpendingCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = formatCurrencyAmount(item.amount, showMinusSign = false),
+                                text = CurrencyFormatter.formatAbsolute(item.amount.toDouble(), currency),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface

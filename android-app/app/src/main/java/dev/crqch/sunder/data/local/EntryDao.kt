@@ -95,4 +95,17 @@ interface EntryDao {
 
     @Query("select * from entries where updatedAt > :timestamp")
     suspend fun getModifiedSince(timestamp: Long): List<EntryEntity>
+
+    @Query("update entries set currency_code = :currencyCode, updatedAt = :timestamp where id in (:ids) and deletedAt is null")
+    suspend fun updateCurrency(
+        ids: List<String>,
+        currencyCode: String,
+        timestamp: Long = System.currentTimeMillis()
+    ): Int
+
+    @Query("select min(date) from entries where deletedAt is null")
+    suspend fun getEarliestActiveEntryDate(): Long?
+
+    @Query("select distinct currency_code from entries where deletedAt is null")
+    suspend fun getActiveCurrencyCodes(): List<String>
 }

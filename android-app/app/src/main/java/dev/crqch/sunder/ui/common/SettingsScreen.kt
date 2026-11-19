@@ -31,6 +31,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -61,7 +64,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -72,27 +77,36 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
 import dev.crqch.sunder.data.repositories.ThemeMode
+import dev.crqch.sunder.ui.components.CurrencyPickerDialog
 import dev.crqch.sunder.ui.theme.sunderColors
-import dev.crqch.sunder.utils.formatAmount
+import dev.crqch.sunder.utils.CurrencyFormatter
 import dev.crqch.sunder.utils.formatSyncTimestamp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateAdmin: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
+    val isRefreshingRates by viewModel.isRefreshingRates.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val lastSyncedAt by viewModel.lastSyncedAt.collectAsState()
     val unsyncedCount by viewModel.unsyncedCount.collectAsState()
     val snackbarMessage by viewModel.snackbarMessage.collectAsState()
     val showLogoutDialog by viewModel.showUnsyncedLogoutDialog.collectAsState()
 
+    var showCurrencyDialog by remember { mutableStateOf(false) }
+    val defaultCurrency = currencyState.defaultCurrency
+
     val snackbarHostState = remember { SnackbarHostState() }
     val syncSuccessStr = stringResource(R.string.sync_success)
     val syncFailStr = stringResource(R.string.sync_failed)
+    val ratesRefreshedStr = stringResource(R.string.rates_refreshed)
+    val ratesFailedStr = stringResource(R.string.rates_refresh_failed)
 
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
@@ -385,78 +399,147 @@ fun SettingsScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = stringResource(R.string.currency),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = formatAmount(
-                                amount = 123.45f,
-                                currencySymbol = settings.currencySymbol,
-                                currencyAfter = settings.currencyAfter
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    val quickSymbols = listOf("" to "None", "$" to "$", "€" to "€", "£" to "£", "zł" to "zł")
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        quickSymbols.forEach { (sym, label) ->
-                            FilterChip(
-                                selected = settings.currencySymbol == sym,
-                                onClick = { viewModel.setCurrencySymbol(sym) },
-                                label = { Text(label) }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.default_display_currency),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = stringResource(R.string.default_display_currency_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    OutlinedTextField(
-                        value = settings.currencySymbol,
-                        onValueChange = { viewModel.setCurrencySymbol(it) },
-                        label = { Text(stringResource(R.string.currency)) },
-                        placeholder = { Text("$, €, zł…") },
-                        singleLine = true,
+                    Surface(
+                        onClick = { showCurrencyDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    )
-
-                    AnimatedVisibility(visible = settings.currencySymbol.isNotBlank()) {
-                        Column(modifier = Modifier.padding(top = 12.dp)) {
-                            Text(
-                                text = stringResource(R.string.currency_position),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                SegmentedButton(
-                                    selected = !settings.currencyAfter,
-                                    onClick = { viewModel.setCurrencyAfter(false) },
-                                    shape = SegmentedButtonDefaults.itemShape(0, 2)
-                                ) {
-                                    Text(stringResource(R.string.before_amount))
-                                }
-                                SegmentedButton(
-                                    selected = settings.currencyAfter,
-                                    onClick = { viewModel.setCurrencyAfter(true) },
-                                    shape = SegmentedButtonDefaults.itemShape(1, 2)
-                                ) {
-                                    Text(stringResource(R.string.after_amount))
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, MaterialTheme.sunderColors.cardBorder)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(40.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.CurrencyExchange,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${defaultCurrency.code} (${defaultCurrency.symbol})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = defaultCurrency.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.currency_preview,
+                                CurrencyFormatter.format(1234.5, defaultCurrency)
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        OutlinedButton(
+                            onClick = { viewModel.refreshRates(ratesRefreshedStr, ratesFailedStr) },
+                            enabled = !isRefreshingRates,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(ButtonDefaults.IconSize)
+                                    .rotate(if (isRefreshingRates) spinAngle else 0f)
+                            )
+                            Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+                            Text(
+                                text = if (isRefreshingRates) {
+                                    stringResource(R.string.refreshing_rates)
+                                } else {
+                                    stringResource(R.string.refresh_rates)
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = stringResource(
+                            R.string.currency_cache_stats,
+                            currencyState.currencies.size,
+                            currencyState.rateDayCount
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (currentUser?.isAdmin == true) {
+                item(key = "admin_section") {
+                    SettingsCard(title = stringResource(R.string.admin)) {
+                        Text(
+                            text = stringResource(R.string.admin_currencies_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = onNavigateAdmin,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CurrencyExchange,
+                                contentDescription = null,
+                                modifier = Modifier.size(ButtonDefaults.IconSize)
+                            )
+                            Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+                            Text(stringResource(R.string.admin_currencies))
                         }
                     }
                 }
@@ -532,6 +615,18 @@ fun SettingsScreen(
                     }
                 }
             }
+        )
+    }
+
+    if (showCurrencyDialog) {
+        CurrencyPickerDialog(
+            currencies = currencyState.currencies,
+            selectedCode = defaultCurrency.code,
+            onSelect = { code ->
+                showCurrencyDialog = false
+                code?.let { viewModel.setDefaultCurrency(it) }
+            },
+            onDismiss = { showCurrencyDialog = false }
         )
     }
 }

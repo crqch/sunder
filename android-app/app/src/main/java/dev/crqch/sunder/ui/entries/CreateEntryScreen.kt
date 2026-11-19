@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Title
@@ -80,6 +81,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.crqch.sunder.R
+import dev.crqch.sunder.ui.components.CurrencyPickerDialog
 import dev.crqch.sunder.ui.components.SelectionItem
 import dev.crqch.sunder.ui.components.SelectionSheet
 import dev.crqch.sunder.ui.theme.sunderColors
@@ -101,6 +103,7 @@ fun CreateEntryScreen(
     val entryFormState = viewModel.entryFormState
     val accounts by viewModel.availableAccounts.collectAsState()
     val categories by viewModel.categories.collectAsState()
+    val currencyState by viewModel.currencyState.collectAsState()
 
     // Auto-select first available account/category if none pre-selected (matches web EntryForm)
     LaunchedEffect(accounts) {
@@ -122,12 +125,31 @@ fun CreateEntryScreen(
     var showSheet by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
+    var showCurrencyDialog by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = entryFormState.date
     )
 
     val selectedAccount = accounts.find { it.account.id == entryFormState.accountId }
     val selectedCategory = categories.find { it.id == entryFormState.categoryId }
+    val selectedCurrency = currencyState.currency(
+        entryFormState.currencyCode.ifBlank { currencyState.defaultCurrencyCode }
+    )
+    val decimalDigits = selectedCurrency.decimalDigits.coerceIn(0, 6)
+    val amountPlaceholder = if (decimalDigits > 0) {
+        "0." + "0".repeat(decimalDigits)
+    } else {
+        "0"
+    }
+
+    // Keep the entry currency in sync with the selected account until the user picks one.
+    LaunchedEffect(
+        entryFormState.accountId,
+        selectedAccount?.account?.currencyCode,
+        currencyState.defaultCurrencyCode
+    ) {
+        viewModel.adoptCurrency(selectedAccount?.account?.currencyCode)
+    }
 
     val dateFormatter = remember { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM) }
     val formattedDate = remember(entryFormState.date) {
@@ -276,7 +298,7 @@ fun CreateEntryScreen(
                         ),
                         placeholder = {
                             Text(
-                                text = "0.00",
+                                text = amountPlaceholder,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center,
                                 style = MaterialTheme.typography.displayLarge.copy(
@@ -285,7 +307,7 @@ fun CreateEntryScreen(
                                 )
                             )
                         },
-                        visualTransformation = CentsAmountVisualTransformation,
+                        visualTransformation = AmountVisualTransformation(decimalDigits),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         colors = TextFieldDefaults.colors(
@@ -344,6 +366,17 @@ fun CreateEntryScreen(
                             isPlaceholder = false,
                             icon = Icons.Default.CalendarToday,
                             onClick = { showDatePicker = true }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = sunderColors.cardBorder
+                        )
+                        SelectorField(
+                            label = stringResource(R.string.currency_label),
+                            selectedName = "${selectedCurrency.code} (${selectedCurrency.symbol}) · ${selectedCurrency.name}",
+                            isPlaceholder = false,
+                            icon = Icons.Default.CurrencyExchange,
+                            onClick = { showCurrencyDialog = true }
                         )
                     }
                 }
@@ -461,6 +494,18 @@ fun CreateEntryScreen(
                     }
                 }
             }
+        }
+
+        if (showCurrencyDialog) {
+            CurrencyPickerDialog(
+                currencies = currencyState.currencies,
+                selectedCode = selectedCurrency.code,
+                onSelect = { code ->
+                    showCurrencyDialog = false
+                    code?.let { viewModel.selectCurrency(it) }
+                },
+                onDismiss = { showCurrencyDialog = false }
+            )
         }
 
         if (showDatePicker) {

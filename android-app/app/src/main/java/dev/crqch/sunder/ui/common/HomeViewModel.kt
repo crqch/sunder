@@ -6,9 +6,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.CategoryEntity
 import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.data.repositories.CategoryRepository
+import dev.crqch.sunder.data.repositories.CurrencyRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
 import dev.crqch.sunder.data.repositories.SyncRepository
 import dev.crqch.sunder.data.repositories.UserRepository
+import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -41,11 +43,18 @@ class HomeViewModel @Inject constructor(
     entryRepository: EntryRepository,
     categoryRepository: CategoryRepository,
     userRepository: UserRepository,
+    currencyRepository: CurrencyRepository,
     private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     val currentUser = userRepository.currentUser
     val isSyncing = syncRepository.isSyncing
+
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
 
     private val _syncMessage = MutableStateFlow<String?>(null)
     val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
@@ -56,21 +65,33 @@ class HomeViewModel @Inject constructor(
     val dashboardState: StateFlow<DashboardState> = combine(
         entryRepository.allEntries,
         categoryRepository.allCategories,
+        currencyRepository.uiState,
         syncRepository.lastSyncedAt
-    ) { entries, categories, _ ->
+    ) { entries, categories, currency, _ ->
         refreshUnsyncedCount()
 
-        val totalBalance = entries.sumOf { it.entry.amount.toDouble() }.toFloat()
-        val totalIncome = entries.filter { it.entry.amount > 0f }
-            .sumOf { it.entry.amount.toDouble() }.toFloat()
-        val totalExpenses = entries.filter { it.entry.amount < 0f }
-            .sumOf { abs(it.entry.amount).toDouble() }.toFloat()
+        val convertedAmounts = entries.associateWith { item ->
+            currency.convertOrSame(
+                amount = item.entry.amount.toDouble(),
+                fromCode = item.entry.currencyCode,
+                dateMillis = item.entry.date
+            )
+        }
 
-        val spendingMap = mutableMapOf<String, Float>()
+        val totalBalance = convertedAmounts.values.sum()
+        val totalIncome = convertedAmounts
+            .filterKeys { it.entry.amount > 0f }
+            .values.sum()
+        val totalExpenses = convertedAmounts
+            .filterKeys { it.entry.amount < 0f }
+            .values.sumOf { abs(it) }
+
+        val spendingMap = mutableMapOf<String, Double>()
         entries.forEach { item ->
             if (item.entry.amount < 0f) {
                 val catId = item.entry.categoryId
-                spendingMap[catId] = (spendingMap[catId] ?: 0f) + abs(item.entry.amount)
+                val converted = abs(convertedAmounts[item] ?: 0.0)
+                spendingMap[catId] = (spendingMap[catId] ?: 0.0) + converted
             }
         }
 
@@ -78,16 +99,24 @@ class HomeViewModel @Inject constructor(
         val topCategories = spendingMap.entries
             .mapNotNull { (catId, amount) ->
                 val cat = categoryById[catId] ?: return@mapNotNull null
-                val share = if (totalExpenses > 0f) (amount / totalExpenses).coerceIn(0f, 1f) else 0f
-                CategorySpendingItem(category = cat, amount = amount, share = share)
+                val share = if (totalExpenses > 0.0) {
+                    (amount / totalExpenses).toFloat().coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+                CategorySpendingItem(
+                    category = cat,
+                    amount = amount.toFloat(),
+                    share = share
+                )
             }
             .sortedByDescending { it.amount }
             .take(5)
 
         DashboardState(
-            totalBalance = totalBalance,
-            totalIncome = totalIncome,
-            totalExpenses = totalExpenses,
+            totalBalance = totalBalance.toFloat(),
+            totalIncome = totalIncome.toFloat(),
+            totalExpenses = totalExpenses.toFloat(),
             recentEntries = entries.take(8),
             topCategories = topCategories,
             totalEntryCount = entries.size

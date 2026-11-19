@@ -10,8 +10,10 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.AccountEntity
 import dev.crqch.sunder.data.repositories.AccountRepository
+import dev.crqch.sunder.data.repositories.CurrencyRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
 import dev.crqch.sunder.ui.SubRoute
+import dev.crqch.sunder.utils.CurrencyUiState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,11 +24,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class AccountFormState(
-    val name: String = ""
+    val name: String = "",
+    val currencyCode: String? = null
 ) {
     companion object {
         fun ofAccount(account: AccountEntity): AccountFormState = AccountFormState(
-            name = account.name
+            name = account.name,
+            currencyCode = account.currencyCode
         )
     }
 
@@ -38,7 +42,8 @@ data class AccountFormState(
         id = id,
         name = name.trim(),
         createdAt = createdAt,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        currencyCode = currencyCode
     )
 }
 
@@ -46,8 +51,15 @@ data class AccountFormState(
 class AccountViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val accountRepository: AccountRepository,
-    private val entryRepository: EntryRepository
+    private val entryRepository: EntryRepository,
+    private val currencyRepository: CurrencyRepository
 ) : ViewModel() {
+
+    val currencyState: StateFlow<CurrencyUiState> = currencyRepository.uiState.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CurrencyUiState()
+    )
 
     var isEditMode by mutableStateOf(false)
         private set
@@ -65,6 +77,10 @@ class AccountViewModel @Inject constructor(
 
     fun updateForm(state: AccountFormState) {
         accountFormState = state
+    }
+
+    fun selectCurrency(code: String?) {
+        accountFormState = accountFormState.copy(currencyCode = code)
     }
 
     init {
@@ -116,8 +132,12 @@ class AccountViewModel @Inject constructor(
     fun saveEdit() {
         if (!accountFormState.isFilled()) return
         viewModelScope.launch {
-            accountRepository.saveAccount(accountFormState, accountId)
-            isEditMode = false
+            val saved = runCatching {
+                accountRepository.saveAccount(accountFormState, accountId, accountFormState.currencyCode)
+            }
+            if (saved.isSuccess) {
+                isEditMode = false
+            }
         }
     }
 

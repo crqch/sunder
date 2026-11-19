@@ -6,6 +6,7 @@
   import { modals } from '$lib/modals.svelte';
   import { tooltip } from '$lib/tooltip';
   import Modal from '$components/Modal.svelte';
+  import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
   let accounts = $state<Account[]>([]);
   let entries = $state<AccountEntry[]>([]);
@@ -28,8 +29,27 @@
     accounts.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  function getBalance(accountId: string) {
-    return entries.filter((e) => e.account_id === accountId).reduce((sum, e) => sum + e.amount, 0);
+  function getAccountDisplayCurrency(account: Account) {
+    return account.currency_code
+      ? normalizeCurrencyCode(account.currency_code)
+      : currencyStore.defaultCurrencyCode;
+  }
+
+  function getBalance(account: Account) {
+    const targetCurrency = getAccountDisplayCurrency(account);
+    return entries
+      .filter((e) => e.account_id === account.id)
+      .reduce(
+        (sum, e) =>
+          sum +
+          currencyStore.tryConvert(
+            e.amount,
+            e.currency_code,
+            targetCurrency,
+            e.date || e.created_at
+          ).amount,
+        0
+      );
   }
 
   let selectedIds = $state<string[]>([]);
@@ -135,8 +155,9 @@
       </div>
 
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {#each filteredAccounts as account}
-          {@const balance = getBalance(account.id)}
+        {#each filteredAccounts as account (account.id)}
+          {@const displayCurrency = getAccountDisplayCurrency(account)}
+          {@const balance = getBalance(account)}
           <a
             href="/accounts/{account.id}"
             onclick={(e) => handleCardClick(e, account.id)}
@@ -159,7 +180,16 @@
               </div>
             </label>
             <div class="mb-4 flex items-start justify-between pr-8">
-              <h2 class="text-lg font-medium tracking-tight">{account.name}</h2>
+              <div class="flex items-center gap-2">
+                <h2 class="text-lg font-medium tracking-tight">{account.name}</h2>
+                {#if account.currency_code}
+                  <span
+                    class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+                  >
+                    {normalizeCurrencyCode(account.currency_code)}
+                  </span>
+                {/if}
+              </div>
               <ChevronRight
                 size={20}
                 class="text-muted-foreground group-hover:text-foreground transition-colors"
@@ -172,7 +202,7 @@
                   ? 'text-emerald-500'
                   : 'text-destructive'}"
               >
-                {Math.abs(balance).toFixed(2)}
+                {currencyStore.formatAmount(balance, displayCurrency)}
               </p>
             </div>
           </a>

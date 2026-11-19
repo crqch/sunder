@@ -25,7 +25,8 @@ data class SyncRequestDto(
 data class SyncResponseDto(
     @Json(name = "accounts") val accounts: List<AccountSyncDto>,
     @Json(name = "categories") val categories: List<CategorySyncDto>,
-    @Json(name = "entries") val entries: List<EntrySyncDto>
+    @Json(name = "entries") val entries: List<EntrySyncDto>,
+    @Json(name = "default_currency_code") val defaultCurrencyCode: String? = null
 )
 
 data class AccountSyncDto(
@@ -33,7 +34,8 @@ data class AccountSyncDto(
     @Json(name = "name") val name: String,
     @Json(name = "updated_at") val updatedAt: String,
     @Json(name = "inserted_at") val createdAt: String,
-    @Json(name = "deleted_at") val deletedAt: String? = null
+    @Json(name = "deleted_at") val deletedAt: String? = null,
+    @Json(name = "currency_code") val currencyCode: String? = null
 )
 
 data class CategorySyncDto(
@@ -57,7 +59,8 @@ data class EntrySyncDto(
     @Json(name = "description") val description: String? = null,
     @Json(name = "updated_at") val updatedAt: String,
     @Json(name = "inserted_at") val createdAt: String,
-    @Json(name = "deleted_at") val deletedAt: String? = null
+    @Json(name = "deleted_at") val deletedAt: String? = null,
+    @Json(name = "currency_code") val currencyCode: String = "USD"
 )
 
 fun AccountEntity.toDto() = AccountSyncDto(
@@ -65,7 +68,8 @@ fun AccountEntity.toDto() = AccountSyncDto(
     name = name,
     updatedAt = formatter.format(Instant.ofEpochMilli(updatedAt)),
     createdAt = formatter.format(Instant.ofEpochMilli(createdAt)),
-    deletedAt = deletedAt?.let { formatter.format(Instant.ofEpochMilli(it)) }
+    deletedAt = deletedAt?.let { formatter.format(Instant.ofEpochMilli(it)) },
+    currencyCode = currencyCode
 )
 
 fun CategoryEntity.toDto() = CategorySyncDto(
@@ -89,7 +93,8 @@ fun EntryEntity.toDto() = EntrySyncDto(
     description = description,
     updatedAt = formatter.format(Instant.ofEpochMilli(updatedAt)),
     createdAt = formatter.format(Instant.ofEpochMilli(createdAt)),
-    deletedAt = deletedAt?.let { formatter.format(Instant.ofEpochMilli(it)) }
+    deletedAt = deletedAt?.let { formatter.format(Instant.ofEpochMilli(it)) },
+    currencyCode = currencyCode
 )
 
 fun AccountSyncDto.toEntity() = AccountEntity(
@@ -97,7 +102,8 @@ fun AccountSyncDto.toEntity() = AccountEntity(
     name = name,
     updatedAt = safeParseDate(updatedAt),
     createdAt = safeParseDate(createdAt),
-    deletedAt = deletedAt?.let { safeParseDate(it) }
+    deletedAt = deletedAt?.let { safeParseDate(it) },
+    currencyCode = currencyCode
 )
 
 fun CategorySyncDto.toEntity() = CategoryEntity(
@@ -121,5 +127,6 @@ fun EntrySyncDto.toEntity() = EntryEntity(
     description = description ?: "",
     updatedAt = safeParseDate(updatedAt),
     createdAt = safeParseDate(createdAt),
-    deletedAt = deletedAt?.let { safeParseDate(it) }
+    deletedAt = deletedAt?.let { safeParseDate(it) },
+    currencyCode = currencyCode
 )
