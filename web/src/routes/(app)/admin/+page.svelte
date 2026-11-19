@@ -77,19 +77,36 @@
 
   async function loadData() {
     try {
-      const [uRes, iRes, cRes] = await Promise.all([
+      const results = await Promise.allSettled([
         authenticatedFetch('/admin/users'),
         authenticatedFetch('/admin/invites'),
         authenticatedFetch('/admin/currencies')
       ]);
-      const [uData, iData, cData] = (await Promise.all([
-        uRes.json(),
-        iRes.json(),
-        cRes.json()
-      ])) as any[];
-      users = uData.users || [];
-      invites = iData.invites || [];
-      currencies = cData.currencies || [];
+
+      const parseJson = async (res: PromiseSettledResult<Response>) => {
+        if (res.status !== 'fulfilled' || !res.value.ok) return null;
+        try {
+          return (await res.value.json()) as any;
+        } catch {
+          return null;
+        }
+      };
+
+      const [uData, iData, cData] = await Promise.all([
+        parseJson(results[0]),
+        parseJson(results[1]),
+        parseJson(results[2])
+      ]);
+
+      if (uData) users = uData.users || [];
+      if (iData) invites = iData.invites || [];
+      if (cData) currencies = cData.currencies || [];
+
+      if (!uData && !iData && !cData) {
+        toast.error('Failed to load admin data');
+      } else if (!uData || !iData || !cData) {
+        toast.warning('Some admin sections failed to load');
+      }
     } catch (e) {
       toast.error('Failed to load admin data');
     } finally {

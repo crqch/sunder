@@ -29,6 +29,7 @@ export function toDateKey(dateLike?: string | Date | null): string {
 
 class CurrencyStore {
   currencies = $state<Currency[]>([]);
+  allCurrencies = $state<Currency[]>([]);
   defaultCurrencyCode = $state<string>(
     typeof window !== 'undefined'
       ? normalizeCurrencyCode(localStorage.getItem(DEFAULT_CURRENCY_STORAGE_KEY))
@@ -41,6 +42,9 @@ class CurrencyStore {
 
   private currencyMap = $derived.by(() => {
     const map = new Map<string, Currency>();
+    for (const c of this.allCurrencies) {
+      map.set(c.code.toUpperCase(), c);
+    }
     for (const c of this.currencies) {
       map.set(c.code.toUpperCase(), c);
     }
@@ -200,7 +204,8 @@ class CurrencyStore {
       ]);
 
       if (cachedCurrencies.length > 0) {
-        this.currencies = cachedCurrencies;
+        this.allCurrencies = cachedCurrencies;
+        this.currencies = cachedCurrencies.filter((c) => c.is_active !== false);
       }
 
       const map: Record<string, Record<string, number>> = {};
@@ -221,7 +226,7 @@ class CurrencyStore {
       throw new Error(`Failed to fetch currencies (${res.status})`);
     }
     const data = await res.json();
-    const list: Currency[] = (data.currencies || []).map((c: Currency) => ({
+    const activeList: Currency[] = (data.currencies || []).map((c: Currency) => ({
       code: normalizeCurrencyCode(c.code),
       name: c.name,
       symbol: c.symbol,
@@ -230,14 +235,30 @@ class CurrencyStore {
       is_active: c.is_active ?? true
     }));
 
+    if (activeList.length === 0) {
+      this.loaded = true;
+      return this.currencies;
+    }
+
+    const mergedByCode = new Map<string, Currency>();
+    const existing = await db.currencies.toArray();
+    for (const prev of existing) {
+      const code = normalizeCurrencyCode(prev.code);
+      mergedByCode.set(code, { ...prev, code, is_active: false });
+    }
+    for (const active of activeList) {
+      mergedByCode.set(active.code, active);
+    }
+    const mergedList = Array.from(mergedByCode.values()).sort((a, b) =>
+      a.code.localeCompare(b.code)
+    );
+
     await db.transaction('rw', db.currencies, async () => {
-      await db.currencies.clear();
-      if (list.length > 0) {
-        await db.currencies.bulkPut(list);
-      }
+      await db.currencies.bulkPut(mergedList);
     });
 
-    this.currencies = list.sort((a, b) => a.code.localeCompare(b.code));
+    this.allCurrencies = mergedList;
+    this.currencies = mergedList.filter((c) => c.is_active !== false);
     this.loaded = true;
     return this.currencies;
   }
@@ -285,8 +306,43 @@ class CurrencyStore {
     }
   }
 
-  async refreshRatesForEntries() {
-    if (typeof window === 'undefined') return;
+  private async fetchHistoryRange(fromStr: string, toStr: string, symbolsParam: string) {
+    let cursor = new Date(`${fromStr}T00:00:00Z`);
+    const end = new Date(`${toStr}T00:00:00Z`);
+
+    while (cursor <= end) {
+      const chunkEnd = new Date(cursor.getTime());
+      chunkEnd.setUTCDate(chunkEnd.getUTCDate() + MAX_HISTORY_CHUNK_DAYS);
+      const effectiveEnd = chunkEnd > end ? end : chunkEnd;
+
+      const params = new URLSearchParams({
+        base: CANONICAL_BASE,
+        from: cursor.toISOString().slice(0, 10),
+        to: effectiveEnd.toISOString().slice(0, 10),
+        symbols: symbolsParam
+      });
+
+      const res = await apiFetch(`/currencies/rates/history?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.rates && typeof data.rates === 'object') {
+          await this.mergeAndStoreSnapshots(data.rates);
+        }
+      }
+
+      cursor = new Date(effectiveEnd.getTime());
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+
+  private hasRateForAllSymbolsOnDate(date: string, symbols: string[]): boolean {
+    const table = this.ratesByDate[date];
+    if (!table) return false;
+    return symbols.every((sym) => typeof table[sym] === 'number' && table[sym] > 0);
+  }
+
+  async refreshRatesForEntries(force = false) {
+    if (typeof window === 'undefined' || this.syncingRates) return;
     this.syncingRates = true;
     try {
       const entries = await db.account_entries.filter((e) => !e.deleted_at).toArray();
@@ -309,35 +365,31 @@ class CurrencyStore {
       const symbols = Array.from(neededCodes).filter((c) => c !== CANONICAL_BASE);
       if (symbols.length > 0 && earliestDate) {
         const today = toDateKey(new Date());
-        let cursor = new Date(`${earliestDate}T00:00:00Z`);
-        const end = new Date(`${today}T00:00:00Z`);
+        const clampedStart = earliestDate > today ? today : earliestDate;
         const symbolsParam = symbols.join(',');
 
-        while (cursor <= end) {
-          const chunkEnd = new Date(cursor.getTime());
-          chunkEnd.setUTCDate(chunkEnd.getUTCDate() + MAX_HISTORY_CHUNK_DAYS);
-          const effectiveEnd = chunkEnd > end ? end : chunkEnd;
+        const cachedEarliest = this.sortedDates[0];
+        const cachedLatest = this.sortedDates[this.sortedDates.length - 1];
+        const symbolsCachedAtBounds =
+          cachedEarliest &&
+          cachedLatest &&
+          this.hasRateForAllSymbolsOnDate(cachedEarliest, symbols) &&
+          this.hasRateForAllSymbolsOnDate(cachedLatest, symbols);
 
-          const fromStr = cursor.toISOString().slice(0, 10);
-          const toStr = effectiveEnd.toISOString().slice(0, 10);
-
-          const params = new URLSearchParams({
-            base: CANONICAL_BASE,
-            from: fromStr,
-            to: toStr,
-            symbols: symbolsParam
-          });
-
-          const res = await apiFetch(`/currencies/rates/history?${params.toString()}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.rates && typeof data.rates === 'object') {
-              await this.mergeAndStoreSnapshots(data.rates);
+        if (force || !cachedEarliest || !cachedLatest || !symbolsCachedAtBounds) {
+          await this.fetchHistoryRange(clampedStart, today, symbolsParam);
+        } else {
+          if (clampedStart < cachedEarliest) {
+            const prevDay = new Date(`${cachedEarliest}T00:00:00Z`);
+            prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+            const prefixEnd = prevDay.toISOString().slice(0, 10);
+            if (clampedStart <= prefixEnd) {
+              await this.fetchHistoryRange(clampedStart, prefixEnd, symbolsParam);
             }
           }
-
-          cursor = new Date(effectiveEnd.getTime());
-          cursor.setUTCDate(cursor.getUTCDate() + 1);
+          if (cachedLatest < today) {
+            await this.fetchHistoryRange(cachedLatest, today, symbolsParam);
+          }
         }
       }
     } catch (err) {
@@ -385,10 +437,10 @@ class CurrencyStore {
     return updatedCode;
   }
 
-  async syncAllCurrencyData() {
+  async syncAllCurrencyData(force = false) {
     await this.loadFromCache();
     await Promise.allSettled([this.refreshCurrencies(), this.refreshPreferences()]);
-    await this.refreshRatesForEntries();
+    await this.refreshRatesForEntries(force);
   }
 }
 

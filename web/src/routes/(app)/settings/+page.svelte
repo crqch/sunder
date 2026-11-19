@@ -16,6 +16,11 @@
   let syncing = $state(false);
   let savingCurrency = $state(false);
   let refreshingRates = $state(false);
+  let selectedDefaultCurrency = $state(currencyStore.defaultCurrencyCode);
+
+  $effect(() => {
+    selectedDefaultCurrency = currencyStore.defaultCurrencyCode;
+  });
 
   let logoutModalOpen = $state(false);
   let unsyncedCount = $state(0);
@@ -25,10 +30,14 @@
     savingCurrency = true;
     try {
       const updated = await currencyStore.updateDefaultCurrency(code);
+      selectedDefaultCurrency = updated;
       toast.success(`Default currency set to ${updated}`);
     } catch (err) {
       console.error('Failed to update default currency', err);
-      toast.error('Failed to update default currency');
+      selectedDefaultCurrency = currencyStore.defaultCurrencyCode;
+      const msg =
+        err instanceof Error && err.message ? err.message : 'Failed to update default currency';
+      toast.error(msg);
     } finally {
       savingCurrency = false;
     }
@@ -37,7 +46,7 @@
   async function handleRefreshCurrencyData() {
     refreshingRates = true;
     try {
-      await currencyStore.syncAllCurrencyData();
+      await currencyStore.syncAllCurrencyData(true);
       toast.success('Currencies and exchange rates updated');
     } catch (err) {
       console.error('Failed to refresh currency data', err);
@@ -204,7 +213,7 @@
       </div>
       <div>
         <CurrencySelect
-          value={currencyStore.defaultCurrencyCode}
+          bind:value={selectedDefaultCurrency}
           disabled={savingCurrency}
           onchange={handleDefaultCurrencyChange}
         />

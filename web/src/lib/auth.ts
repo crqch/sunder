@@ -146,6 +146,7 @@ export async function refreshAccessToken() {
 export function logout() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('sunder_refresh_token');
+    localStorage.removeItem('sunder_default_currency');
     if (!window.location.pathname.startsWith('/auth/')) {
       window.location.href = '/auth/sign-in';
     }
