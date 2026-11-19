@@ -112,10 +112,19 @@ defmodule Sunder.Contexts.Currencies do
   # Exchange Rate Storage & Synchronization
   # ---------------------------------------------------------------------------
 
+  def known_currency_codes do
+    Repo.all(from(c in Currency, select: c.code))
+    |> MapSet.new()
+  end
+
   def has_rates_for_date?(%Date{} = date) do
     Repo.exists?(
       from(r in ExchangeRate,
-        where: r.base_currency_code == @canonical_base and r.rate_date == ^date
+        where:
+          r.base_currency_code == @canonical_base and
+            r.rate_date == ^date and
+            r.source != "manual" and
+            r.target_currency_code != @canonical_base
       )
     )
   end
@@ -133,8 +142,8 @@ defmodule Sunder.Contexts.Currencies do
     fetcher = fetcher_module()
 
     with {:ok, %{date: date, base: base, source: source, rates: rates}} <-
-           fetcher.fetch_rates(:latest) do
-      {:ok, count} = store_rates(date, rates, source, base)
+           fetcher.fetch_rates(:latest),
+         {:ok, count} <- store_rates(date, rates, source, base) do
       {:ok, %{date: date, base: base, source: source, stored_count: count}}
     end
   end
@@ -143,11 +152,10 @@ defmodule Sunder.Contexts.Currencies do
     fetcher = fetcher_module()
 
     with {:ok, %{date: fetched_date, base: base, source: source, rates: rates}} <-
-           fetcher.fetch_rates(date) do
-      # Store under the fetched date, and if the provider returned a nearby date
-      # (e.g. Friday for a weekend), also index it under the requested date if distinct
-      {:ok, count} = store_rates(fetched_date, rates, source, base)
-
+           fetcher.fetch_rates(date),
+         # Store under the fetched date, and if the provider returned a nearby date
+         # (e.g. Friday for a weekend), also index it under the requested date if distinct
+         {:ok, count} <- store_rates(fetched_date, rates, source, base) do
       if fetched_date != date do
         store_rates(date, rates, source, base)
       end
@@ -638,7 +646,8 @@ defmodule Sunder.Contexts.Currencies do
     fetch_if_missing = Keyword.get(opts, :fetch_if_missing, default_on_demand)
     today = Date.utc_today()
 
-    if fetch_if_missing and Date.compare(date, today) != :gt and not has_rates_for_date?(date) do
+    if fetch_if_missing and Date.compare(date, today) != :gt and not has_rates_for_date?(date) and
+         claim_on_demand_fetch_slot(date) do
       result =
         if date == today do
           sync_latest_rates()
@@ -653,6 +662,26 @@ defmodule Sunder.Contexts.Currencies do
     end
 
     :ok
+  end
+
+  defp claim_on_demand_fetch_slot(%Date{} = date) do
+    cooldown_ms = Application.get_env(:sunder, :currency_on_demand_cooldown_ms, :timer.minutes(15))
+
+    if cooldown_ms <= 0 or :ets.whereis(:sunder_currency_fetch_cooldown) == :undefined do
+      true
+    else
+      now_ms = System.monotonic_time(:millisecond)
+      key = Date.to_iso8601(date)
+
+      case :ets.lookup(:sunder_currency_fetch_cooldown, key) do
+        [{^key, last_attempt_ms}] when now_ms - last_attempt_ms < cooldown_ms ->
+          false
+
+        _ ->
+          :ets.insert(:sunder_currency_fetch_cooldown, {key, now_ms})
+          true
+      end
+    end
   end
 
   defp fetcher_module do

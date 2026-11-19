@@ -74,8 +74,9 @@ defmodule Sunder.Eco.Entry do
   end
 
   defp normalize_currency_code(changeset) do
-    update_change(changeset, :currency_code, fn code ->
-      code |> String.trim() |> String.upcase()
+    update_change(changeset, :currency_code, fn
+      code when is_binary(code) -> code |> String.trim() |> String.upcase()
+      other -> other
     end)
   end
 end

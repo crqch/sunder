@@ -255,6 +255,33 @@ defmodule SunderWeb.CurrencyControllerTest do
 
       assert bad_sync["error"] == "currency_not_allowed"
 
+      # Deactivated catalog currency still syncs cleanly so offline clients are never bricked
+      jpy = Currencies.get_currency("JPY")
+      {:ok, _} = Currencies.update_currency(jpy, %{is_active: false})
+      jpy_entry_id = ExCuid2.generate()
+
+      _deactivated_sync =
+        conn
+        |> post("/dashboard/eco/sync?last=1970-01-01T00:00:00", %{
+          accounts: [],
+          categories: [],
+          entries: [
+            %{
+              id: jpy_entry_id,
+              title: "Offline Tokyo snack",
+              amount: -500.0,
+              currency_code: "JPY",
+              date: now,
+              account_id: acc_id,
+              category_id: cat_id
+            }
+          ]
+        })
+        |> json_response(200)
+
+      saved_jpy = Repo.get!(Entry, jpy_entry_id)
+      assert saved_jpy.currency_code == "JPY"
+
       # Export includes currency_code and default_currency_code
       export_resp = conn |> get("/dashboard/eco/data/export") |> json_response(200)
       assert export_resp["default_currency_code"] == "PLN"

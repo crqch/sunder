@@ -4,18 +4,20 @@ defmodule SunderWeb.Sync.Writer do
 
   def apply_writes(multi, %{eco_user: eco_user}, last_synced_at) do
     Ecto.Multi.run(multi, :upsert_sync, fn repo, %{guard: guard_data} ->
+      known_codes = Currencies.known_currency_codes()
+
       with {:ok, acc_res} <-
-             process_domain(repo, guard_data.accounts, last_synced_at, Account, eco_user),
+             process_domain(repo, guard_data.accounts, last_synced_at, Account, eco_user, known_codes),
            {:ok, cat_res} <-
-             process_domain(repo, guard_data.categories, last_synced_at, Category, eco_user),
+             process_domain(repo, guard_data.categories, last_synced_at, Category, eco_user, known_codes),
            {:ok, ent_res} <-
-             process_domain(repo, guard_data.entries, last_synced_at, Entry, eco_user) do
+             process_domain(repo, guard_data.entries, last_synced_at, Entry, eco_user, known_codes) do
         {:ok, %{accounts: acc_res, categories: cat_res, entries: ent_res}}
       end
     end)
   end
 
-  defp process_domain(repo, domain_data, last_synced_at, schema_module, eco_user) do
+  defp process_domain(repo, domain_data, last_synced_at, schema_module, eco_user, known_codes) do
     %{valid: valid_txs, db_records: db_records} = domain_data
 
     Enum.reduce_while(valid_txs, {:ok, %{conflicts: [], ok: []}}, fn client_tx,
@@ -26,7 +28,7 @@ defmodule SunderWeb.Sync.Writer do
                                                                       }} ->
       db_record = Map.get(db_records, client_tx["id"])
 
-      case prepare_tx(schema_module, client_tx, db_record, eco_user) do
+      case prepare_tx(schema_module, client_tx, db_record, eco_user, known_codes) do
         {:error, reason} ->
           {:halt, {:error, reason}}
 
@@ -58,7 +60,7 @@ defmodule SunderWeb.Sync.Writer do
     end)
   end
 
-  defp prepare_tx(Entry, client_tx, db_record, eco_user) do
+  defp prepare_tx(Entry, client_tx, db_record, eco_user, known_codes) do
     raw_code = Map.get(client_tx, "currency_code")
 
     case Currencies.normalize_code(raw_code) do
@@ -73,7 +75,7 @@ defmodule SunderWeb.Sync.Writer do
       normalized_code ->
         same_as_existing = db_record != nil and db_record.currency_code == normalized_code
 
-        if same_as_existing or Currencies.currency_allowed?(normalized_code) do
+        if same_as_existing or MapSet.member?(known_codes, normalized_code) do
           {:ok, Map.put(client_tx, "currency_code", normalized_code)}
         else
           {:error, :currency_not_allowed}
@@ -81,7 +83,7 @@ defmodule SunderWeb.Sync.Writer do
     end
   end
 
-  defp prepare_tx(Account, client_tx, db_record, _eco_user) do
+  defp prepare_tx(Account, client_tx, db_record, _eco_user, known_codes) do
     if Map.has_key?(client_tx, "currency_code") do
       case Currencies.normalize_code(Map.get(client_tx, "currency_code")) do
         nil ->
@@ -90,7 +92,7 @@ defmodule SunderWeb.Sync.Writer do
         normalized_code ->
           same_as_existing = db_record != nil and db_record.currency_code == normalized_code
 
-          if same_as_existing or Currencies.currency_allowed?(normalized_code) do
+          if same_as_existing or MapSet.member?(known_codes, normalized_code) do
             {:ok, Map.put(client_tx, "currency_code", normalized_code)}
           else
             {:error, :currency_not_allowed}
@@ -101,7 +103,7 @@ defmodule SunderWeb.Sync.Writer do
     end
   end
 
-  defp prepare_tx(_schema_module, client_tx, _db_record, _eco_user), do: {:ok, client_tx}
+  defp prepare_tx(_schema_module, client_tx, _db_record, _eco_user, _known_codes), do: {:ok, client_tx}
 
   defp updated_after_sync?(_db_updated_at, nil), do: true
 

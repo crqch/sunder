@@ -226,9 +226,16 @@ defmodule Sunder.Contexts.CurrenciesTest do
     test "upsert_manual_rate supports USD base and cross-pair" do
       {:ok, r1} = Currencies.upsert_manual_rate("USD", "EUR", "0.80", ~D[2026-11-12])
       assert Decimal.equal?(r1.rate, Decimal.new("0.8"))
+      # A single manual override must not treat the day as having full provider rates
+      refute Currencies.has_rates_for_date?(~D[2026-11-12])
 
       {:ok, r2} = Currencies.upsert_manual_rate("EUR", "PLN", "5.00", ~D[2026-11-12])
       assert Decimal.equal?(r2.rate, Decimal.new("4.0"))
+    end
+
+    test "nil currency code produces validation error instead of raising" do
+      changeset = Sunder.Eco.Currency.changeset(%Sunder.Eco.Currency{}, %{code: nil})
+      refute changeset.valid?
     end
   end
 end

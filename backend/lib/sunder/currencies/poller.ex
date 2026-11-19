@@ -30,6 +30,10 @@ defmodule Sunder.Currencies.Poller do
 
   @impl true
   def init(opts) do
+    if :ets.whereis(:sunder_currency_fetch_cooldown) == :undefined do
+      :ets.new(:sunder_currency_fetch_cooldown, [:named_table, :public, :set])
+    end
+
     config = Application.get_env(:sunder, __MODULE__, [])
 
     state = %{
@@ -79,6 +83,8 @@ defmodule Sunder.Currencies.Poller do
     today = Date.utc_today()
 
     try do
+      ensure_catalog!()
+
       if not force and Currencies.has_rates_for_date?(today) do
         Logger.debug("Exchange rates for #{today} already present; skipping boot poll.")
         state.poll_interval_ms
@@ -100,6 +106,12 @@ defmodule Sunder.Currencies.Poller do
       e ->
         Logger.warning("Exchange rate poller error: #{Exception.message(e)}")
         state.retry_interval_ms
+    end
+  end
+
+  defp ensure_catalog! do
+    if MapSet.size(Currencies.known_currency_codes()) == 0 do
+      Catalog.sync_catalog!()
     end
   end
 
