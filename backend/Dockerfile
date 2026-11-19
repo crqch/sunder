@@ -1,5 +1,5 @@
 # Build Stage
-FROM hexpm/elixir:1.15.7-erlang-26.1.2-debian-bullseye-20230612-slim AS build
+FROM hexpm/elixir:1.15.7-erlang-26.1.2-debian-bookworm-20231009-slim AS build
 
 # install build dependencies
 RUN apt-get update -y && apt-get install -y build-essential git \
@@ -32,7 +32,7 @@ RUN mix compile
 RUN mix release
 
 # Runtime Stage
-FROM debian:bullseye-20230612-slim AS app
+FROM debian:bookworm-20231009-slim AS app
 
 RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales sqlite3 \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
