@@ -99,4 +99,14 @@ class EntryRepository @Inject constructor(
         entryDao.softDelete(id)
         syncManager.triggerSync()
     }
+
+    suspend fun deleteEntries(ids: List<String>) {
+        if (ids.isEmpty()) return
+        entryDao.softDeleteAll(ids)
+        syncManager.triggerSync()
+    }
+
+    suspend fun countActiveByCategoryId(categoryId: String): Int {
+        return entryDao.countActiveByCategoryId(categoryId)
+    }
 }

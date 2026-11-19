@@ -63,4 +63,10 @@ class AccountRepository @Inject constructor(
         accountDao.softDelete(id)
         syncManager.triggerSync()
     }
+
+    suspend fun deleteAccounts(ids: List<String>) {
+        if (ids.isEmpty()) return
+        accountDao.softDeleteAll(ids)
+        syncManager.triggerSync()
+    }
 }

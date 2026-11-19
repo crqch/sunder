@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface EntryDao {
 
+    @Transaction
     @Query(
         """
         select * from entries
@@ -24,7 +25,7 @@ interface EntryDao {
         """
         select * from entries 
         where deletedAt is null 
-        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%')
+        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%' or location like '%' || :query || '%')
         order by date desc
     """
     )
@@ -42,7 +43,7 @@ interface EntryDao {
         select * from entries 
         where accountId = :accountId 
         and deletedAt is null
-        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%')
+        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%' or location like '%' || :query || '%')
         order by date desc
     """
     )
@@ -54,7 +55,7 @@ interface EntryDao {
         select * from entries 
         where categoryId = :categoryId 
         and deletedAt is null
-        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%')
+        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%' or location like '%' || :query || '%')
         order by date desc
     """
     )
@@ -67,7 +68,7 @@ interface EntryDao {
         where accountId = :accountId 
         and categoryId = :categoryId 
         and deletedAt is null
-        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%')
+        and (:query is null or title like '%' || :query || '%' or description like '%' || :query || '%' or location like '%' || :query || '%')
         order by date desc
     """
     )
@@ -85,6 +86,12 @@ interface EntryDao {
 
     @Query("update entries set deletedAt = :timestamp, updatedAt = :timestamp where id = :id")
     suspend fun softDelete(id: String, timestamp: Long = System.currentTimeMillis())
+
+    @Query("update entries set deletedAt = :timestamp, updatedAt = :timestamp where id in (:ids)")
+    suspend fun softDeleteAll(ids: List<String>, timestamp: Long = System.currentTimeMillis())
+
+    @Query("select count(*) from entries where categoryId = :categoryId and deletedAt is null")
+    suspend fun countActiveByCategoryId(categoryId: String): Int
 
     @Query("select * from entries where updatedAt > :timestamp")
     suspend fun getModifiedSince(timestamp: Long): List<EntryEntity>

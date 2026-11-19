@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.AccountWithBalance
+import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.data.repositories.AccountRepository
 import dev.crqch.sunder.data.repositories.CategoryRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
@@ -38,7 +39,12 @@ class EntryDetailViewModel @Inject constructor(
 
     val entryId = entryRoute?.entryId
 
+    private var lastLoadedEntity: EntryEntity? = null
+
     var entryFormState by mutableStateOf(EntryFormState())
+        private set
+
+    var amountInput by mutableStateOf("")
         private set
 
     init {
@@ -46,13 +52,19 @@ class EntryDetailViewModel @Inject constructor(
             viewModelScope.launch {
                 entryRepository.getEntry(id).collect { entity ->
                     entity?.let {
-                        entryFormState = EntryFormState.ofEntity(it)
-                        amountInput =
-                            if (entryFormState.amount == 0f) "" else entryFormState.amount.toString()
+                        lastLoadedEntity = it
+                        if (!isEditMode) {
+                            applyEntity(it)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private fun applyEntity(entity: EntryEntity) {
+        entryFormState = EntryFormState.ofEntity(entity)
+        amountInput = amountToCentsDigits(entryFormState.amount)
     }
 
     val availableAccounts: StateFlow<List<AccountWithBalance>> =
@@ -68,26 +80,34 @@ class EntryDetailViewModel @Inject constructor(
         initialValue = emptyList()
     )
 
-
-    var amountInput by mutableStateOf(entryFormState.amount.let { if (it == 0f) "" else it.toString() })
-        private set
-
     fun updateForm(state: EntryFormState) {
         entryFormState = state
     }
 
     fun updateAmount(input: String) {
-        if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
-            amountInput = input
-            val safeFloat = input.toFloatOrNull() ?: 0f
-            entryFormState = entryFormState.copy(amount = safeFloat)
-        }
+        val parsed = parseCentsAmountInput(input, entryFormState.isExpense)
+        amountInput = parsed.digits
+        entryFormState = entryFormState.copy(
+            amount = parsed.amount,
+            isExpense = parsed.isExpense
+        )
     }
 
-    fun updateEntry(state: EntryFormState, onComplete: () -> Unit) {
+    fun startEdit() {
+        lastLoadedEntity?.let { applyEntity(it) }
+        isEditMode = true
+    }
+
+    fun cancelEdit() {
+        lastLoadedEntity?.let { applyEntity(it) }
+        isEditMode = false
+    }
+
+    fun saveEdit() {
+        if (!entryFormState.isFilled()) return
         viewModelScope.launch {
-            entryRepository.saveEntry(state, entryId)
-            onComplete()
+            entryRepository.saveEntry(entryFormState, entryId)
+            isEditMode = false
         }
     }
 
@@ -98,12 +118,5 @@ class EntryDetailViewModel @Inject constructor(
                 onComplete()
             }
         }
-    }
-
-    fun toggleEditMode() {
-        viewModelScope.launch {
-            entryRepository.saveEntry(entryFormState, entryId)
-        }
-        isEditMode = !isEditMode
     }
 }

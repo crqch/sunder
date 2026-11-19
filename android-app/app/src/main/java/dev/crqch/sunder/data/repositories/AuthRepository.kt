@@ -6,8 +6,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.crqch.sunder.BuildConfig
+import dev.crqch.sunder.api.AuthRefreshTokenRequest
 import dev.crqch.sunder.api.DefaultApi
-import dev.crqch.sunder.models.AuthRefreshTokenTHN4OMARequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -70,8 +70,8 @@ class AuthRepository @Inject constructor(
         val refresh = refreshTokenFlow.first() ?: return null
 
         return try {
-            val response = api.authRefreshTokenTHN4OMA(
-                AuthRefreshTokenTHN4OMARequest(token = refresh)
+            val response = api.refreshToken(
+                AuthRefreshTokenRequest(token = refresh)
             )
             if (response.isSuccessful) {
                 val body = response.body()

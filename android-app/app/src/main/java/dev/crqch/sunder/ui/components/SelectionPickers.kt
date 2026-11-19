@@ -1,11 +1,16 @@
 package dev.crqch.sunder.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -19,10 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import dev.crqch.sunder.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.crqch.sunder.R
 
 @Composable
 fun SelectionSheet(
@@ -39,7 +44,7 @@ fun SelectionSheet(
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp)
         )
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
             item {
@@ -60,12 +65,14 @@ fun SelectionItem(
     label: String,
     isSelected: Boolean = false,
     icon: ImageVector? = null,
+    colorDot: Color? = null,
+    supportingText: String? = null,
     onClick: () -> Unit,
     isHighlight: Boolean = false
 ) {
     val containerColor = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer
-        isHighlight -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        isHighlight -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f)
         else -> Color.Transparent
     }
 
@@ -80,32 +87,55 @@ fun SelectionItem(
             Text(
                 text = label,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isSelected || isHighlight) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (isSelected || isHighlight) FontWeight.SemiBold else FontWeight.Normal,
                 color = contentColor
             )
         },
-        leadingContent = icon?.let {
+        supportingContent = supportingText?.let { sub ->
             {
-                Icon(
-                    it,
-                    contentDescription = null,
-                    tint = if (isSelected) contentColor else if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                Text(
+                    text = sub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        },
+        leadingContent = when {
+            colorDot != null -> {
+                {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(colorDot)
+                    )
+                }
+            }
+            icon != null -> {
+                {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) contentColor else if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            else -> null
         },
         trailingContent = if (isSelected) {
             {
                 Icon(
-                    Icons.Default.Check,
+                    imageVector = Icons.Default.Check,
                     contentDescription = stringResource(R.string.selected),
-                    tint = contentColor
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         } else null,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 2.dp),
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
         colors = ListItemDefaults.colors(
             containerColor = containerColor
         )

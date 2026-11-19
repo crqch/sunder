@@ -1,7 +1,5 @@
 package dev.crqch.sunder.ui.categories
 
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,11 +9,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.crqch.sunder.data.local.CategoryEntity
-import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.data.repositories.CategoryRepository
 import dev.crqch.sunder.data.repositories.EntryRepository
 import dev.crqch.sunder.ui.SubRoute
-import dev.crqch.sunder.ui.entries.EntryFormState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,35 +20,29 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlin.math.abs
-
 
 data class CategoryFormState(
     val title: String = "",
     val description: String = "",
-    val color: String = "#f3f3f3"
-
-
+    val color: String = "#6366f1"
 ) {
     companion object {
         fun ofCategory(category: CategoryEntity): CategoryFormState = CategoryFormState(
-            category.title,
-            category.description,
-            category.color
+            title = category.title,
+            description = category.description,
+            color = category.color.ifBlank { "#6366f1" }
         )
-
     }
 
     fun isFilled(): Boolean {
-        if (title.isBlank()) return false
-        return true
+        return title.isNotBlank()
     }
 
     fun toCategory(id: String, createdAt: Long, updatedAt: Long): CategoryEntity = CategoryEntity(
         id = id,
-        title = title,
-        description = description,
-        color = color,
+        title = title.trim(),
+        description = description.trim(),
+        color = color.ifBlank { "#6366f1" },
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -76,26 +66,26 @@ class CategoryViewModel @Inject constructor(
 
     val categoryId = categoryRoute?.categoryId
 
+    var categoryFormState by mutableStateOf(CategoryFormState())
+        private set
 
     fun updateForm(state: CategoryFormState) {
         categoryFormState = state
     }
-
-    var categoryFormState by mutableStateOf(CategoryFormState())
-        private set
 
     init {
         categoryId?.let { id ->
             viewModelScope.launch {
                 categoryRepository.getCategory(id).collect { entity ->
                     entity?.let {
-                        categoryFormState = CategoryFormState.ofCategory(it)
+                        if (!isEditMode) {
+                            categoryFormState = CategoryFormState.ofCategory(it)
+                        }
                     }
                 }
             }
         }
     }
-
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val category: StateFlow<CategoryEntity?> = flowOf(categoryId).flatMapLatest { id ->
@@ -115,6 +105,28 @@ class CategoryViewModel @Inject constructor(
         initialValue = listOf()
     )
 
+    fun startEdit() {
+        category.value?.let {
+            categoryFormState = CategoryFormState.ofCategory(it)
+        }
+        isEditMode = true
+    }
+
+    fun cancelEdit() {
+        category.value?.let {
+            categoryFormState = CategoryFormState.ofCategory(it)
+        }
+        isEditMode = false
+    }
+
+    fun saveEdit() {
+        if (!categoryFormState.isFilled()) return
+        viewModelScope.launch {
+            categoryRepository.saveCategory(categoryFormState, categoryId)
+            isEditMode = false
+        }
+    }
+
     fun delete(onComplete: () -> Unit) {
         categoryId?.let { id ->
             viewModelScope.launch {
@@ -122,12 +134,5 @@ class CategoryViewModel @Inject constructor(
                 onComplete()
             }
         }
-    }
-
-    fun toggleEditMode() {
-        viewModelScope.launch {
-            categoryRepository.saveCategory(categoryFormState, categoryId)
-        }
-        isEditMode = !isEditMode
     }
 }
