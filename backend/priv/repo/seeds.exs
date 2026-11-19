@@ -14,6 +14,8 @@
 alias Sunder.Accounts.{User, Invite}
 alias Sunder.Eco.{EcoUser}
 
+Sunder.Currencies.Catalog.sync_catalog!()
+
 case Sunder.Repo.insert(%User{
   email: "admin",
   username: "admin",

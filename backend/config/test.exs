@@ -20,3 +20,6 @@ config :sunder, SunderWeb.Endpoint,
 
 # Print only warnings and errors during test
 config :logger, level: :warn
+
+config :sunder, Sunder.Currencies.Poller, enabled: false
+config :sunder, :currency_fetch_on_demand, false

@@ -29,6 +29,12 @@ defmodule SunderWeb.Router do
     post("/auth/register/:invite", AuthController, :register)
     post("/auth/login", AuthController, :login)
     post("/auth/refresh_token", AuthController, :refresh_token)
+
+    get("/currencies", CurrencyController, :index)
+    get("/currencies/rates", CurrencyController, :rates)
+    get("/currencies/rates/history", CurrencyController, :history)
+    get("/currencies/convert", CurrencyController, :convert)
+    get("/currencies/:code", CurrencyController, :show)
   end
 
   scope "/dashboard", SunderWeb.Authed do
@@ -44,6 +50,8 @@ defmodule SunderWeb.Router do
     pipe_through(SunderWeb.Plugs.EcoUserPlug)
 
     post("/sync", SyncController, :sync)
+    get("/preferences", PreferencesController, :show)
+    put("/preferences", PreferencesController, :update)
   end
 
   scope "/dashboard/eco/data", SunderWeb do
@@ -68,6 +76,12 @@ defmodule SunderWeb.Router do
     get("/invites", AdminController, :list_invites)
     post("/invites", AdminController, :create_invite)
     delete("/invites/:id", AdminController, :delete_invite)
+
+    get("/currencies", AdminController, :list_currencies)
+    post("/currencies", AdminController, :create_currency)
+    put("/currencies/rates", AdminController, :upsert_rate)
+    post("/currencies/sync-rates", AdminController, :sync_rates)
+    put("/currencies/:code", AdminController, :update_currency)
   end
 
   # Other scopes may use custom stacks.

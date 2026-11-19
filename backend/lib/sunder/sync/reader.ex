@@ -8,6 +8,7 @@ defmodule SunderWeb.Sync.Reader do
     Ecto.Multi.run(multi, :reader, fn repo, %{upsert_sync: upsert_data} ->
       {:ok,
        %{
+         default_currency_code: eco_user.default_currency_code,
          accounts:
            process_domain(
              repo,

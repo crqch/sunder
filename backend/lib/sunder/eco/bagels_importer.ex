@@ -1,9 +1,13 @@
 defmodule Sunder.Eco.BagelsImporter do
   import Ecto.Query
+  alias Sunder.Contexts.Currencies
   alias Sunder.Repo
-  alias Sunder.Eco.{Account, Category, Entry}
+  alias Sunder.Eco.{Account, Category, EcoUser, Entry}
 
   def import_db(eco_user_id, db_path) do
+    eco_user = Repo.get(EcoUser, eco_user_id)
+    default_currency = (eco_user && eco_user.default_currency_code) || Currencies.canonical_base()
+
     # 1. Import Accounts
     bagel_accounts = read_json(db_path, "SELECT * FROM account")
     account_map = Enum.reduce(bagel_accounts, %{}, fn acc, acc_map ->
@@ -54,6 +58,7 @@ defmodule Sunder.Eco.BagelsImporter do
         date: date,
         title: rec["label"] || "Untitled",
         description: rec["tags"],
+        currency_code: default_currency,
         eco_user_id: eco_user_id,
         category_id: cat_map[rec["categoryId"]]
       }

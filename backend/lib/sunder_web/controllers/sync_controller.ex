@@ -28,6 +28,7 @@ defmodule SunderWeb.Authed.SyncController do
         %{
           type: :object,
           properties: %{
+            default_currency_code: %{type: :string},
             accounts: %{
               type: :array,
               items: %{
@@ -35,6 +36,7 @@ defmodule SunderWeb.Authed.SyncController do
                 properties: %{
                   id: %{type: :string},
                   name: %{type: :string},
+                  currency_code: %{type: :string, nullable: true},
                   eco_user_id: %{type: :string},
                   deleted_at: %{type: :string, format: :"date-time", nullable: true},
                   inserted_at: %{type: :string, format: :"date-time"},
@@ -66,6 +68,7 @@ defmodule SunderWeb.Authed.SyncController do
                   id: %{type: :string},
                   date: %{type: :string, format: :"date-time"},
                   amount: %{type: :number},
+                  currency_code: %{type: :string},
                   title: %{type: :string},
                   description: %{type: :string},
                   location: %{type: :string},
@@ -107,11 +110,21 @@ defmodule SunderWeb.Authed.SyncController do
       {:ok, data} ->
         conn |> put_status(200) |> json(data.reader)
 
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{error: reason})
-
       {:error, :guard, :txs_invalid_format, _} ->
         conn |> put_status(400) |> json(%{error: "txs_invalid_format"})
+
+      {:error, :upsert_sync, :currency_not_allowed, _} ->
+        conn |> put_status(400) |> json(%{error: "currency_not_allowed"})
+
+      {:error, :upsert_sync, %Ecto.Changeset{} = changeset, _} ->
+        errors = Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+        conn |> put_status(400) |> json(%{error: "validation_failed", details: errors})
+
+      {:error, _step, reason, _} ->
+        conn |> put_status(500) |> json(%{error: inspect(reason)})
+
+      {:error, reason} ->
+        conn |> put_status(500) |> json(%{error: inspect(reason)})
     end
   end
 

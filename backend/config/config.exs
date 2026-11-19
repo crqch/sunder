@@ -28,6 +28,16 @@ config :logger, :console,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Currency exchange rate polling & fetching
+config :sunder, Sunder.Currencies.Poller,
+  enabled: true,
+  initial_delay_ms: :timer.seconds(5),
+  poll_interval_ms: :timer.hours(24),
+  retry_interval_ms: :timer.minutes(30)
+
+config :sunder, :currency_fetcher, Sunder.Currencies.Fetcher
+config :sunder, :currency_fetch_on_demand, true
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{Mix.env()}.exs"

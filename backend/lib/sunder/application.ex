@@ -6,18 +6,22 @@ defmodule Sunder.Application do
   use Application
 
   def start(_type, _args) do
-    children = [
-      # Start the Ecto repository
-      Sunder.Repo,
-      # Start the Telemetry supervisor
-      SunderWeb.Telemetry,
-      # Start the PubSub system
-      {Phoenix.PubSub, name: Sunder.PubSub},
-      # Start the Endpoint (http/https)
-      SunderWeb.Endpoint
-      # Start a worker by calling: Sunder.Worker.start_link(arg)
-      # {Sunder.Worker, arg}
-    ]
+    poller_enabled =
+      Application.get_env(:sunder, Sunder.Currencies.Poller, [])
+      |> Keyword.get(:enabled, true)
+
+    children =
+      [
+        # Start the Ecto repository
+        Sunder.Repo,
+        # Start the Telemetry supervisor
+        SunderWeb.Telemetry,
+        # Start the PubSub system
+        {Phoenix.PubSub, name: Sunder.PubSub},
+        # Start the Endpoint (http/https)
+        SunderWeb.Endpoint
+      ] ++
+        if(poller_enabled, do: [Sunder.Currencies.Poller], else: [])
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
