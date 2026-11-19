@@ -272,6 +272,7 @@ impl SunderApp {
                 description: (!description_value.is_empty()).then_some(description_value),
                 location: (!location_value.is_empty()).then_some(location_value),
                 amount,
+                currency_code: self.settings.default_currency_code.clone(),
                 date: date_stamp,
                 deleted_at: None,
                 inserted_at: now(),

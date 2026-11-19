@@ -622,6 +622,7 @@ impl SunderApp {
             username: self.settings.username.clone(),
             email: self.settings.email.clone(),
             flags: self.settings.user_flags.clone(),
+            default_currency_code: self.settings.default_currency_code.clone(),
         });
         self.start_auto_sync(cx);
         self.sync_now(false, cx);
@@ -2335,18 +2336,33 @@ impl SunderApp {
                 }
                 if let Some(profile) = profile {
                     self.settings.username = profile.username.clone();
-                    let email = self
-                        .user
-                        .as_ref()
-                        .map(|user| user.email.clone())
-                        .unwrap_or_else(|| self.settings.email.clone());
+                    let email = if !profile.email.is_empty() {
+                        profile.email.clone()
+                    } else {
+                        self.user
+                            .as_ref()
+                            .map(|user| user.email.clone())
+                            .unwrap_or_else(|| self.settings.email.clone())
+                    };
+                    self.settings.email = email.clone();
                     self.settings.user_flags = profile.flags.clone();
+                    let default_currency_code =
+                        crate::model::normalize_currency_code(&profile.default_currency_code);
+                    self.settings.default_currency_code = default_currency_code.clone();
                     self.user = Some(crate::model::User {
                         username: profile.username,
                         email,
                         flags: profile.flags,
+                        default_currency_code,
                     });
                     self.profile_loaded = true;
+                }
+                if let Some(code) = response.default_currency_code.clone() {
+                    let normalized = crate::model::normalize_currency_code(&code);
+                    self.settings.default_currency_code = normalized.clone();
+                    if let Some(user) = self.user.as_mut() {
+                        user.default_currency_code = normalized;
+                    }
                 }
                 self.snapshot.apply_sync_response(response);
                 self.settings.last_sync = Some(sync_start);

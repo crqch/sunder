@@ -416,6 +416,7 @@ mod tests {
             description: Some("Morning coffee run".into()),
             location: Some("Corner Cafe".into()),
             amount,
+            currency_code: crate::model::default_currency_code(),
             date: date.into(),
             deleted_at: None,
             inserted_at: date.into(),
