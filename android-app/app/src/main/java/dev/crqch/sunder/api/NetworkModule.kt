@@ -54,4 +54,22 @@ object NetworkModule {
     fun provideSyncApi(retrofit: Retrofit): SyncApi {
         return retrofit.create(SyncApi::class.java)
     }
+
+    @Provides
+    @Singleton
+    fun provideCurrencyApi(retrofit: Retrofit): CurrencyApi {
+        return retrofit.create(CurrencyApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun providePreferencesApi(retrofit: Retrofit): PreferencesApi {
+        return retrofit.create(PreferencesApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAdminApi(retrofit: Retrofit): AdminApi {
+        return retrofit.create(AdminApi::class.java)
+    }
     }

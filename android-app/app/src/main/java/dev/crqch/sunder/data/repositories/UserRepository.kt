@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.crqch.sunder.api.DefaultApi
 import dev.crqch.sunder.data.local.User
 import dev.crqch.sunder.data.sync.SyncManager
+import dev.crqch.sunder.utils.normalizeCurrencyCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +28,7 @@ class UserRepository @Inject constructor(
     private val api: DefaultApi,
     private val syncManager: SyncManager,
     private val syncRepository: SyncRepository,
+    private val preferencesRepository: PreferencesRepository,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -60,9 +62,11 @@ class UserRepository @Inject constructor(
                 val user = User(
                     username = body.username ?: "",
                     email = body.email ?: "",
-                    flags = body.flags ?: emptyList()
+                    flags = body.flags ?: emptyList(),
+                    defaultCurrencyCode = normalizeCurrencyCode(body.defaultCurrencyCode)
                 )
                 saveUserLocal(user)
+                preferencesRepository.setDefaultCurrencyCode(user.defaultCurrencyCode)
                 syncManager.triggerSync()
                 syncManager.schedulePeriodicSync()
             } else if (res.code() == 401 || res.code() == 403) {

@@ -4,7 +4,9 @@ import dev.crqch.sunder.data.local.EntryDao
 import dev.crqch.sunder.data.local.EntryEntity
 import dev.crqch.sunder.data.local.EntryWithDetails
 import dev.crqch.sunder.ui.entries.EntryFormState
+import dev.crqch.sunder.utils.CANONICAL_BASE_CURRENCY
 import dev.crqch.sunder.utils.Cuid2
+import dev.crqch.sunder.utils.normalizeCurrencyCode
 import dev.crqch.sunder.data.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -52,7 +54,8 @@ class EntryRepository @Inject constructor(
         amount: Float,
         accountId: String,
         categoryId: String,
-        date: Long
+        date: Long,
+        currencyCode: String = CANONICAL_BASE_CURRENCY
     ) {
         val now = Instant.now().toEpochMilli()
         entryDao.upsert(
@@ -60,13 +63,18 @@ class EntryRepository @Inject constructor(
                 Cuid2.generate(),
                 title, date,
                 "",
-                amount, accountId, categoryId, description, createdAt = now, updatedAt = now
+                amount, accountId, categoryId, description, createdAt = now, updatedAt = now,
+                currencyCode = normalizeCurrencyCode(currencyCode)
             )
         )
         syncManager.triggerSync()
     }
 
-    suspend fun saveEntry(state: EntryFormState, id: String? = null) {
+    suspend fun saveEntry(
+        state: EntryFormState,
+        id: String? = null,
+        currencyCode: String? = null
+    ) {
         val now = System.currentTimeMillis()
 
         if (id == null) {
@@ -75,7 +83,9 @@ class EntryRepository @Inject constructor(
                 createdAt = now,
                 updatedAt = now
             )
-            entryDao.upsert(entry)
+            entryDao.upsert(
+                entry.copy(currencyCode = normalizeCurrencyCode(currencyCode ?: entry.currencyCode))
+            )
         } else {
             val existing = entryDao.getEntryByIdDirect(id)
             val updated = state.toEntry(
@@ -83,7 +93,10 @@ class EntryRepository @Inject constructor(
                 createdAt = existing?.createdAt ?: now,
                 updatedAt = now
             )
-            entryDao.upsert(updated)
+            val resolvedCurrency = currencyCode
+                ?: existing?.currencyCode
+                ?: updated.currencyCode
+            entryDao.upsert(updated.copy(currencyCode = normalizeCurrencyCode(resolvedCurrency)))
         }
         syncManager.triggerSync()
     }
@@ -103,6 +116,20 @@ class EntryRepository @Inject constructor(
     suspend fun deleteEntries(ids: List<String>) {
         if (ids.isEmpty()) return
         entryDao.softDeleteAll(ids)
+        syncManager.triggerSync()
+    }
+
+    /**
+     * Re-labels entries to another currency without touching their numeric amount,
+     * then queues a sync so the change reaches every other client.
+     */
+    suspend fun updateEntriesCurrency(ids: List<String>, currencyCode: String) {
+        if (ids.isEmpty()) return
+        entryDao.updateCurrency(
+            ids = ids,
+            currencyCode = normalizeCurrencyCode(currencyCode),
+            timestamp = System.currentTimeMillis()
+        )
         syncManager.triggerSync()
     }
 

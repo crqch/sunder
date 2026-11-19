@@ -1,6 +1,7 @@
 package dev.crqch.sunder.di
 
 import android.content.Context
+import androidx.room.Room
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -8,7 +9,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.crqch.sunder.data.local.AccountDao
 import dev.crqch.sunder.data.local.CategoryDao
+import dev.crqch.sunder.data.local.CurrencyDao
 import dev.crqch.sunder.data.local.EntryDao
+import dev.crqch.sunder.data.local.ExchangeRateDao
 import dev.crqch.sunder.data.local.SunderDatabase
 import dev.crqch.sunder.data.local.SyncMetadataDao
 import javax.inject.Singleton
@@ -20,7 +23,13 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): SunderDatabase {
-        return SunderDatabase.getDatabase(context)
+        return Room.databaseBuilder(
+            context.applicationContext,
+            SunderDatabase::class.java,
+            SunderDatabase.DATABASE_NAME
+        )
+            .addMigrations(SunderDatabase.MIGRATION_3_4)
+            .build()
     }
 
     @Provides
@@ -41,5 +50,15 @@ object DatabaseModule {
     @Provides
     fun provideSyncMetadataDao(database: SunderDatabase): SyncMetadataDao {
         return database.syncMetadataDao()
+    }
+
+    @Provides
+    fun provideCurrencyDao(database: SunderDatabase): CurrencyDao {
+        return database.currencyDao()
+    }
+
+    @Provides
+    fun provideExchangeRateDao(database: SunderDatabase): ExchangeRateDao {
+        return database.exchangeRateDao()
     }
 }

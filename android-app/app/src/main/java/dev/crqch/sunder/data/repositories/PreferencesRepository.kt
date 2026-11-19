@@ -9,10 +9,12 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import dev.crqch.sunder.utils.normalizeCurrencyCode
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,6 +31,7 @@ data class AppSettings(
     val dynamicColor: Boolean = false,
     val currencySymbol: String = "",
     val currencyAfter: Boolean = false,
+    val defaultCurrencyCode: String = "USD",
     val autoSyncEnabled: Boolean = true,
     val autoSyncIntervalMinutes: Long = 60L
 )
@@ -44,9 +47,13 @@ class PreferencesRepository @Inject constructor(
         private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         private val CURRENCY_SYMBOL = stringPreferencesKey("currency_symbol")
         private val CURRENCY_AFTER = booleanPreferencesKey("currency_after")
+        private val DEFAULT_CURRENCY_CODE = stringPreferencesKey("default_currency_code")
         private val AUTO_SYNC_ENABLED = booleanPreferencesKey("auto_sync_enabled")
         private val AUTO_SYNC_INTERVAL = longPreferencesKey("auto_sync_interval")
     }
+
+    val defaultCurrencyCode: Flow<String> = context.settingsDataStore.data
+        .map { prefs -> normalizeCurrencyCode(prefs[DEFAULT_CURRENCY_CODE]) }
 
     val settings: StateFlow<AppSettings> = context.settingsDataStore.data
         .map { prefs ->
@@ -59,6 +66,7 @@ class PreferencesRepository @Inject constructor(
                 dynamicColor = prefs[DYNAMIC_COLOR] ?: false,
                 currencySymbol = prefs[CURRENCY_SYMBOL] ?: "",
                 currencyAfter = prefs[CURRENCY_AFTER] ?: false,
+                defaultCurrencyCode = normalizeCurrencyCode(prefs[DEFAULT_CURRENCY_CODE]),
                 autoSyncEnabled = prefs[AUTO_SYNC_ENABLED] ?: true,
                 autoSyncIntervalMinutes = prefs[AUTO_SYNC_INTERVAL] ?: 60L
             )
@@ -83,6 +91,18 @@ class PreferencesRepository @Inject constructor(
 
     suspend fun setCurrencyAfter(after: Boolean) {
         context.settingsDataStore.edit { it[CURRENCY_AFTER] = after }
+    }
+
+    /** Updates the legacy symbol/position settings so existing screens keep working. */
+    suspend fun setCurrencyMetadata(symbol: String, symbolAfter: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[CURRENCY_SYMBOL] = symbol.take(5)
+            prefs[CURRENCY_AFTER] = symbolAfter
+        }
+    }
+
+    suspend fun setDefaultCurrencyCode(code: String) {
+        context.settingsDataStore.edit { it[DEFAULT_CURRENCY_CODE] = normalizeCurrencyCode(code) }
     }
 
     suspend fun setAutoSyncEnabled(enabled: Boolean) {

@@ -1,5 +1,6 @@
 package dev.crqch.sunder.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -16,5 +17,8 @@ data class EntryEntity(
 
     override val createdAt: Long,
     override val updatedAt: Long,
-    override val deletedAt: Long? = null
+    override val deletedAt: Long? = null,
+
+    @ColumnInfo(name = "currency_code", defaultValue = "USD")
+    val currencyCode: String = "USD"
 ) : Timestamps

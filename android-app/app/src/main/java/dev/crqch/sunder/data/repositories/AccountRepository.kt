@@ -7,6 +7,7 @@ import dev.crqch.sunder.data.local.CategoryEntity
 import dev.crqch.sunder.ui.accounts.AccountFormState
 import dev.crqch.sunder.ui.categories.CategoryFormState
 import dev.crqch.sunder.utils.Cuid2
+import dev.crqch.sunder.utils.normalizeCurrencyCode
 import dev.crqch.sunder.data.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -24,29 +25,36 @@ class AccountRepository @Inject constructor(
 
     suspend fun getAccount(id: String): Flow<AccountEntity?> = accountDao.getAccount(id)
 
-    suspend fun createAccount(name: String) {
+    suspend fun createAccount(name: String, currencyCode: String? = null) {
         val now = System.currentTimeMillis()
         val account = AccountEntity(
             id = Cuid2.generate(),
             name = name,
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            currencyCode = currencyCode?.let { normalizeCurrencyCode(it) }
         )
         accountDao.insert(account)
         syncManager.triggerSync()
     }
 
 
-    suspend fun saveAccount(state: AccountFormState, id: String?) {
+    suspend fun saveAccount(
+        state: AccountFormState,
+        id: String?,
+        currencyCode: String? = null
+    ) {
         val now = System.currentTimeMillis()
 
         if (id == null) {
-            val entry = state.toAccount(
+            val account = state.toAccount(
                 id = Cuid2.generate(),
                 createdAt = now,
                 updatedAt = now
             )
-            accountDao.upsert(entry)
+            accountDao.upsert(
+                account.copy(currencyCode = currencyCode?.let { normalizeCurrencyCode(it) })
+            )
         } else {
             val existing = accountDao.getAccountById(id)
             val updated = state.toAccount(
@@ -54,7 +62,12 @@ class AccountRepository @Inject constructor(
                 createdAt = existing?.createdAt ?: now,
                 updatedAt = now
             )
-            accountDao.upsert(updated)
+            accountDao.upsert(
+                updated.copy(
+                    currencyCode = (currencyCode ?: existing?.currencyCode)
+                        ?.let { normalizeCurrencyCode(it) }
+                )
+            )
         }
         syncManager.triggerSync()
     }

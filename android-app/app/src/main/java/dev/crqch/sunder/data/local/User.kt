@@ -6,5 +6,9 @@ import kotlinx.serialization.Serializable
 data class User(
     val username: String,
     val email: String,
-    val flags: List<String>
-)
+    val flags: List<String>,
+    val defaultCurrencyCode: String = "USD"
+) {
+    val isAdmin: Boolean
+        get() = flags.contains("is_admin")
+}

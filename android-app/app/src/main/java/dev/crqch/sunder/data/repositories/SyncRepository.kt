@@ -5,6 +5,7 @@ import androidx.room.withTransaction
 import dev.crqch.sunder.api.SyncApi
 import dev.crqch.sunder.data.local.*
 import dev.crqch.sunder.data.sync.*
+import dev.crqch.sunder.utils.normalizeCurrencyCode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +23,9 @@ class SyncRepository @Inject constructor(
     private val accountDao: AccountDao,
     private val categoryDao: CategoryDao,
     private val entryDao: EntryDao,
-    private val syncMetadataDao: SyncMetadataDao
+    private val syncMetadataDao: SyncMetadataDao,
+    private val preferencesRepository: PreferencesRepository,
+    private val currencyRepository: CurrencyRepository
 ) {
     private val formatter = DateTimeFormatter.ISO_INSTANT.withZone(ZoneOffset.UTC)
 
@@ -71,6 +74,8 @@ class SyncRepository @Inject constructor(
                         )
                     )
                 }
+
+                syncCurrencyData(data.defaultCurrencyCode)
             } else {
                 Log.e(
                     "SyncRepository",
@@ -95,6 +100,26 @@ class SyncRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Refreshes the currency catalog and historical rates after a successful sync.
+     * Every step is best-effort so an offline device never fails the data sync.
+     */
+    private suspend fun syncCurrencyData(defaultCurrencyCode: String?) {
+        runCatching { currencyRepository.refreshCurrencies() }
+
+        if (defaultCurrencyCode != null) {
+            val normalized = normalizeCurrencyCode(defaultCurrencyCode)
+            runCatching {
+                preferencesRepository.setDefaultCurrencyCode(normalized)
+                currencyRepository.getCurrency(normalized)?.let {
+                    preferencesRepository.setCurrencyMetadata(it.symbol, it.symbolAfter)
+                }
+            }
+        }
+
+        runCatching { currencyRepository.refreshRates() }
     }
 
     suspend fun resetSync() {
