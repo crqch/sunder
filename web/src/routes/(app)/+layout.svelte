@@ -8,6 +8,7 @@
   import ThemeButton from '$components/ThemeButton.svelte';
   import SyncIndicator from '$components/SyncIndicator.svelte';
   import { themeStore } from '$lib/themeStore';
+  import { currencyStore } from '$lib/currency.svelte';
   import { Toaster } from 'svelte-sonner';
 
   let { children } = $props();
@@ -15,6 +16,21 @@
   $effect(() => {
     if (!$authStore.loading && !$authStore.isAuthenticated) {
       goto('/auth/sign-in');
+    }
+  });
+
+  let currencyInitialized = false;
+  $effect(() => {
+    if ($authStore.isAuthenticated) {
+      if ($authStore.user?.default_currency_code) {
+        currencyStore.setDefaultCurrencyLocal($authStore.user.default_currency_code);
+      }
+      if (!currencyInitialized) {
+        currencyInitialized = true;
+        currencyStore.syncAllCurrencyData();
+      }
+    } else {
+      currencyInitialized = false;
     }
   });
 

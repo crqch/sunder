@@ -1,5 +1,6 @@
 import { db } from '$lib/db';
-import { authenticatedFetch } from '$lib/auth';
+import { authenticatedFetch, authStore } from '$lib/auth';
+import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
 const LAST_SYNC_KEY = 'sunder_last_sync_timestamp';
 const EPOCH = '1970-01-01T00:00:00.000Z';
@@ -25,9 +26,16 @@ export async function syncAll() {
   }
 
   const payload = {
-    accounts,
+    accounts: accounts.map((a) => ({
+      ...a,
+      currency_code: a.currency_code ? normalizeCurrencyCode(a.currency_code) : null
+    })),
     categories,
-    entries: entries.map((e) => ({ ...e, date: e.date || e.created_at }))
+    entries: entries.map((e) => ({
+      ...e,
+      currency_code: normalizeCurrencyCode(e.currency_code),
+      date: e.date || e.created_at
+    }))
   };
 
   const res = await authenticatedFetch(`/dashboard/eco/sync?last=${encodeURIComponent(lastSync)}`, {
@@ -45,17 +53,44 @@ export async function syncAll() {
 
   await db.transaction('rw', db.accounts, db.entry_categories, db.account_entries, async () => {
     if (serverData.accounts?.length) {
-      await db.accounts.bulkPut(serverData.accounts);
+      await db.accounts.bulkPut(
+        serverData.accounts.map((a: Record<string, unknown>) => ({
+          ...a,
+          currency_code:
+            typeof a.currency_code === 'string' ? normalizeCurrencyCode(a.currency_code) : null
+        }))
+      );
     }
     if (serverData.categories?.length) {
       await db.entry_categories.bulkPut(serverData.categories);
     }
     if (serverData.entries?.length) {
-      await db.account_entries.bulkPut(serverData.entries);
+      await db.account_entries.bulkPut(
+        serverData.entries.map((e: Record<string, unknown>) => ({
+          ...e,
+          currency_code: normalizeCurrencyCode(
+            typeof e.currency_code === 'string' ? e.currency_code : null
+          )
+        }))
+      );
     }
   });
 
+  if (serverData.default_currency_code) {
+    const code = normalizeCurrencyCode(serverData.default_currency_code);
+    currencyStore.setDefaultCurrencyLocal(code);
+    authStore.update((s) =>
+      s.user ? { ...s, user: { ...s.user, default_currency_code: code } } : s
+    );
+  }
+
   localStorage.setItem(LAST_SYNC_KEY, now);
+
+  // Refresh server-allowed currencies and historical exchange rates (non-blocking for data sync)
+  currencyStore.syncAllCurrencyData().catch((err) => {
+    console.warn('Currency data refresh failed during sync', err);
+  });
+
   return serverData;
 }
 
