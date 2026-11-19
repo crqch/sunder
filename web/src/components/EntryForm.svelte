@@ -6,7 +6,9 @@
   import { toast } from 'svelte-sonner';
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
+  import CurrencySelect from '$components/CurrencySelect.svelte';
   import DatePicker from '$components/DatePicker.svelte';
+  import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
   import { createId } from '@paralleldrive/cuid2';
 
   let {
@@ -42,6 +44,8 @@
   let isIncome = $state(false);
   let account_id = $state<string>(initialAccountId || '');
   let category_id = $state<string>(initialCategoryId || '');
+  let currency_code = $state<string>(currencyStore.defaultCurrencyCode);
+  let currencyManuallyChosen = $state(false);
 
   let entryDateObj = $state<Date | null>(new Date());
 
@@ -74,6 +78,17 @@
       subAcc.unsubscribe();
       subCat.unsubscribe();
     };
+  });
+
+  $effect(() => {
+    if (!currencyManuallyChosen && account_id) {
+      const selectedAcc = accounts.find((a) => a.id === account_id);
+      if (selectedAcc?.currency_code) {
+        currency_code = normalizeCurrencyCode(selectedAcc.currency_code);
+      } else {
+        currency_code = currencyStore.defaultCurrencyCode;
+      }
+    }
   });
 
   function handleAmountInput(e: Event) {
@@ -118,6 +133,7 @@
     const now = new Date().toISOString();
     const transactionDate = entryDateObj ? entryDateObj.toISOString() : new Date().toISOString();
     const id = createId();
+    const normalizedCurrency = normalizeCurrencyCode(currency_code);
     const newEntry = {
       id,
       account_id,
@@ -126,6 +142,7 @@
       description: description.trim() || null,
       location: location.trim() || null,
       amount,
+      currency_code: normalizedCurrency,
       date: transactionDate,
       deleted_at: null,
       created_at: now,
@@ -133,6 +150,9 @@
     };
 
     await db.account_entries.add(newEntry);
+    if (normalizedCurrency !== currencyStore.defaultCurrencyCode) {
+      currencyStore.refreshRatesForEntries().catch(() => {});
+    }
     onsuccess(id);
   }
 </script>
@@ -159,21 +179,28 @@
     </button>
   </div>
 
-  <div class="space-y-1.5">
-    <label class="text-foreground block text-sm font-medium">Amount</label>
-    <div class="relative">
-      <input
-        type="text"
-        inputmode="decimal"
-        bind:value={amountStr}
-        oninput={handleAmountInput}
-        class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-2xl font-medium transition-all focus:ring-2 focus:outline-none {isIncome
-          ? 'text-emerald-500'
-          : 'text-destructive'}"
-        placeholder="0.00"
-        required
-        autofocus
-      />
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div class="space-y-1.5 sm:col-span-2">
+      <label class="text-foreground block text-sm font-medium">Amount</label>
+      <div class="relative">
+        <input
+          type="text"
+          inputmode="decimal"
+          bind:value={amountStr}
+          oninput={handleAmountInput}
+          class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-2xl font-medium transition-all focus:ring-2 focus:outline-none {isIncome
+            ? 'text-emerald-500'
+            : 'text-destructive'}"
+          placeholder="0.00"
+          required
+          autofocus
+        />
+      </div>
+    </div>
+
+    <div class="space-y-1.5">
+      <label class="text-foreground block text-sm font-medium">Currency</label>
+      <CurrencySelect bind:value={currency_code} onchange={() => (currencyManuallyChosen = true)} />
     </div>
   </div>
 

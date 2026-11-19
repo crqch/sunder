@@ -2,6 +2,8 @@
   import { db } from '$lib/db';
   import { Save } from '@lucide/svelte';
   import { createId } from '@paralleldrive/cuid2';
+  import CurrencySelect from '$components/CurrencySelect.svelte';
+  import { normalizeCurrencyCode } from '$lib/currency.svelte';
 
   let {
     onsuccess,
@@ -14,9 +16,10 @@
   }>();
 
   let name = $state('');
+  let currencyCode = $state('');
 
   $effect(() => {
-    isDirty = name.trim() !== '';
+    isDirty = name.trim() !== '' || currencyCode !== '';
   });
 
   async function saveAccount(e: Event) {
@@ -27,7 +30,8 @@
     const id = createId();
     const newAccount = {
       id,
-      name,
+      name: name.trim(),
+      currency_code: currencyCode ? normalizeCurrencyCode(currencyCode) : null,
       deleted_at: null,
       created_at: now,
       updated_at: now
@@ -49,6 +53,15 @@
       placeholder="e.g. Checking, Savings, Cash"
       required
       autofocus
+    />
+  </div>
+
+  <div class="space-y-1.5">
+    <label class="text-foreground block text-sm font-medium">Default Currency (Optional)</label>
+    <CurrencySelect
+      bind:value={currencyCode}
+      allowEmpty={true}
+      emptyLabel="Use account owner's default currency"
     />
   </div>
 

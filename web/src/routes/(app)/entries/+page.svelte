@@ -2,9 +2,11 @@
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
   import type { AccountEntry, Account, EntryCategory } from '$lib/types';
-  import { Plus, Filter, SortDesc, SortAsc, Search, X, Trash2, Check } from '@lucide/svelte';
+  import { Plus, Filter, SortDesc, SortAsc, Search, X, Trash2, Check, Coins } from '@lucide/svelte';
   import { modals } from '$lib/modals.svelte';
   import { tooltip } from '$lib/tooltip';
+  import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
+  import { toast } from 'svelte-sonner';
 
   let entries = $state<AccountEntry[]>([]);
   let accounts = $state<Account[]>([]);
@@ -30,13 +32,15 @@
 
   import MultiSelect from '$components/MultiSelect.svelte';
   import Select from '$components/Select.svelte';
+  import CurrencySelect from '$components/CurrencySelect.svelte';
   import DatePicker from '$components/DatePicker.svelte';
   import Modal from '$components/Modal.svelte';
 
   // Filters state
   let searchQuery = $state('');
-  let selectedAccounts = $state<number[]>([]);
-  let selectedCategories = $state<number[]>([]);
+  let selectedAccounts = $state<any[]>([]);
+  let selectedCategories = $state<any[]>([]);
+  let selectedCurrency = $state<string>('');
   let minAmount = $state<number | null>(null);
   let maxAmount = $state<number | null>(null);
   let startDate = $state<Date | null>(null);
@@ -65,6 +69,14 @@
       // Categories
       if (selectedCategories.length > 0 && !selectedCategories.includes(e.category_id))
         return false;
+
+      // Currency
+      if (
+        selectedCurrency &&
+        normalizeCurrencyCode(e.currency_code) !== normalizeCurrencyCode(selectedCurrency)
+      ) {
+        return false;
+      }
 
       // Amount
       if (minAmount !== null && e.amount < minAmount) return false;
@@ -96,7 +108,10 @@
       if (sortField === 'date')
         cmp =
           new Date(a.date || a.created_at).getTime() - new Date(b.date || b.created_at).getTime();
-      else if (sortField === 'amount') cmp = Math.abs(a.amount) - Math.abs(b.amount);
+      else if (sortField === 'amount')
+        cmp =
+          Math.abs(currencyStore.convertEntryToDefault(a)) -
+          Math.abs(currencyStore.convertEntryToDefault(b));
       else if (sortField === 'title') cmp = a.title.localeCompare(b.title);
 
       return sortDirection === 'desc' ? -cmp : cmp;
@@ -119,6 +134,7 @@
     searchQuery = '';
     selectedAccounts = [];
     selectedCategories = [];
+    selectedCurrency = '';
     minAmount = null;
     maxAmount = null;
     startDate = null;
@@ -130,6 +146,9 @@
     filteredEntries.length > 0 && selectedIds.length === filteredEntries.length
   );
   let deleteModalOpen = $state(false);
+  let currencyModalOpen = $state(false);
+  let bulkCurrencyCode = $state<string>(currencyStore.defaultCurrencyCode);
+  let updatingCurrency = $state(false);
 
   function toggleSelectAll() {
     if (allSelected) {
@@ -152,6 +171,34 @@
 
   function confirmDelete() {
     deleteModalOpen = true;
+  }
+
+  function openBulkCurrencyModal() {
+    bulkCurrencyCode = currencyStore.defaultCurrencyCode;
+    currencyModalOpen = true;
+  }
+
+  async function executeBulkCurrencyChange() {
+    if (selectedIds.length === 0 || !bulkCurrencyCode) return;
+    updatingCurrency = true;
+    try {
+      const targetCode = normalizeCurrencyCode(bulkCurrencyCode);
+      const now = new Date().toISOString();
+      const count = selectedIds.length;
+      await db.account_entries
+        .where('id')
+        .anyOf(selectedIds)
+        .modify({ currency_code: targetCode, updated_at: now });
+      selectedIds = [];
+      currencyModalOpen = false;
+      toast.success(`Updated ${count} ${count === 1 ? 'entry' : 'entries'} to ${targetCode}`);
+      currencyStore.refreshRatesForEntries().catch(() => {});
+    } catch (err) {
+      console.error('Failed to bulk update currency', err);
+      toast.error('Failed to update entry currencies');
+    } finally {
+      updatingCurrency = false;
+    }
   }
 
   async function executeDelete() {
@@ -260,13 +307,13 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
           <!-- Accounts Filter -->
           <div class="relative z-10 space-y-2">
             <label class="text-muted-foreground text-sm font-medium">Accounts</label>
             <MultiSelect
               bind:value={selectedAccounts}
-              options={accounts}
+              options={accounts as any}
               placeholder="All Accounts"
             />
           </div>
@@ -276,8 +323,18 @@
             <label class="text-muted-foreground text-sm font-medium">Categories</label>
             <MultiSelect
               bind:value={selectedCategories}
-              options={categories}
+              options={categories.map((c) => ({ id: c.id, name: c.title, color: c.color })) as any}
               placeholder="All Categories"
+            />
+          </div>
+
+          <!-- Currency Filter -->
+          <div class="relative space-y-2">
+            <label class="text-muted-foreground text-sm font-medium">Currency</label>
+            <CurrencySelect
+              bind:value={selectedCurrency}
+              allowEmpty={true}
+              emptyLabel="All Currencies"
             />
           </div>
         </div>
@@ -301,7 +358,9 @@
     </div>
   {:else}
     <div class="flex flex-col gap-3">
-      <div class="text-muted-foreground flex items-center justify-between px-2 text-xs font-medium">
+      <div
+        class="text-muted-foreground flex flex-wrap items-center justify-between gap-2 px-2 text-xs font-medium"
+      >
         <label class="group flex cursor-pointer items-center gap-2.5 text-sm font-medium">
           <div
             class="relative flex h-5 w-5 items-center justify-center rounded border-2 transition-all {allSelected
@@ -320,15 +379,30 @@
         </label>
 
         {#if selectedIds.length > 0}
-          <button
-            onclick={confirmDelete}
-            class="btn btn-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 gap-1.5"
-          >
-            <Trash2 size={14} /> Delete Selected ({selectedIds.length})
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick={openBulkCurrencyModal} class="btn btn-outline btn-sm h-8 gap-1.5">
+              <Coins size={14} /> Change Currency ({selectedIds.length})
+            </button>
+            <button
+              onclick={confirmDelete}
+              class="btn btn-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 gap-1.5"
+            >
+              <Trash2 size={14} /> Delete Selected ({selectedIds.length})
+            </button>
+          </div>
         {/if}
       </div>
-      {#each filteredEntries as entry}
+      {#each filteredEntries as entry (entry.id)}
+        {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
+        {@const isForeign = entryCode !== currencyStore.defaultCurrencyCode}
+        {@const converted = isForeign
+          ? currencyStore.tryConvert(
+              entry.amount,
+              entryCode,
+              currencyStore.defaultCurrencyCode,
+              entry.date || entry.created_at
+            )
+          : null}
         <a
           href="/entries/{entry.id}"
           onclick={(e) => handleCardClick(e, entry.id)}
@@ -370,6 +444,11 @@
                   <span class="text-muted-foreground text-xs"
                     >{new Date(entry.date || entry.created_at).toLocaleDateString()}</span
                   >
+                  <span
+                    class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+                  >
+                    {entryCode}
+                  </span>
                 </div>
               </div>
             </div>
@@ -379,13 +458,53 @@
                   ? 'text-emerald-500'
                   : 'text-destructive'}"
               >
-                {entry.amount > 0 ? '+' : ''}{entry.amount.toFixed(2)}
+                {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
               </p>
+              {#if converted?.converted}
+                <p class="text-muted-foreground text-xs">
+                  ≈ {currencyStore.formatAmount(
+                    converted.amount,
+                    currencyStore.defaultCurrencyCode,
+                    {
+                      showPlus: true
+                    }
+                  )}
+                </p>
+              {/if}
             </div>
           </div>
         </a>
       {/each}
     </div>
+
+    <Modal bind:open={currencyModalOpen} title="Change Entry Currency">
+      <div class="space-y-4">
+        <p class="text-muted-foreground text-sm">
+          Change the currency tag for
+          <strong class="text-foreground font-semibold">{selectedIds.length}</strong>
+          selected {selectedIds.length === 1 ? 'entry' : 'entries'}. Numeric amounts stay as-is
+          (useful for reassigning migrated entries).
+        </p>
+
+        <div class="space-y-1.5">
+          <label class="text-foreground block text-sm font-medium">Target Currency</label>
+          <CurrencySelect bind:value={bulkCurrencyCode} />
+        </div>
+
+        <div class="flex flex-col gap-2 pt-2 sm:flex-row">
+          <button
+            onclick={executeBulkCurrencyChange}
+            disabled={updatingCurrency || !bulkCurrencyCode}
+            class="btn flex-1 disabled:opacity-50"
+          >
+            {updatingCurrency ? 'Updating...' : `Set to ${bulkCurrencyCode || '...'}`}
+          </button>
+          <button onclick={() => (currencyModalOpen = false)} class="btn-outline flex-1">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </Modal>
 
     <Modal bind:open={deleteModalOpen} title="Delete Entries">
       <div class="space-y-4">

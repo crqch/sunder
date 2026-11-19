@@ -8,8 +8,9 @@
   import { toast } from 'svelte-sonner';
   import Modal from '$components/Modal.svelte';
   import EntryForm from '$components/EntryForm.svelte';
+  import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
-  let id = $derived($page.params.id);
+  let id = $derived($page.params.id || '');
 
   let category = $state<EntryCategory | null>(null);
   let entries = $state<AccountEntry[]>([]);
@@ -85,9 +86,13 @@
     editing = false;
   }
 
-  function getAccountName(accId: number) {
+  function getAccountName(accId: string) {
     return accounts.find((a) => a.id === accId)?.name || 'Unknown';
   }
+
+  let categoryTotal = $derived(
+    entries.reduce((sum, e) => sum + currencyStore.convertEntryToDefault(e), 0)
+  );
 </script>
 
 {#if !category}
@@ -165,6 +170,21 @@
       {/if}
     </div>
 
+    <div class="bg-card border-border/50 rounded-xl border p-6 shadow-sm">
+      <h2 class="text-muted-foreground mb-1 text-sm font-medium">
+        Total ({currencyStore.defaultCurrencyCode})
+      </h2>
+      <p
+        class="text-3xl font-bold tracking-tight {categoryTotal >= 0
+          ? 'text-emerald-500'
+          : 'text-destructive'}"
+      >
+        {currencyStore.formatAmount(categoryTotal, currencyStore.defaultCurrencyCode, {
+          showPlus: true
+        })}
+      </p>
+    </div>
+
     <div class="pt-4">
       <div class="border-border/50 mb-4 flex items-center justify-between border-b pb-2">
         <h2 class="text-lg font-semibold tracking-tight">Transactions</h2>
@@ -181,7 +201,17 @@
         </div>
       {:else}
         <div class="space-y-2">
-          {#each entries as entry}
+          {#each entries as entry (entry.id)}
+            {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
+            {@const isForeign = entryCode !== currencyStore.defaultCurrencyCode}
+            {@const converted = isForeign
+              ? currencyStore.tryConvert(
+                  entry.amount,
+                  entryCode,
+                  currencyStore.defaultCurrencyCode,
+                  entry.date || entry.created_at
+                )
+              : null}
             <a
               href="/entries/{entry.id}"
               class="group bg-card border-border/50 hover:border-border block rounded-lg border p-3.5 shadow-sm transition-all hover:shadow-md"
@@ -203,8 +233,17 @@
                       ? 'text-emerald-500'
                       : 'text-destructive'}"
                   >
-                    {entry.amount > 0 ? '+' : ''}{entry.amount.toFixed(2)}
+                    {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
                   </p>
+                  {#if converted?.converted}
+                    <p class="text-muted-foreground text-[11px]">
+                      ≈ {currencyStore.formatAmount(
+                        converted.amount,
+                        currencyStore.defaultCurrencyCode,
+                        { showPlus: true }
+                      )}
+                    </p>
+                  {/if}
                   <p class="text-muted-foreground mt-0.5 text-xs">
                     {new Date(entry.date || entry.created_at).toLocaleDateString()}
                   </p>

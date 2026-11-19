@@ -7,8 +7,10 @@
   import { Plus, Trash2, Pencil, Check, X, ArrowLeft } from '@lucide/svelte';
   import Modal from '$components/Modal.svelte';
   import EntryForm from '$components/EntryForm.svelte';
+  import CurrencySelect from '$components/CurrencySelect.svelte';
+  import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
-  let id = $derived($page.params.id);
+  let id = $derived($page.params.id || '');
 
   let account = $state<Account | null>(null);
   let entries = $state<AccountEntry[]>([]);
@@ -16,6 +18,7 @@
 
   let editing = $state(false);
   let editName = $state('');
+  let editCurrencyCode = $state('');
   let createEntryModalOpen = $state(false);
 
   $effect(() => {
@@ -25,7 +28,12 @@
           account = null;
         } else {
           account = v || null;
-          if (account && !editing) editName = account.name;
+          if (account && !editing) {
+            editName = account.name;
+            editCurrencyCode = account.currency_code
+              ? normalizeCurrencyCode(account.currency_code)
+              : '';
+          }
         }
       }
     });
@@ -48,7 +56,21 @@
     };
   });
 
-  let balance = $derived(entries.reduce((sum, e) => sum + e.amount, 0));
+  let displayCurrency = $derived(
+    account?.currency_code
+      ? normalizeCurrencyCode(account.currency_code)
+      : currencyStore.defaultCurrencyCode
+  );
+
+  let balance = $derived(
+    entries.reduce(
+      (sum, e) =>
+        sum +
+        currencyStore.tryConvert(e.amount, e.currency_code, displayCurrency, e.date || e.created_at)
+          .amount,
+      0
+    )
+  );
 
   async function handleDelete() {
     if (!account) return;
@@ -65,17 +87,18 @@
   async function handleSaveEdit() {
     if (!account || !editName.trim()) return;
     await db.accounts.update(id, {
-      name: editName,
+      name: editName.trim(),
+      currency_code: editCurrencyCode ? normalizeCurrencyCode(editCurrencyCode) : null,
       updated_at: new Date().toISOString()
     });
     editing = false;
   }
 
-  function getCategoryColor(catId: number) {
+  function getCategoryColor(catId: string) {
     return categories.find((c) => c.id === catId)?.color || '#ccc';
   }
-  function getCategoryName(catId: number) {
-    return categories.find((c) => c.id === catId)?.name || 'Unknown';
+  function getCategoryName(catId: string) {
+    return categories.find((c) => c.id === catId)?.title || 'Unknown';
   }
 </script>
 
@@ -98,7 +121,7 @@
             e.preventDefault();
             handleSaveEdit();
           }}
-          class="flex flex-1 items-center gap-2"
+          class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center"
         >
           <input
             type="text"
@@ -106,25 +129,46 @@
             class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary flex-1 rounded-lg border px-3 py-2 text-xl font-semibold focus:ring-2 focus:outline-none"
             autofocus
           />
-          <button
-            type="submit"
-            class="btn-icon text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-600"
-          >
-            <Check size={20} />
-          </button>
-          <button
-            type="button"
-            onclick={() => {
-              editing = false;
-              editName = account!.name;
-            }}
-            class="btn-icon text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <X size={20} />
-          </button>
+          <div class="w-full sm:w-56">
+            <CurrencySelect
+              bind:value={editCurrencyCode}
+              allowEmpty={true}
+              emptyLabel="Default currency"
+            />
+          </div>
+          <div class="flex items-center gap-1">
+            <button
+              type="submit"
+              class="btn-icon text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-600"
+            >
+              <Check size={20} />
+            </button>
+            <button
+              type="button"
+              onclick={() => {
+                editing = false;
+                editName = account!.name;
+                editCurrencyCode = account!.currency_code
+                  ? normalizeCurrencyCode(account!.currency_code)
+                  : '';
+              }}
+              class="btn-icon text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </form>
       {:else}
-        <h1 class="flex-1 text-2xl font-semibold tracking-tight">{account.name}</h1>
+        <div class="flex flex-1 items-center gap-2.5">
+          <h1 class="text-2xl font-semibold tracking-tight">{account.name}</h1>
+          {#if account.currency_code}
+            <span
+              class="bg-muted text-muted-foreground rounded px-2 py-0.5 font-mono text-xs font-semibold"
+            >
+              {normalizeCurrencyCode(account.currency_code)}
+            </span>
+          {/if}
+        </div>
         <div class="flex gap-2">
           <button onclick={() => (editing = true)} class="btn-icon" title="Edit">
             <Pencil size={18} />
@@ -137,13 +181,15 @@
     </div>
 
     <div class="bg-card border-border/50 rounded-xl border p-6 shadow-sm">
-      <h2 class="text-muted-foreground mb-1 text-sm font-medium">Current Balance</h2>
+      <h2 class="text-muted-foreground mb-1 text-sm font-medium">
+        Current Balance ({displayCurrency})
+      </h2>
       <p
         class="text-4xl font-bold tracking-tight {balance >= 0
           ? 'text-emerald-500'
           : 'text-destructive'}"
       >
-        {Math.abs(balance).toFixed(2)}
+        {currencyStore.formatAmount(balance, displayCurrency)}
       </p>
     </div>
 
@@ -163,7 +209,17 @@
         </div>
       {:else}
         <div class="space-y-2">
-          {#each entries as entry}
+          {#each entries as entry (entry.id)}
+            {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
+            {@const isForeign = entryCode !== displayCurrency}
+            {@const converted = isForeign
+              ? currencyStore.tryConvert(
+                  entry.amount,
+                  entryCode,
+                  displayCurrency,
+                  entry.date || entry.created_at
+                )
+              : null}
             <a
               href="/entries/{entry.id}"
               class="group bg-card border-border/50 hover:border-border block rounded-lg border p-3.5 shadow-sm transition-all hover:shadow-md"
@@ -191,8 +247,15 @@
                       ? 'text-emerald-500'
                       : 'text-destructive'}"
                   >
-                    {entry.amount > 0 ? '+' : ''}{entry.amount.toFixed(2)}
+                    {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
                   </p>
+                  {#if converted?.converted}
+                    <p class="text-muted-foreground text-[11px]">
+                      ≈ {currencyStore.formatAmount(converted.amount, displayCurrency, {
+                        showPlus: true
+                      })}
+                    </p>
+                  {/if}
                   <p class="text-muted-foreground mt-0.5 text-xs">
                     {new Date(entry.date || entry.created_at).toLocaleDateString()}
                   </p>

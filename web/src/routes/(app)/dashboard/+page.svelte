@@ -5,6 +5,7 @@
   import { Plus, Wallet, ArrowRight } from '@lucide/svelte';
   import { modals } from '$lib/modals.svelte';
   import { tooltip } from '$lib/tooltip';
+  import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
   let accounts = $state<Account[]>([]);
   let entries = $state<AccountEntry[]>([]);
@@ -31,10 +32,20 @@
     };
   });
 
-  let totalBalance = $derived(entries.reduce((sum, entry) => sum + entry.amount, 0));
-  let income = $derived(entries.filter((e) => e.amount > 0).reduce((sum, e) => sum + e.amount, 0));
+  let defaultCurrency = $derived(currencyStore.defaultCurrencyCode);
+
+  let totalBalance = $derived(
+    entries.reduce((sum, entry) => sum + currencyStore.convertEntryToDefault(entry), 0)
+  );
+  let income = $derived(
+    entries
+      .filter((e) => e.amount > 0)
+      .reduce((sum, e) => sum + currencyStore.convertEntryToDefault(e), 0)
+  );
   let expenses = $derived(
-    entries.filter((e) => e.amount < 0).reduce((sum, e) => sum + Math.abs(e.amount), 0)
+    entries
+      .filter((e) => e.amount < 0)
+      .reduce((sum, e) => sum + Math.abs(currencyStore.convertEntryToDefault(e)), 0)
   );
   let recentEntries = $derived(entries.slice(0, 10));
 
@@ -42,7 +53,8 @@
     let spending: Record<string, number> = {};
     entries.forEach((e) => {
       if (e.amount < 0) {
-        spending[e.category_id] = (spending[e.category_id] || 0) + Math.abs(e.amount);
+        const converted = Math.abs(currencyStore.convertEntryToDefault(e));
+        spending[e.category_id] = (spending[e.category_id] || 0) + converted;
       }
     });
     return Object.entries(spending)
@@ -65,6 +77,13 @@
 <div class="space-y-8 font-sans">
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+    <a
+      href="/settings"
+      class="bg-muted text-muted-foreground hover:text-foreground rounded-full px-3 py-1 font-mono text-xs font-medium transition-colors"
+      title="Change default display currency in Settings"
+    >
+      Totals in {defaultCurrency}
+    </a>
   </div>
 
   <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -78,7 +97,7 @@
           ? 'text-emerald-500'
           : 'text-destructive'}"
       >
-        {totalBalance >= 0 ? '' : '-'}{Math.abs(totalBalance).toFixed(2)}
+        {currencyStore.formatAmount(totalBalance, defaultCurrency)}
       </p>
     </div>
 
@@ -88,7 +107,7 @@
       <div class="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl"></div>
       <h2 class="text-muted-foreground mb-1 text-sm font-medium">Total Income</h2>
       <p class="text-3xl font-bold tracking-tight text-emerald-500">
-        +{income.toFixed(2)}
+        {currencyStore.formatAmount(income, defaultCurrency, { showPlus: true })}
       </p>
     </div>
 
@@ -98,7 +117,7 @@
       <div class="bg-destructive/10 absolute -top-6 -right-6 h-24 w-24 rounded-full blur-2xl"></div>
       <h2 class="text-muted-foreground mb-1 text-sm font-medium">Total Expenses</h2>
       <p class="text-destructive text-3xl font-bold tracking-tight">
-        -{expenses.toFixed(2)}
+        {currencyStore.formatAmount(-expenses, defaultCurrency)}
       </p>
     </div>
   </div>
@@ -140,7 +159,17 @@
         </div>
       {:else}
         <div class="flex flex-col gap-2">
-          {#each recentEntries as entry}
+          {#each recentEntries as entry (entry.id)}
+            {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
+            {@const isForeign = entryCode !== defaultCurrency}
+            {@const converted = isForeign
+              ? currencyStore.tryConvert(
+                  entry.amount,
+                  entryCode,
+                  defaultCurrency,
+                  entry.date || entry.created_at
+                )
+              : null}
             <a
               href="/entries/{entry.id}"
               class="group bg-card border-border/50 hover:border-border rounded-lg border p-3.5 shadow-sm transition-all hover:shadow-md"
@@ -158,13 +187,22 @@
                     </p>
                   </div>
                 </div>
-                <p
-                  class="text-sm font-semibold {entry.amount >= 0
-                    ? 'text-emerald-500'
-                    : 'text-destructive'}"
-                >
-                  {entry.amount > 0 ? '+' : ''}{entry.amount.toFixed(2)}
-                </p>
+                <div class="text-right">
+                  <p
+                    class="text-sm font-semibold {entry.amount >= 0
+                      ? 'text-emerald-500'
+                      : 'text-destructive'}"
+                  >
+                    {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
+                  </p>
+                  {#if converted?.converted}
+                    <p class="text-muted-foreground text-[11px]">
+                      ≈ {currencyStore.formatAmount(converted.amount, defaultCurrency, {
+                        showPlus: true
+                      })}
+                    </p>
+                  {/if}
+                </div>
               </div>
             </a>
           {/each}
@@ -184,13 +222,16 @@
               <div>
                 <div class="mb-1.5 flex justify-between text-sm font-medium">
                   <span class="text-foreground">{item.category?.title || 'Unknown'}</span>
-                  <span class="text-muted-foreground">{item.amount.toFixed(2)}</span>
+                  <span class="text-muted-foreground">
+                    {currencyStore.formatAmount(item.amount, defaultCurrency, { absolute: true })}
+                  </span>
                 </div>
                 <div class="bg-muted h-2 w-full overflow-hidden rounded-full">
                   <div
                     class="h-full rounded-full transition-all duration-1000"
-                    style="width: {(item.amount / expenses) * 100}%; background-color: {item
-                      .category?.color || '#ccc'};"
+                    style="width: {expenses > 0
+                      ? (item.amount / expenses) * 100
+                      : 0}%; background-color: {item.category?.color || '#ccc'};"
                   ></div>
                 </div>
               </div>

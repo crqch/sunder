@@ -8,9 +8,11 @@
   import { toast } from 'svelte-sonner';
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
+  import CurrencySelect from '$components/CurrencySelect.svelte';
   import DatePicker from '$components/DatePicker.svelte';
+  import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
-  let id = $derived($page.params.id);
+  let id = $derived($page.params.id || '');
 
   let entry = $state<AccountEntry | null>(null);
   let accounts = $state<Account[]>([]);
@@ -20,8 +22,9 @@
   let editTitle = $state('');
   let editAmountStr = $state('');
   let editIsIncome = $state(false);
-  let editAccountId = $state(0);
-  let editCategoryId = $state(0);
+  let editCurrencyCode = $state(currencyStore.defaultCurrencyCode);
+  let editAccountId = $state<any>('');
+  let editCategoryId = $state<any>('');
   let editDateObj = $state<Date | null>(null);
   let editLocation = $state('');
   let editDescription = $state('');
@@ -37,6 +40,7 @@
             editTitle = entry.title;
             editAmountStr = Math.abs(entry.amount).toString();
             editIsIncome = entry.amount >= 0;
+            editCurrencyCode = normalizeCurrencyCode(entry.currency_code);
             editAccountId = entry.account_id;
             editCategoryId = entry.category_id;
             editDateObj = new Date(entry.date || entry.created_at);
@@ -106,9 +110,12 @@
     }
     if (!editIsIncome) amount = -amount;
 
+    const normalizedCurrency = normalizeCurrencyCode(editCurrencyCode);
+
     await db.account_entries.update(id, {
       title: editTitle.trim(),
       amount,
+      currency_code: normalizedCurrency,
       account_id: editAccountId,
       category_id: editCategoryId,
       date: editDateObj ? editDateObj.toISOString() : new Date().toISOString(),
@@ -116,6 +123,9 @@
       description: editDescription.trim() || null,
       updated_at: new Date().toISOString()
     });
+    if (normalizedCurrency !== currencyStore.defaultCurrencyCode) {
+      currencyStore.refreshRatesForEntries().catch(() => {});
+    }
     editing = false;
   }
 
@@ -128,6 +138,18 @@
   function getCategoryColor(catId: string) {
     return categories.find((c) => c.id === catId)?.color || '#cccccc';
   }
+
+  let entryCurrency = $derived(normalizeCurrencyCode(entry?.currency_code));
+  let convertedInfo = $derived.by(() => {
+    if (!entry) return null;
+    if (entryCurrency === currencyStore.defaultCurrencyCode) return null;
+    return currencyStore.tryConvert(
+      entry.amount,
+      entryCurrency,
+      currencyStore.defaultCurrencyCode,
+      entry.date || entry.created_at
+    );
+  });
 </script>
 
 {#if !entry}
@@ -183,16 +205,23 @@
           >
         </div>
 
-        <div class="space-y-1.5">
-          <label class="text-foreground block text-sm font-medium">Amount</label>
-          <input
-            type="text"
-            inputmode="decimal"
-            bind:value={editAmountStr}
-            oninput={handleAmountInput}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-xl font-medium focus:ring-2 focus:outline-none"
-            placeholder="Amount"
-          />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="space-y-1.5 sm:col-span-2">
+            <label class="text-foreground block text-sm font-medium">Amount</label>
+            <input
+              type="text"
+              inputmode="decimal"
+              bind:value={editAmountStr}
+              oninput={handleAmountInput}
+              class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-xl font-medium focus:ring-2 focus:outline-none"
+              placeholder="Amount"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-foreground block text-sm font-medium">Currency</label>
+            <CurrencySelect bind:value={editCurrencyCode} />
+          </div>
         </div>
 
         <div class="space-y-1.5">
@@ -263,11 +292,33 @@
               ? 'text-emerald-500'
               : 'text-destructive'}"
           >
-            {entry.amount > 0 ? '+' : ''}{entry.amount.toFixed(2)}
+            {currencyStore.formatAmount(entry.amount, entryCurrency, { showPlus: true })}
           </p>
+          {#if convertedInfo?.converted}
+            <p class="text-muted-foreground mt-2 text-sm">
+              ≈ {currencyStore.formatAmount(
+                convertedInfo.amount,
+                currencyStore.defaultCurrencyCode,
+                { showPlus: true }
+              )}
+              {#if convertedInfo.rate}
+                <span class="text-xs opacity-75">
+                  (1 {entryCurrency} = {convertedInfo.rate.toFixed(4)}
+                  {currencyStore.defaultCurrencyCode})
+                </span>
+              {/if}
+            </p>
+          {/if}
         </div>
 
         <div class="space-y-5">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-muted-foreground font-medium">Currency</span>
+            <span class="font-mono font-medium">
+              {entryCurrency} · {currencyStore.getCurrency(entryCurrency).name}
+            </span>
+          </div>
+
           <div class="flex items-center justify-between text-sm">
             <span class="text-muted-foreground font-medium">Account</span>
             <a

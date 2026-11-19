@@ -2,9 +2,11 @@
   import { authStore, logout, authenticatedFetch } from '$lib/auth';
   import { syncAll, getUnsyncedChanges, clearLocalDatabase } from '$lib/sync';
   import { syncState } from '$lib/syncState.svelte';
+  import { currencyStore } from '$lib/currency.svelte';
   import { LogOut, RefreshCw, Download, Upload, Database } from '@lucide/svelte';
   import { toast } from 'svelte-sonner';
   import Modal from '$components/Modal.svelte';
+  import CurrencySelect from '$components/CurrencySelect.svelte';
 
   let lastSync = $state(
     typeof window !== 'undefined'
@@ -12,9 +14,38 @@
       : 'Never'
   );
   let syncing = $state(false);
+  let savingCurrency = $state(false);
+  let refreshingRates = $state(false);
 
   let logoutModalOpen = $state(false);
   let unsyncedCount = $state(0);
+
+  async function handleDefaultCurrencyChange(code: string) {
+    if (!code || code === currencyStore.defaultCurrencyCode) return;
+    savingCurrency = true;
+    try {
+      const updated = await currencyStore.updateDefaultCurrency(code);
+      toast.success(`Default currency set to ${updated}`);
+    } catch (err) {
+      console.error('Failed to update default currency', err);
+      toast.error('Failed to update default currency');
+    } finally {
+      savingCurrency = false;
+    }
+  }
+
+  async function handleRefreshCurrencyData() {
+    refreshingRates = true;
+    try {
+      await currencyStore.syncAllCurrencyData();
+      toast.success('Currencies and exchange rates updated');
+    } catch (err) {
+      console.error('Failed to refresh currency data', err);
+      toast.error('Failed to refresh currencies and rates');
+    } finally {
+      refreshingRates = false;
+    }
+  }
 
   async function handleLogoutClick() {
     try {
@@ -156,6 +187,48 @@
     <div class="pt-4">
       <button onclick={handleLogoutClick} class="btn btn-destructive btn-sm gap-2">
         <LogOut size={14} /> Logout
+      </button>
+    </div>
+  </div>
+
+  <div class="bg-card border-border/50 space-y-5 rounded-xl border p-6 shadow-sm">
+    <h2 class="border-border/50 border-b pb-2 text-lg font-semibold tracking-tight">Currency</h2>
+
+    <div class="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+      <div>
+        <h3 class="font-medium">Default Display Currency</h3>
+        <p class="text-muted-foreground text-sm">
+          Totals, balances, and spending analytics convert entries to this currency using historical
+          rates on each transaction's date.
+        </p>
+      </div>
+      <div>
+        <CurrencySelect
+          value={currencyStore.defaultCurrencyCode}
+          disabled={savingCurrency}
+          onchange={handleDefaultCurrencyChange}
+        />
+      </div>
+    </div>
+
+    <div class="border-border/50 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+      <p class="text-muted-foreground text-xs font-medium">
+        {currencyStore.currencies.length} active server currencies ·
+        {currencyStore.sortedDates.length} cached exchange rate {currencyStore.sortedDates
+          .length === 1
+          ? 'day'
+          : 'days'}
+      </p>
+      <button
+        onclick={handleRefreshCurrencyData}
+        disabled={refreshingRates || currencyStore.syncingRates}
+        class="btn btn-outline btn-sm gap-2 disabled:opacity-50"
+      >
+        <RefreshCw
+          size={14}
+          class={refreshingRates || currencyStore.syncingRates ? 'animate-spin' : ''}
+        />
+        {refreshingRates || currencyStore.syncingRates ? 'Refreshing...' : 'Refresh Rates'}
       </button>
     </div>
   </div>
