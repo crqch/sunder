@@ -172,7 +172,10 @@ defmodule SunderWeb.CurrencyController do
             base: %{type: :string},
             from: %{type: :string, format: :date},
             to: %{type: :string, format: :date},
-            rates: %{type: :object}
+            rates: %{type: :object},
+            count: %{type: :integer},
+            available_from: %{type: :string, format: :date, nullable: true},
+            available_to: %{type: :string, format: :date, nullable: true}
           }
         },
         [description: "Historical exchange rates keyed by date"]
@@ -195,7 +198,10 @@ defmodule SunderWeb.CurrencyController do
         base: history.base,
         from: Date.to_iso8601(history.from),
         to: Date.to_iso8601(history.to),
-        rates: history.rates
+        rates: history.rates,
+        count: history.count,
+        available_from: history.available_from,
+        available_to: history.available_to
       })
     else
       {:error, :missing_date} ->

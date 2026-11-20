@@ -10,7 +10,18 @@ defmodule Sunder.Currencies.FetcherBehaviour do
           rates: %{String.t() => Decimal.t()}
         }
 
+  @type range_fetch_result :: %{
+          base: String.t(),
+          source: String.t(),
+          rates_by_date: %{Date.t() => %{String.t() => Decimal.t()}}
+        }
+
   @callback fetch_rates(Date.t() | :latest) :: {:ok, fetch_result()} | {:error, term()}
+
+  @callback fetch_rates_range(Date.t(), Date.t()) ::
+              {:ok, range_fetch_result()} | {:error, term()}
+
+  @optional_callbacks fetch_rates_range: 2
 end
 
 defmodule Sunder.Currencies.Fetcher do
@@ -60,6 +71,29 @@ defmodule Sunder.Currencies.Fetcher do
     ]
 
     try_providers(providers, date)
+  end
+
+  @doc """
+  Fetches a whole historical range in a single request using Frankfurter's fast
+  timeseries endpoint (ECB business-day rates, base USD).
+  """
+  @impl true
+  def fetch_rates_range(%Date{} = from_date, %Date{} = to_date) do
+    if Date.compare(from_date, to_date) == :gt do
+      {:error, :invalid_date_range}
+    else
+      url =
+        "https://api.frankfurter.dev/v1/#{Date.to_iso8601(from_date)}..#{Date.to_iso8601(to_date)}?base=USD"
+
+      with {:ok, payload} <- http_get_json(url),
+           {:ok, rates_by_date} <- parse_frankfurter_timeseries(payload) do
+        {:ok, %{base: "USD", source: "frankfurter", rates_by_date: rates_by_date}}
+      else
+        {:error, reason} ->
+          Logger.warning("Currency timeseries request failed: #{inspect(reason)}")
+          {:error, reason}
+      end
+    end
   end
 
   defp try_providers([], _fallback_date) do
@@ -180,6 +214,33 @@ defmodule Sunder.Currencies.Fetcher do
   end
 
   defp parse_frankfurter(_, _), do: {:error, :invalid_payload}
+
+  defp parse_frankfurter_timeseries(%{"rates" => raw_by_date}) when is_map(raw_by_date) do
+    rates_by_date =
+      Enum.reduce(raw_by_date, %{}, fn {date_str, raw_rates}, acc ->
+        with true <- is_binary(date_str),
+             {:ok, date} <- Date.from_iso8601(date_str),
+             true <- is_map(raw_rates) do
+          rates = normalize_rates_map(raw_rates)
+
+          if map_size(rates) > 1 do
+            Map.put(acc, date, rates)
+          else
+            acc
+          end
+        else
+          _ -> acc
+        end
+      end)
+
+    if map_size(rates_by_date) > 0 do
+      {:ok, rates_by_date}
+    else
+      {:error, :empty_rates}
+    end
+  end
+
+  defp parse_frankfurter_timeseries(_), do: {:error, :invalid_payload}
 
   defp parse_date_or(date_str, fallback_date) when is_binary(date_str) do
     case Date.from_iso8601(date_str) do

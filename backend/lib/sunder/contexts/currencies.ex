@@ -189,6 +189,36 @@ defmodule Sunder.Contexts.Currencies do
     end
   end
 
+  @doc """
+  Syncs a whole date range in one upstream request (when the configured fetcher
+  supports `fetch_rates_range/2`) and bulk-upserts every returned date.
+  """
+  def sync_rates_range(%Date{} = from_date, %Date{} = to_date) do
+    if Date.compare(from_date, to_date) == :gt do
+      {:error, :invalid_date_range}
+    else
+      fetcher = fetcher_module()
+
+      if range_fetch_supported?(fetcher) do
+        with {:ok, %{base: base, source: source, rates_by_date: rates_by_date}} <-
+               fetcher.fetch_rates_range(from_date, to_date),
+             {:ok, count} <- store_rates_bulk(rates_by_date, source, base) do
+          {:ok,
+           %{
+             from: from_date,
+             to: to_date,
+             base: base,
+             source: source,
+             date_count: map_size(rates_by_date),
+             stored_count: count
+           }}
+        end
+      else
+        {:error, :range_fetch_not_supported}
+      end
+    end
+  end
+
   def store_rates(%Date{} = rate_date, rates_map, source, base \\ @canonical_base)
       when is_map(rates_map) and is_binary(source) do
     base_code = normalize_code(base) || @canonical_base
@@ -201,19 +231,7 @@ defmodule Sunder.Contexts.Currencies do
       {:error, :unknown_base_currency}
     else
       now = NaiveDateTime.truncate(NaiveDateTime.utc_now(), :second)
-
-      normalized_rates =
-        rates_map
-        |> Enum.reduce(%{base_code => Decimal.new("1")}, fn {raw_code, raw_rate}, acc ->
-          code = normalize_code(raw_code)
-
-          with true <- not is_nil(code) and MapSet.member?(known_codes, code),
-               {:ok, dec_rate} <- cast_positive_decimal(raw_rate) do
-            Map.put(acc, code, Decimal.round(dec_rate, @rate_precision))
-          else
-            _ -> acc
-          end
-        end)
+      normalized_rates = normalize_rates_for_store(rates_map, base_code, known_codes)
 
       rows =
         Enum.map(normalized_rates, fn {target_code, rate_dec} ->
@@ -237,6 +255,64 @@ defmodule Sunder.Contexts.Currencies do
 
       {:ok, count}
     end
+  end
+
+  defp store_rates_bulk(rates_by_date, source, base)
+       when is_map(rates_by_date) and is_binary(source) do
+    base_code = normalize_code(base) || @canonical_base
+    known_codes = known_currency_codes()
+
+    if not MapSet.member?(known_codes, base_code) do
+      {:error, :unknown_base_currency}
+    else
+      now = NaiveDateTime.truncate(NaiveDateTime.utc_now(), :second)
+
+      rows =
+        Enum.flat_map(rates_by_date, fn {%Date{} = rate_date, rates_map} ->
+          rates_map
+          |> normalize_rates_for_store(base_code, known_codes)
+          |> Enum.map(fn {target_code, rate_dec} ->
+            %{
+              id: ExCuid2.generate(),
+              base_currency_code: base_code,
+              target_currency_code: target_code,
+              rate: rate_dec,
+              rate_date: rate_date,
+              source: source,
+              inserted_at: now,
+              updated_at: now
+            }
+          end)
+        end)
+
+      count =
+        rows
+        |> Enum.chunk_every(1_500)
+        |> Enum.reduce(0, fn chunk, acc ->
+          {inserted, _} =
+            Repo.insert_all(ExchangeRate, chunk,
+              on_conflict: {:replace, [:rate, :source, :updated_at]},
+              conflict_target: [:base_currency_code, :target_currency_code, :rate_date]
+            )
+
+          acc + inserted
+        end)
+
+      {:ok, count}
+    end
+  end
+
+  defp normalize_rates_for_store(rates_map, base_code, known_codes) do
+    Enum.reduce(rates_map, %{base_code => Decimal.new("1")}, fn {raw_code, raw_rate}, acc ->
+      code = normalize_code(raw_code)
+
+      with true <- not is_nil(code) and MapSet.member?(known_codes, code),
+           {:ok, dec_rate} <- cast_positive_decimal(raw_rate) do
+        Map.put(acc, code, Decimal.round(dec_rate, @rate_precision))
+      else
+        _ -> acc
+      end
+    end)
   end
 
   def upsert_manual_rate(base_code, target_code, raw_rate, %Date{} = rate_date) do
@@ -474,6 +550,8 @@ defmodule Sunder.Contexts.Currencies do
     with :ok <- validate_history_range(from_date, to_date),
          base_norm when not is_nil(base_norm) <- normalize_code(base_code),
          %Currency{} <- get_currency(base_norm) do
+      maybe_fetch_range_on_demand(from_date, to_date, opts)
+
       filter_codes =
         case symbols do
           nil -> nil
@@ -546,12 +624,17 @@ defmodule Sunder.Contexts.Currencies do
           end
         end)
 
+      date_keys = grouped_by_date |> Map.keys() |> Enum.sort()
+
       {:ok,
        %{
          base: base_norm,
          from: from_date,
          to: to_date,
-         rates: grouped_by_date
+         rates: grouped_by_date,
+         count: length(date_keys),
+         available_from: List.first(date_keys),
+         available_to: List.last(date_keys)
        }}
     else
       {:error, reason} -> {:error, reason}
@@ -664,14 +747,103 @@ defmodule Sunder.Contexts.Currencies do
     :ok
   end
 
+  defp maybe_fetch_range_on_demand(%Date{} = from_date, %Date{} = to_date, opts) do
+    default_on_demand = Application.get_env(:sunder, :currency_fetch_on_demand, true)
+    fetch_if_missing = Keyword.get(opts, :fetch_if_missing, default_on_demand)
+    today = Date.utc_today()
+    clamped_to = if Date.compare(to_date, today) == :gt, do: today, else: to_date
+
+    with true <- fetch_if_missing,
+         true <- Date.compare(from_date, clamped_to) != :gt,
+         fetcher <- fetcher_module(),
+         true <- range_fetch_supported?(fetcher),
+         true <- range_coverage_sparse?(from_date, clamped_to),
+         true <-
+           claim_fetch_slot(
+             "range:#{Date.to_iso8601(from_date)}:#{Date.to_iso8601(clamped_to)}"
+           ) do
+      case sync_rates_range(from_date, clamped_to) do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning(
+            "On-demand range rate fetch failed for #{from_date}..#{clamped_to}: #{inspect(reason)}"
+          )
+      end
+    end
+
+    :ok
+  end
+
+  defp range_fetch_supported?(fetcher) do
+    Code.ensure_loaded?(fetcher) and function_exported?(fetcher, :fetch_rates_range, 2)
+  end
+
+  # A range is sparse when stored provider-backed dates cover too little of the
+  # window (allowing ~15% tolerance for ECB/bank holidays) or leave an unbackfilled
+  # gap at the start of the requested range.
+  defp range_coverage_sparse?(%Date{} = from_date, %Date{} = to_date) do
+    stored_dates =
+      Repo.all(
+        from(r in ExchangeRate,
+          where:
+            r.base_currency_code == @canonical_base and
+              r.rate_date >= ^from_date and
+              r.rate_date <= ^to_date and
+              r.source != "manual" and
+              r.target_currency_code != @canonical_base,
+          distinct: true,
+          select: r.rate_date
+        )
+      )
+
+    expected = expected_trading_days(from_date, to_date)
+
+    cond do
+      expected <= 0 ->
+        false
+
+      stored_dates == [] ->
+        true
+
+      true ->
+        min_required =
+          if expected <= 5 do
+            max(expected - 1, 1)
+          else
+            max(trunc(Float.floor(expected * 0.85)), 1)
+          end
+
+        earliest = Enum.min(stored_dates, Date)
+        leading_gap_days = Date.diff(earliest, from_date)
+
+        length(stored_dates) < min_required or leading_gap_days > 7
+    end
+  end
+
+  defp expected_trading_days(%Date{} = from_date, %Date{} = to_date) do
+    weekdays = Date.range(from_date, to_date) |> Enum.count(&(Date.day_of_week(&1) <= 5))
+
+    # Today's rates may not be published upstream yet; don't count them as missing.
+    if Date.compare(to_date, Date.utc_today()) == :eq and Date.day_of_week(to_date) <= 5 do
+      max(weekdays - 1, 0)
+    else
+      weekdays
+    end
+  end
+
   defp claim_on_demand_fetch_slot(%Date{} = date) do
+    claim_fetch_slot(Date.to_iso8601(date))
+  end
+
+  defp claim_fetch_slot(key) do
     cooldown_ms = Application.get_env(:sunder, :currency_on_demand_cooldown_ms, :timer.minutes(15))
 
     if cooldown_ms <= 0 or :ets.whereis(:sunder_currency_fetch_cooldown) == :undefined do
       true
     else
       now_ms = System.monotonic_time(:millisecond)
-      key = Date.to_iso8601(date)
 
       case :ets.lookup(:sunder_currency_fetch_cooldown, key) do
         [{^key, last_attempt_ms}] when now_ms - last_attempt_ms < cooldown_ms ->
