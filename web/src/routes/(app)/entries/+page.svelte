@@ -432,6 +432,10 @@
     return result as EntryRow[];
   });
 
+  let filteredTotal = $derived(
+    filteredEntries.reduce((sum, entry) => sum + currencyStore.convertEntryToDefault(entry), 0)
+  );
+
   function getCategoryColor(id: string) {
     return categories.find((c) => c.id === id)?.color || '#71717a';
   }
@@ -711,14 +715,31 @@
   <LayoutHeader hasDivider padding={4}>
     <VStack gap={3}>
       <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
-        <HStack gap={2} vAlign="center">
-          <Heading level={1}>Entries</Heading>
-          <Badge
-            label={filteredEntries.length === entries.length
-              ? String(entries.length)
-              : `${filteredEntries.length} / ${entries.length}`}
-          />
-        </HStack>
+        <VStack gap={0.5}>
+          <HStack gap={2} vAlign="center">
+            <Heading level={1}>Entries</Heading>
+            <Badge
+              label={filteredEntries.length === entries.length
+                ? String(entries.length)
+                : `${filteredEntries.length} / ${entries.length}`}
+            />
+          </HStack>
+          {#if filteredEntries.length > 0}
+            <HStack gap={1.5} vAlign="center">
+              <Text type="supporting" color="secondary">
+                {filters.length > 0 ? 'Total for matching entries:' : 'Total across shown entries:'}
+              </Text>
+              <Text
+                type="supporting"
+                weight="semibold"
+                hasTabularNumbers
+                class={filteredTotal >= 0 ? 'sunder-positive' : 'sunder-negative'}
+              >
+                {currencyStore.formatAmount(filteredTotal, currencyStore.defaultCurrencyCode)}
+              </Text>
+            </HStack>
+          {/if}
+        </VStack>
 
         <HStack gap={2} vAlign="center" wrap="wrap">
           <Selector
