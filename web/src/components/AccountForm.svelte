@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { db } from '$lib/db';
+  import { Button, FormLayout, HStack, Icon, TextInput } from '@astryx-sv/core';
   import { Save } from '@lucide/svelte';
   import { createId } from '@paralleldrive/cuid2';
+  import { db } from '$lib/db';
   import CurrencySelect from '$components/CurrencySelect.svelte';
   import { normalizeCurrencyCode } from '$lib/currency.svelte';
 
@@ -9,11 +10,11 @@
     onsuccess,
     oncancel,
     isDirty = $bindable(false)
-  } = $props<{
+  }: {
     onsuccess: (id: string) => void;
     oncancel?: () => void;
     isDirty?: boolean;
-  }>();
+  } = $props();
 
   let name = $state('');
   let currencyCode = $state('');
@@ -22,7 +23,7 @@
     isDirty = name.trim() !== '' || currencyCode !== '';
   });
 
-  async function saveAccount(e: Event) {
+  async function saveAccount(e: SubmitEvent) {
     e.preventDefault();
     if (!name.trim()) return;
 
@@ -42,41 +43,31 @@
   }
 </script>
 
-<form onsubmit={saveAccount} class="space-y-5">
-  <div class="space-y-1.5">
-    <label for="acc-name" class="text-foreground block text-sm font-medium">Account Name</label>
-    <input
-      id="acc-name"
-      type="text"
-      bind:value={name}
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
-      placeholder="e.g. Checking, Savings, Cash"
-      required
-      autofocus
-    />
-  </div>
+{#snippet saveIcon()}
+  <Icon icon={Save} size="sm" />
+{/snippet}
 
-  <div class="space-y-1.5">
-    <label class="text-foreground block text-sm font-medium">Default Currency (Optional)</label>
+<form onsubmit={saveAccount}>
+  <FormLayout defaultOptionality="optional">
+    <TextInput
+      label="Account name"
+      placeholder="e.g. Checking, Savings, Cash"
+      value={name}
+      onChange={(v) => (name = v)}
+      isRequired
+      hasAutoFocus
+    />
     <CurrencySelect
       bind:value={currencyCode}
+      label="Default currency"
       allowEmpty={true}
       emptyLabel="Use account owner's default currency"
     />
-  </div>
-
-  <div class="mt-4 flex gap-3 pt-2">
-    {#if oncancel}
-      <button
-        type="button"
-        onclick={oncancel}
-        class="btn-outline flex w-full flex-1 items-center justify-center"
-      >
-        Cancel
-      </button>
-    {/if}
-    <button type="submit" class="btn flex w-full flex-1 items-center justify-center gap-2">
-      <Save size={16} /> Create
-    </button>
-  </div>
+    <HStack gap={3} hAlign="end" paddingBlockStart={2}>
+      {#if oncancel}
+        <Button label="Cancel" variant="secondary" onclick={oncancel} />
+      {/if}
+      <Button label="Create account" type="submit" variant="primary" icon={saveIcon} />
+    </HStack>
+  </FormLayout>
 </form>

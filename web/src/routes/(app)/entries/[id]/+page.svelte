@@ -1,15 +1,42 @@
 <script lang="ts">
+  import {
+    AlertDialog,
+    BreadcrumbItem,
+    Breadcrumbs,
+    Button,
+    Divider,
+    EmptyState,
+    FormLayout,
+    Grid,
+    Heading,
+    HStack,
+    Icon,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    Link,
+    MetadataList,
+    MetadataListItem,
+    SegmentedControl,
+    SegmentedControlItem,
+    Text,
+    TextArea,
+    TextInput,
+    Token,
+    VStack
+  } from '@astryx-sv/core';
+  import { Check, Minus, Pencil, Plus, Trash2, X } from '@lucide/svelte';
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
   import type { AccountEntry, Account, EntryCategory } from '$lib/types';
-  import { goto } from '$app/navigation';
-  import { Trash2, Pencil, Check, X, ArrowLeft } from '@lucide/svelte';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/toast.svelte';
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
   import CurrencySelect from '$components/CurrencySelect.svelte';
   import DatePicker from '$components/DatePicker.svelte';
+  import CategoryDot from '$components/CategoryDot.svelte';
   import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
   let id = $derived($page.params.id || '');
@@ -23,11 +50,15 @@
   let editAmountStr = $state('');
   let editIsIncome = $state(false);
   let editCurrencyCode = $state(currencyStore.defaultCurrencyCode);
-  let editAccountId = $state<any>('');
-  let editCategoryId = $state<any>('');
+  let editAccountId = $state('');
+  let editCategoryId = $state('');
   let editDateObj = $state<Date | null>(null);
   let editLocation = $state('');
   let editDescription = $state('');
+  let editAmountError = $state<string | null>(null);
+  let editTitleError = $state<string | null>(null);
+  let editAmountWrapEl = $state<HTMLElement | null>(null);
+  let deleteConfirmOpen = $state(false);
 
   $effect(() => {
     const subEnt = liveQuery(() => db.account_entries.get(id)).subscribe({
@@ -46,6 +77,8 @@
             editDateObj = new Date(entry.date || entry.created_at);
             editLocation = entry.location || '';
             editDescription = entry.description || '';
+            editAmountError = null;
+            editTitleError = null;
           }
         }
       }
@@ -64,50 +97,74 @@
     };
   });
 
-  function handleAmountInput(e: Event) {
-    const target = e.target as HTMLInputElement;
-    let val = target.value;
-
+  function handleAmountInput(val: string) {
     if (val.includes('-')) {
       editIsIncome = false;
       val = val.replace(/-/g, '');
     }
-    if (val.includes('+')) {
+    if (val.includes('+') || val.includes('=')) {
       editIsIncome = true;
-      val = val.replace(/\+/g, '');
+      val = val.replace(/[+=]/g, '');
     }
 
-    // Only allow numbers and one decimal point
     val = val.replace(/[^0-9.]/g, '');
     const parts = val.split('.');
     if (parts.length > 2) {
       val = parts[0] + '.' + parts.slice(1).join('');
     }
 
+    if (val === editAmountStr) {
+      const inputEl = editAmountWrapEl?.querySelector('input');
+      if (inputEl && inputEl.value !== val) {
+        inputEl.value = val;
+      }
+    }
+
     editAmountStr = val;
-    target.value = val;
+    if (editAmountError) editAmountError = null;
   }
 
   async function handleDelete() {
     if (!entry) return;
-    if (confirm('Are you sure you want to delete this entry?')) {
-      const now = new Date().toISOString();
-      await db.account_entries.update(id, {
-        deleted_at: now,
-        updated_at: now
-      });
-      goto(`/accounts/${entry.account_id}`);
-    }
+    const now = new Date().toISOString();
+    await db.account_entries.update(id, {
+      deleted_at: now,
+      updated_at: now
+    });
+    deleteConfirmOpen = false;
+    goto(`/accounts/${entry.account_id}`);
   }
 
-  async function handleSaveEdit() {
-    if (!entry || !editTitle.trim() || !editAccountId || !editCategoryId) return;
+  async function handleSaveEdit(e: SubmitEvent) {
+    e.preventDefault();
+    if (!entry) return;
 
     let amount = Math.abs(parseFloat(editAmountStr));
+    let hasError = false;
     if (isNaN(amount) || amount === 0) {
-      toast.error('Please enter a valid amount.');
+      editAmountError = 'Enter a valid amount greater than 0.';
+      hasError = true;
+    } else {
+      editAmountError = null;
+    }
+
+    if (!editTitle.trim()) {
+      editTitleError = 'Enter a title for this entry.';
+      hasError = true;
+    } else {
+      editTitleError = null;
+    }
+
+    if (hasError) {
+      toast.error(editAmountError ?? editTitleError ?? 'Please fill out all required fields.');
       return;
     }
+
+    if (!editAccountId || !editCategoryId) {
+      toast.error('Please select an account and category.');
+      return;
+    }
+
     if (!editIsIncome) amount = -amount;
 
     const normalizedCurrency = normalizeCurrencyCode(editCurrencyCode);
@@ -136,7 +193,7 @@
     return categories.find((c) => c.id === catId)?.title || 'Unknown';
   }
   function getCategoryColor(catId: string) {
-    return categories.find((c) => c.id === catId)?.color || '#cccccc';
+    return categories.find((c) => c.id === catId)?.color || '#71717a';
   }
 
   let entryCurrency = $derived(normalizeCurrencyCode(entry?.currency_code));
@@ -152,211 +209,256 @@
   });
 </script>
 
-{#if !entry}
-  <div class="text-muted-foreground p-12 text-center font-bold tracking-widest uppercase">
-    Entry not found or deleted.
-    <br /><br />
-    <button onclick={() => history.back()} class="btn btn-outline inline-block">Go Back</button>
-  </div>
-{:else}
-  <div class="mx-auto max-w-2xl space-y-6 font-sans">
-    <div class="border-border/50 flex items-center gap-4 border-b pb-4">
-      <button onclick={() => history.back()} class="btn-icon">
-        <ArrowLeft size={20} />
-      </button>
-      <h1 class="flex-1 text-2xl font-semibold tracking-tight">Entry Details</h1>
+{#snippet editIcon()}
+  <Icon icon={Pencil} size="sm" />
+{/snippet}
+{#snippet deleteIcon()}
+  <Icon icon={Trash2} size="sm" />
+{/snippet}
+{#snippet saveIcon()}
+  <Icon icon={Check} size="sm" />
+{/snippet}
+{#snippet cancelIcon()}
+  <Icon icon={X} size="sm" />
+{/snippet}
+{#snippet expenseIcon()}
+  <Icon icon={Minus} size="sm" />
+{/snippet}
+{#snippet incomeIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet notFoundActions()}
+  <Button label="Back to entries" href="/entries" />
+{/snippet}
 
-      {#if !editing}
-        <div class="flex gap-2">
-          <button onclick={() => (editing = true)} class="btn-icon" title="Edit">
-            <Pencil size={18} />
-          </button>
-          <button onclick={handleDelete} class="btn-icon-destructive" title="Delete">
-            <Trash2 size={18} />
-          </button>
-        </div>
-      {/if}
-    </div>
+{#snippet header()}
+  <LayoutHeader hasDivider padding={5}>
+    <VStack gap={2}>
+      <Breadcrumbs variant="supporting">
+        <BreadcrumbItem href="/entries">Entries</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>{entry?.title ?? 'Entry details'}</BreadcrumbItem>
+      </Breadcrumbs>
 
-    {#if editing}
-      <form
-        onsubmit={(e) => {
-          e.preventDefault();
-          handleSaveEdit();
-        }}
-        class="bg-card border-border/50 space-y-5 rounded-xl border p-6 shadow-sm"
-      >
-        <div class="flex gap-3">
-          <button
-            type="button"
-            onclick={() => (editIsIncome = false)}
-            class="flex-1 rounded-lg border py-3 text-sm font-medium transition-all {!editIsIncome
-              ? 'bg-destructive/10 text-destructive border-destructive/20'
-              : 'border-border/50 text-muted-foreground hover:bg-muted bg-transparent'}"
-            >Expense</button
-          >
-          <button
-            type="button"
-            onclick={() => (editIsIncome = true)}
-            class="flex-1 rounded-lg border py-3 text-sm font-medium transition-all {editIsIncome
-              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
-              : 'border-border/50 text-muted-foreground hover:bg-muted bg-transparent'}"
-            >Income</button
-          >
-        </div>
+      <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+        <HStack gap={2} vAlign="center" wrap="wrap">
+          <Heading level={1}>{editing ? 'Edit entry' : (entry?.title ?? 'Entry details')}</Heading>
+          {#if entry && !editing}
+            <Token label={entryCurrency} size="sm" />
+          {/if}
+        </HStack>
 
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div class="space-y-1.5 sm:col-span-2">
-            <label class="text-foreground block text-sm font-medium">Amount</label>
-            <input
-              type="text"
-              inputmode="decimal"
-              bind:value={editAmountStr}
-              oninput={handleAmountInput}
-              class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-xl font-medium focus:ring-2 focus:outline-none"
-              placeholder="Amount"
+        {#if entry && !editing}
+          <HStack gap={2}>
+            <Button
+              label="Edit"
+              variant="secondary"
+              size="sm"
+              icon={editIcon}
+              onclick={() => (editing = true)}
             />
-          </div>
+            <Button
+              label="Delete"
+              variant="destructive"
+              size="sm"
+              icon={deleteIcon}
+              onclick={() => (deleteConfirmOpen = true)}
+            />
+          </HStack>
+        {/if}
+      </HStack>
+    </VStack>
+  </LayoutHeader>
+{/snippet}
 
-          <div class="space-y-1.5">
-            <label class="text-foreground block text-sm font-medium">Currency</label>
-            <CurrencySelect bind:value={editCurrencyCode} />
-          </div>
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-foreground block text-sm font-medium">Title</label>
-          <input
-            type="text"
-            bind:value={editTitle}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-            placeholder="Title"
-          />
-        </div>
-
-        <div class="relative z-10 grid grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-foreground block text-sm font-medium">Account</label>
-            <AccountSelect bind:value={editAccountId} {accounts} />
-          </div>
-          <div class="space-y-1.5">
-            <label class="text-foreground block text-sm font-medium">Category</label>
-            <CategorySelect bind:value={editCategoryId} {categories} />
-          </div>
-        </div>
-
-        <div class="space-y-1.5 pt-2">
-          <label class="text-foreground block text-sm font-medium">Date</label>
-          <DatePicker bind:startDate={editDateObj} mode="single" />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-foreground block text-sm font-medium">Location</label>
-          <input
-            type="text"
-            bind:value={editLocation}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-            placeholder="Location"
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-foreground block text-sm font-medium">Note</label>
-          <textarea
-            bind:value={editDescription}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full resize-none rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-            placeholder="Note"></textarea>
-        </div>
-
-        <div class="flex gap-4 pt-4">
-          <button type="submit" class="btn flex-1 gap-2 py-3"><Check size={16} /> Save</button>
-          <button
-            type="button"
-            onclick={() => {
-              editing = false;
-            }}
-            class="btn-outline flex flex-1 items-center justify-center gap-2 py-3"
-            ><X size={16} /> Cancel</button
+{#snippet content()}
+  <LayoutContent padding={6} label="Entry details">
+    {#if !entry}
+      <EmptyState title="Entry not found or deleted" actions={notFoundActions} />
+    {:else if editing}
+      <form onsubmit={handleSaveEdit} novalidate>
+        <FormLayout defaultOptionality="optional">
+          <SegmentedControl
+            label="Entry type"
+            value={editIsIncome ? 'income' : 'expense'}
+            onChange={(v) => (editIsIncome = v === 'income')}
+            layout="fill"
           >
-        </div>
+            <SegmentedControlItem value="expense" label="Expense" icon={expenseIcon} />
+            <SegmentedControlItem value="income" label="Income" icon={incomeIcon} />
+          </SegmentedControl>
+
+          <!-- Matched md heights + responsive grid (identical to EntryForm). -->
+          <div class="sunder-amount-currency-grid">
+            <div bind:this={editAmountWrapEl} class="sunder-amount-cell">
+              <TextInput
+                label="Amount"
+                size="md"
+                placeholder="0.00"
+                value={editAmountStr}
+                onChange={handleAmountInput}
+                status={editAmountError ? { type: 'error', message: editAmountError } : undefined}
+                controlClassName={editIsIncome
+                  ? 'sunder-tabular sunder-positive'
+                  : 'sunder-tabular sunder-negative'}
+                isRequired
+                hasAutoFocus
+              />
+            </div>
+            <div class="sunder-currency-cell">
+              <CurrencySelect bind:value={editCurrencyCode} showLabel isRequired size="md" />
+            </div>
+          </div>
+
+          <TextInput
+            label="Title"
+            value={editTitle}
+            onChange={(v) => {
+              editTitle = v;
+              if (editTitleError && v.trim()) editTitleError = null;
+            }}
+            status={editTitleError ? { type: 'error', message: editTitleError } : undefined}
+            isRequired
+          />
+
+          <Grid columns={{ minWidth: 200, max: 2 }} gap={4}>
+            <AccountSelect bind:value={editAccountId} {accounts} showLabel isRequired />
+            <CategorySelect bind:value={editCategoryId} {categories} showLabel isRequired />
+          </Grid>
+
+          <Grid columns={{ minWidth: 200, max: 2 }} gap={4}>
+            <DatePicker bind:startDate={editDateObj} mode="single" label="Date" showLabel />
+            <TextInput
+              label="Location"
+              placeholder="Where did this happen?"
+              value={editLocation}
+              onChange={(v) => (editLocation = v)}
+            />
+          </Grid>
+
+          <TextArea
+            label="Note"
+            rows={3}
+            value={editDescription}
+            onChange={(v) => (editDescription = v)}
+          />
+
+          <HStack gap={3} hAlign="end" paddingBlockStart={2}>
+            <Button
+              label="Cancel"
+              variant="secondary"
+              icon={cancelIcon}
+              onclick={() => (editing = false)}
+            />
+            <Button label="Save changes" type="submit" variant="primary" icon={saveIcon} />
+          </HStack>
+        </FormLayout>
       </form>
     {:else}
-      <div class="bg-card border-border/50 rounded-xl border p-6 shadow-sm">
-        <div class="border-border/50 mb-8 border-b pb-8 text-center">
-          <p class="text-muted-foreground mb-4 text-sm font-medium">
-            {new Date(entry.date || entry.created_at).toLocaleDateString()}
-          </p>
-          <h2 class="mb-2 text-2xl font-semibold tracking-tight">{entry.title}</h2>
-          <p
-            class="text-5xl font-bold tracking-tight {entry.amount >= 0
-              ? 'text-emerald-500'
-              : 'text-destructive'}"
+      <VStack gap={6}>
+        <VStack gap={1}>
+          <Text type="supporting" color="secondary">
+            {entry.amount >= 0 ? 'Income' : 'Expense'} · {new Date(
+              entry.date || entry.created_at
+            ).toLocaleDateString()}
+          </Text>
+          <Heading
+            level={2}
+            type="display-2"
+            class={entry.amount >= 0
+              ? 'sunder-tabular sunder-positive'
+              : 'sunder-tabular sunder-negative'}
           >
             {currencyStore.formatAmount(entry.amount, entryCurrency, { showPlus: true })}
-          </p>
+          </Heading>
           {#if convertedInfo?.converted}
-            <p class="text-muted-foreground mt-2 text-sm">
+            <Text type="supporting" color="secondary" hasTabularNumbers>
               ≈ {currencyStore.formatAmount(
                 convertedInfo.amount,
                 currencyStore.defaultCurrencyCode,
                 { showPlus: true }
               )}
               {#if convertedInfo.rate}
-                <span class="text-xs opacity-75">
-                  (1 {entryCurrency} = {convertedInfo.rate.toFixed(4)}
-                  {currencyStore.defaultCurrencyCode})
-                </span>
+                (1 {entryCurrency} = {convertedInfo.rate.toFixed(4)}
+                {currencyStore.defaultCurrencyCode})
               {/if}
-            </p>
+            </Text>
           {/if}
-        </div>
+        </VStack>
 
-        <div class="space-y-5">
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-muted-foreground font-medium">Currency</span>
-            <span class="font-mono font-medium">
+        <Divider />
+
+        <MetadataList columns="multi">
+          <MetadataListItem label="Account">
+            <Link href="/accounts/{entry.account_id}" type="inherit">
+              {getAccountName(entry.account_id)}
+            </Link>
+          </MetadataListItem>
+          <MetadataListItem label="Category">
+            <Link href="/categories/{entry.category_id}" type="inherit">
+              <HStack gap={2} vAlign="center">
+                <CategoryDot color={getCategoryColor(entry.category_id)} size="sm" />
+                {getCategoryName(entry.category_id)}
+              </HStack>
+            </Link>
+          </MetadataListItem>
+          <MetadataListItem label="Currency">
+            <Text type="code">
               {entryCurrency} · {currencyStore.getCurrency(entryCurrency).name}
-            </span>
-          </div>
-
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-muted-foreground font-medium">Account</span>
-            <a
-              href="/accounts/{entry.account_id}"
-              class="hover:text-primary font-medium transition-colors"
-              >{getAccountName(entry.account_id)}</a
-            >
-          </div>
-
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-muted-foreground font-medium">Category</span>
-            <a
-              href="/categories/{entry.category_id}"
-              class="hover:text-primary flex items-center gap-2 font-medium transition-colors"
-            >
-              <div
-                class="h-3 w-3 rounded-full"
-                style="background-color: {getCategoryColor(entry.category_id)}"
-              ></div>
-              {getCategoryName(entry.category_id)}
-            </a>
-          </div>
-
+            </Text>
+          </MetadataListItem>
+          <MetadataListItem label="Date">
+            <Text hasTabularNumbers>
+              {new Date(entry.date || entry.created_at).toLocaleDateString()}
+            </Text>
+          </MetadataListItem>
           {#if entry.location}
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-muted-foreground font-medium">Location</span>
-              <span class="text-right font-medium">{entry.location}</span>
-            </div>
+            <MetadataListItem label="Location">
+              <Text>{entry.location}</Text>
+            </MetadataListItem>
           {/if}
+        </MetadataList>
 
-          {#if entry.description}
-            <div class="border-border/50 mt-5 border-t pt-5 text-sm">
-              <span class="text-muted-foreground mb-2 block font-medium">Note</span>
-              <p class="text-foreground font-medium whitespace-pre-wrap">{entry.description}</p>
-            </div>
-          {/if}
-        </div>
-      </div>
+        {#if entry.description}
+          <Divider />
+          <VStack gap={1.5}>
+            <Text type="label" color="secondary" weight="medium">Note</Text>
+            <Text class="sunder-pre-wrap">{entry.description}</Text>
+          </VStack>
+        {/if}
+      </VStack>
     {/if}
-  </div>
-{/if}
+  </LayoutContent>
+{/snippet}
+
+<Layout height="fill" contentWidth={760} {header} {content} />
+
+<AlertDialog
+  isOpen={deleteConfirmOpen}
+  onOpenChange={(next) => (deleteConfirmOpen = next)}
+  title="Delete this entry?"
+  description="“{entry?.title ?? ''}” will be marked as deleted and removed from your totals."
+  actionLabel="Delete entry"
+  actionVariant="destructive"
+  onAction={handleDelete}
+/>
+
+<style>
+  .sunder-amount-currency-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(176px, 220px);
+    gap: var(--spacing-4);
+    align-items: start;
+    width: 100%;
+  }
+
+  .sunder-amount-cell,
+  .sunder-currency-cell {
+    min-width: 0;
+  }
+
+  @media (max-width: 480px) {
+    .sunder-amount-currency-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

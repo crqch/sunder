@@ -1,29 +1,55 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fly, slide } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { prefersReducedMotion } from 'svelte/motion';
+  import { fade, scale, slide } from 'svelte/transition';
   import {
-    RefreshCw,
-    CheckCircle2,
-    AlertCircle,
-    CircleDashed,
-    ChevronDown,
-    ChevronUp,
-    Save,
-    Maximize2
-  } from '@lucide/svelte';
+    AlertDialog,
+    Badge,
+    Banner,
+    Button,
+    HStack,
+    Heading,
+    Icon,
+    IconButton,
+    List,
+    ListItem,
+    Spinner,
+    StatusDot,
+    Text,
+    VStack
+  } from '@astryx-sv/core';
+  import { ChevronDown, Maximize2, Minimize2, RefreshCw } from '@lucide/svelte';
   import { getUnsyncedChanges, syncAll, clearLocalDatabase } from '$lib/sync';
   import { syncState } from '$lib/syncState.svelte';
 
-  let { mode = 'bar' } = $props<{ mode?: 'bar' | 'sidebar' }>();
+  let {
+    mode = 'banner',
+    compact = false
+  }: { mode?: 'poller' | 'banner' | 'sidebar'; compact?: boolean } = $props();
 
-  let unsyncedCount = $state(0);
-  let unsyncedData = $state<{ accounts: any[]; categories: any[]; entries: any[] }>({
-    accounts: [],
-    categories: [],
-    entries: []
-  });
   let showDetails = $state(false);
+  let discardConfirmOpen = $state(false);
   let lastAutoSyncTime = Date.now();
+  const detailsId = $props.id();
+
+  // Svelte skips `in:` transitions for blocks created during a component's first
+  // render, and this component remounts every time the banner slot appears — so
+  // the shell's intro never played. Flipping a post-mount flag creates the shell
+  // through a real state change instead, which lets the slide intro run.
+  let bannerEntered = $state(false);
+  $effect(() => {
+    bannerEntered = true;
+  });
+
+  /** Svelte transitions get a zero clock when the user asks for less motion. */
+  function motionMs(duration: number): number {
+    return prefersReducedMotion.current ? 0 : duration;
+  }
+
+  let unsyncedCount = $derived(syncState.pendingCount);
+  let unsyncedData = $derived(syncState.unsyncedData);
+  let isPillVisible = $derived(syncState.minimized && syncState.status !== 'idle');
 
   function toggleMinimize() {
     syncState.minimized = !syncState.minimized;
@@ -32,37 +58,39 @@
 
   // Periodically check for unsynced changes and run auto-sync
   onMount(() => {
-    // Only run the interval in the bar instance so we don't duplicate work
-    if (mode === 'sidebar') return;
+    // Only run the polling interval in the dedicated poller instance so we don't
+    // duplicate work and polling stays active even when the banner slot unmounts.
+    if (mode !== 'poller') return;
 
-    const interval = setInterval(async () => {
+    const poll = async () => {
       if (syncState.status === 'syncing') return;
       try {
         const changes = await getUnsyncedChanges();
-        unsyncedData = changes;
-        unsyncedCount =
-          changes.accounts.length + changes.categories.length + changes.entries.length;
+        syncState.unsyncedData = changes;
+        const count = changes.accounts.length + changes.categories.length + changes.entries.length;
+        syncState.pendingCount = count;
 
-        if (unsyncedCount > 0 && syncState.status === 'idle') {
+        if (count > 0 && syncState.status === 'idle') {
           syncState.status = 'unsynced';
-        } else if (unsyncedCount === 0 && syncState.status === 'unsynced') {
+        } else if (count === 0 && syncState.status === 'unsynced') {
           syncState.status = 'idle';
           showDetails = false;
         }
 
-        // Auto-sync logic
-        if (syncState.autoSyncEnabled && unsyncedCount > 0) {
+        if (syncState.autoSyncEnabled && count > 0) {
           const now = Date.now();
           if (now - lastAutoSyncTime >= syncState.autoSyncInterval * 60 * 1000) {
             lastAutoSyncTime = now;
             await handleManualSync();
           }
         }
-      } catch (e) {
-        // ignore
+      } catch {
+        // ignore transient IndexedDB reads
       }
-    }, 2000);
+    };
 
+    poll();
+    const interval = setInterval(poll, 2000);
     return () => clearInterval(interval);
   });
 
@@ -73,7 +101,10 @@
     try {
       await syncAll();
       syncState.status = 'success';
-      unsyncedCount = 0;
+      syncState.pendingCount = 0;
+      syncState.unsyncedData = { accounts: [], categories: [], entries: [] };
+      syncState.lastSyncedAt =
+        localStorage.getItem('sunder_last_sync_timestamp') || new Date().toISOString();
       showDetails = false;
       setTimeout(() => {
         if (syncState.status === 'success') {
@@ -87,216 +118,319 @@
   }
 
   async function handleDiscardAll() {
-    if (confirm('Are you sure you want to discard all unsynced changes? This cannot be undone.')) {
-      syncState.status = 'syncing';
-      try {
-        await clearLocalDatabase();
-        await syncAll(); // pulls fresh data
-        syncState.status = 'idle';
-        unsyncedCount = 0;
-        showDetails = false;
-      } catch (e) {
-        console.error(e);
-        syncState.status = 'error';
-      }
+    syncState.status = 'syncing';
+    try {
+      await clearLocalDatabase();
+      await syncAll();
+      syncState.status = 'idle';
+      syncState.pendingCount = 0;
+      syncState.unsyncedData = { accounts: [], categories: [], entries: [] };
+      syncState.lastSyncedAt =
+        localStorage.getItem('sunder_last_sync_timestamp') || new Date().toISOString();
+      showDetails = false;
+    } catch (e) {
+      console.error(e);
+      syncState.status = 'error';
     }
+    discardConfirmOpen = false;
   }
+
+  function lastSyncTimestamp(): string {
+    if (typeof window === 'undefined') return '1970-01-01';
+    return (
+      syncState.lastSyncedAt || localStorage.getItem('sunder_last_sync_timestamp') || '1970-01-01'
+    );
+  }
+
+  let statusLabelText = $derived(
+    syncState.status === 'syncing'
+      ? 'Syncing...'
+      : syncState.status === 'success'
+        ? 'Synced'
+        : syncState.status === 'error'
+          ? 'Sync failed'
+          : 'Unsynced'
+  );
+
+  let bannerStatus = $derived<'info' | 'success' | 'error' | 'warning'>(
+    syncState.status === 'syncing'
+      ? 'info'
+      : syncState.status === 'success'
+        ? 'success'
+        : syncState.status === 'error'
+          ? 'error'
+          : 'warning'
+  );
+
+  let bannerTitle = $derived(
+    syncState.status === 'syncing'
+      ? 'Syncing your data...'
+      : syncState.status === 'success'
+        ? 'All changes synced'
+        : syncState.status === 'error'
+          ? 'Sync failed — check your connection or retry'
+          : `${unsyncedCount} unsynced ${unsyncedCount === 1 ? 'change' : 'changes'}`
+  );
 </script>
 
-{#if mode === 'sidebar'}
-  {#if syncState.minimized && syncState.status !== 'idle'}
-    <div transition:slide={{ duration: 250 }} class="flex items-center gap-2 pb-2">
-      <button
-        type="button"
-        onclick={handleManualSync}
-        class="focus-visible:ring-primary flex flex-1 items-center justify-center gap-2 rounded-md p-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2
-          {syncState.status === 'error'
-          ? 'text-destructive hover:bg-destructive/10'
-          : syncState.status === 'success'
-            ? 'text-emerald-500 hover:bg-emerald-500/10'
-            : syncState.status === 'unsynced'
-              ? 'text-amber-500 hover:bg-amber-500/10'
-              : 'text-muted-foreground hover:bg-muted'}"
-        title="Sync Status"
+{#snippet statusMark()}
+  <span class="sunder-sync-mark" data-status={syncState.status}>
+    {#key syncState.status}
+      <span
+        class="sunder-sync-mark-swap"
+        in:scale={{ duration: motionMs(180), start: 0.65, easing: cubicOut }}
+        out:fade={{ duration: motionMs(110) }}
       >
         {#if syncState.status === 'syncing'}
-          <RefreshCw size={16} class="text-primary animate-spin" />
-          <span>Syncing...</span>
+          <Spinner size="sm" />
         {:else if syncState.status === 'success'}
-          <CheckCircle2 size={16} />
-          <span>Synced!</span>
+          <StatusDot variant="success" label="Synced" />
         {:else if syncState.status === 'error'}
-          <AlertCircle size={16} />
-          <span>Failed</span>
+          <StatusDot variant="error" label="Sync failed" />
         {:else if syncState.status === 'unsynced'}
-          <div class="relative flex h-4 w-4 items-center justify-center">
-            <div
-              class="absolute h-full w-full animate-ping rounded-full bg-amber-500 opacity-20"
-            ></div>
-            <CircleDashed size={16} class="relative z-10 text-amber-500" />
-          </div>
-          <span>Unsynced</span>
+          <StatusDot variant="warning" label="Unsynced changes" isPulsing />
+        {:else}
+          <StatusDot variant="success" label="All changes synced" />
         {/if}
-      </button>
-      <button
-        onclick={toggleMinimize}
-        class="text-muted-foreground hover:bg-muted rounded-md p-2 transition-colors"
-        title="Expand Sync Bar"
+      </span>
+    {/key}
+  </span>
+{/snippet}
+
+{#snippet syncIcon()}
+  <Icon icon={RefreshCw} size="sm" />
+{/snippet}
+
+{#snippet expandIcon()}
+  <Icon icon={Maximize2} size="sm" />
+{/snippet}
+
+{#snippet minimizeIcon()}
+  <Icon icon={Minimize2} size="sm" />
+{/snippet}
+
+{#snippet chevronIcon()}
+  <span class="sunder-sync-chevron" data-open={showDetails ? '' : undefined}>
+    <Icon icon={ChevronDown} size="sm" />
+  </span>
+{/snippet}
+
+{#snippet bannerActions()}
+  <HStack class="sunder-sync-actions" gap={2} vAlign="center">
+    {#if syncState.status === 'unsynced' || syncState.status === 'error'}
+      <Button
+        class="sunder-sync-action"
+        label={syncState.status === 'error' ? 'Retry sync' : 'Sync now'}
+        variant="primary"
+        size="sm"
+        icon={syncIcon}
+        onclick={handleManualSync}
+      />
+    {/if}
+    <IconButton
+      class="sunder-sync-minimize"
+      label="Minimize sync banner"
+      variant="ghost"
+      size="sm"
+      icon={minimizeIcon}
+      tooltip="Minimize to sidebar"
+      onclick={toggleMinimize}
+    />
+    {#if syncState.status === 'unsynced'}
+      <IconButton
+        class="sunder-sync-toggle"
+        label={showDetails ? 'Collapse pending changes' : 'Expand pending changes'}
+        variant="ghost"
+        size="sm"
+        icon={chevronIcon}
+        tooltip={showDetails ? 'Collapse pending changes' : 'Expand pending changes'}
+        aria-expanded={showDetails}
+        aria-controls={showDetails ? detailsId : undefined}
+        onclick={() => (showDetails = !showDetails)}
+      />
+    {/if}
+  </HStack>
+{/snippet}
+
+{#snippet changeItem(item: any, labelField: string, baseHref: string)}
+  {@const isDeleted = !!item.deleted_at}
+  {@const isCreated = item.created_at > lastSyncTimestamp()}
+  {#snippet changeBadge()}
+    {#if isDeleted}
+      <Badge variant="error" label="Deleted" />
+    {:else if isCreated}
+      <Badge variant="success" label="Created" />
+    {:else}
+      <Badge variant="warning" label="Updated" />
+    {/if}
+  {/snippet}
+  {#snippet itemLabel()}
+    {#if isDeleted}
+      <Text color="secondary" hasStrikethrough>{item[labelField]}</Text>
+    {:else}
+      {item[labelField]}
+    {/if}
+  {/snippet}
+  <ListItem
+    label={itemLabel}
+    startContent={changeBadge}
+    href={isDeleted ? undefined : `${baseHref}/${item.id}`}
+    onclick={() => {
+      showDetails = false;
+    }}
+  />
+{/snippet}
+
+{#snippet pendingDetails()}
+  <VStack gap={4}>
+    <HStack hAlign="between" vAlign="center" gap={3}>
+      <Heading level={4}>Pending changes</Heading>
+      <Button
+        class="sunder-sync-discard"
+        label="Discard all"
+        variant="destructive"
+        size="sm"
+        onclick={() => (discardConfirmOpen = true)}
+      />
+    </HStack>
+
+    {#if unsyncedData.accounts.length > 0}
+      <VStack gap={1}>
+        <Text type="supporting" color="secondary" weight="semibold">Accounts</Text>
+        <List density="compact" edge="flush">
+          {#each unsyncedData.accounts as item (item.id)}
+            {@render changeItem(item, 'name', '/accounts')}
+          {/each}
+        </List>
+      </VStack>
+    {/if}
+    {#if unsyncedData.categories.length > 0}
+      <VStack gap={1}>
+        <Text type="supporting" color="secondary" weight="semibold">Categories</Text>
+        <List density="compact" edge="flush">
+          {#each unsyncedData.categories as item (item.id)}
+            {@render changeItem(item, 'title', '/categories')}
+          {/each}
+        </List>
+      </VStack>
+    {/if}
+    {#if unsyncedData.entries.length > 0}
+      <VStack gap={1}>
+        <Text type="supporting" color="secondary" weight="semibold">Entries</Text>
+        <List density="compact" edge="flush">
+          {#each unsyncedData.entries as item (item.id)}
+            {@render changeItem(item, 'title', '/entries')}
+          {/each}
+        </List>
+      </VStack>
+    {/if}
+  </VStack>
+{/snippet}
+
+{#if mode === 'poller'}
+  <!-- Headless sync state poller; renders no DOM or landmark. -->
+{:else if mode === 'sidebar'}
+  {#if compact}
+    {#if isPillVisible}
+      <div
+        class="sunder-sync-compact"
+        data-status={syncState.status}
+        in:fade={{ duration: motionMs(180) }}
+        out:fade={{ duration: motionMs(120) }}
       >
-        <Maximize2 size={16} />
-      </button>
+        <IconButton
+          class="sunder-sync-compact-button"
+          label={statusLabelText}
+          variant="ghost"
+          size="sm"
+          icon={statusMark}
+          tooltip="Expand sync banner"
+          onclick={toggleMinimize}
+        />
+      </div>
+    {/if}
+  {:else if isPillVisible}
+    <div
+      class="sunder-sync-pill"
+      data-status={syncState.status}
+      in:slide={{ duration: motionMs(240), easing: cubicOut }}
+      out:slide={{ duration: motionMs(180), easing: cubicOut }}
+    >
+      <div
+        class="sunder-sync-pill-inner"
+        in:fade={{ duration: motionMs(180), delay: motionMs(30) }}
+        out:fade={{ duration: motionMs(120) }}
+      >
+        <HStack class="sunder-sync-pill-row" gap={1} vAlign="center" hAlign="between" width="100%">
+          <Button
+            class="sunder-sync-pill-button"
+            label={statusLabelText}
+            variant="ghost"
+            size="sm"
+            icon={statusMark}
+            tooltip="Click to sync now"
+            onclick={handleManualSync}
+          />
+          <IconButton
+            class="sunder-sync-pill-expand"
+            label="Expand sync banner"
+            variant="ghost"
+            size="sm"
+            icon={expandIcon}
+            tooltip="Expand sync banner"
+            onclick={toggleMinimize}
+          />
+        </HStack>
+      </div>
     </div>
   {/if}
-{:else}
-  {#if !syncState.minimized && syncState.status !== 'idle'}
+{:else if bannerEntered && !syncState.minimized && syncState.status !== 'idle'}
+  <div
+    class="sunder-sync-banner-shell"
+    in:slide={{ duration: motionMs(260), easing: cubicOut }}
+    out:slide={{ duration: motionMs(180), easing: cubicOut }}
+  >
     <div
-      transition:fly={{ y: 50, duration: 300 }}
-      class="bg-card border-border/50 fixed right-0 bottom-0 left-0 z-50 flex flex-col border-t shadow-[0_-4px_10px_rgba(0,0,0,0.05)] md:left-64"
+      class="sunder-sync-banner-inner"
+      in:fade={{ duration: motionMs(200), delay: motionMs(30) }}
+      out:fade={{ duration: motionMs(120) }}
     >
-      <!-- Header Bar -->
-      <div class="flex h-14 items-center justify-between px-6">
+      <Banner
+        class="sunder-sync-banner"
+        container="section"
+        status={bannerStatus}
+        title={bannerTitle}
+        icon={statusMark}
+        endContent={bannerActions}
+        collapsible={false}
+      />
+      <!--
+        The disclosure region lives outside Banner so its padding and borders
+        ride the same slide transition as its height. Inside Banner's content
+        wrapper they popped in/out instantly at the ends of the slide (jitter).
+      -->
+      {#if syncState.status === 'unsynced' && showDetails}
         <div
-          class="flex cursor-pointer items-center gap-3 select-none"
-          onclick={() => {
-            if (syncState.status === 'unsynced') showDetails = !showDetails;
-          }}
+          class="sunder-sync-details"
+          id={detailsId}
+          in:slide={{ duration: motionMs(220), easing: cubicOut }}
+          out:slide={{ duration: motionMs(160), easing: cubicOut }}
         >
-          {#if syncState.status === 'syncing'}
-            <RefreshCw size={18} class="text-primary animate-spin" />
-            <span class="font-medium">Syncing your data...</span>
-          {:else if syncState.status === 'success'}
-            <CheckCircle2 size={18} class="text-emerald-500" />
-            <span class="font-medium text-emerald-500">All changes synced!</span>
-          {:else if syncState.status === 'error'}
-            <AlertCircle size={18} class="text-destructive" />
-            <span class="text-destructive font-medium">Sync Failed. Retrying soon...</span>
-          {:else if syncState.status === 'unsynced'}
-            <div class="relative flex h-5 w-5 items-center justify-center">
-              <div
-                class="absolute h-full w-full animate-ping rounded-full bg-amber-500 opacity-20"
-              ></div>
-              <CircleDashed size={18} class="relative z-10 text-amber-500" />
-            </div>
-            <span class="text-foreground font-medium">
-              {unsyncedCount} unsynced {unsyncedCount === 1 ? 'change' : 'changes'}
-            </span>
-            <ChevronUp
-              size={16}
-              class="text-muted-foreground transition-transform duration-200 {showDetails
-                ? 'rotate-180'
-                : ''}"
-            />
-          {/if}
-        </div>
-
-        <div class="flex items-center gap-2">
-          {#if syncState.status === 'unsynced'}
-            <button onclick={handleManualSync} class="btn btn-sm gap-2">
-              <Save size={16} /> Sync Now
-            </button>
-          {/if}
-
-          <button
-            onclick={toggleMinimize}
-            class="text-muted-foreground hover:bg-muted rounded-md p-1.5 transition-colors"
-            title="Minimize to sidebar"
-          >
-            <ChevronDown size={16} />
-          </button>
-        </div>
-      </div>
-
-      <!-- Details Panel -->
-      {#if showDetails && syncState.status === 'unsynced'}
-        <div
-          transition:slide={{ duration: 250 }}
-          class="border-border/50 bg-muted/30 max-h-64 overflow-y-auto border-t px-6 py-4"
-        >
-          <div class="mb-4 flex items-center justify-between">
-            <h4 class="text-sm font-semibold">Pending Changes</h4>
-            <button
-              onclick={handleDiscardAll}
-              class="btn-outline border-destructive/50 hover:bg-destructive/10 text-destructive btn-sm"
-            >
-              Discard All
-            </button>
-          </div>
-          <div class="space-y-3">
-            {#snippet changeItem(item: any, labelField: string, baseHref: string)}
-              {@const isDeleted = !!item.deleted_at}
-              {@const lastSync = localStorage.getItem('sunder_last_sync_timestamp') || '1970-01-01'}
-              {@const isCreated = item.created_at > lastSync}
-              <li class="flex items-center gap-2">
-                {#if isDeleted}
-                  <span
-                    class="text-destructive bg-destructive/10 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wider uppercase"
-                    >Deleted</span
-                  >
-                  <span class="text-muted-foreground line-through">{item[labelField]}</span>
-                {:else}
-                  {#if isCreated}
-                    <span
-                      class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-emerald-500 uppercase"
-                      >Created</span
-                    >
-                  {:else}
-                    <span
-                      class="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-amber-500 uppercase"
-                      >Updated</span
-                    >
-                  {/if}
-                  <a
-                    href="{baseHref}/{item.id}"
-                    class="hover:text-primary cursor-pointer transition-colors hover:underline"
-                    onclick={() => {
-                      showDetails = false;
-                    }}
-                  >
-                    {item[labelField]}
-                  </a>
-                {/if}
-              </li>
-            {/snippet}
-
-            {#if unsyncedData.accounts.length > 0}
-              <div>
-                <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
-                  Accounts
-                </p>
-                <ul class="space-y-1.5 text-sm">
-                  {#each unsyncedData.accounts as item}
-                    {@render changeItem(item, 'name', '/accounts')}
-                  {/each}
-                </ul>
-              </div>
-            {/if}
-            {#if unsyncedData.categories.length > 0}
-              <div>
-                <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
-                  Categories
-                </p>
-                <ul class="space-y-1.5 text-sm">
-                  {#each unsyncedData.categories as item}
-                    {@render changeItem(item, 'title', '/categories')}
-                  {/each}
-                </ul>
-              </div>
-            {/if}
-            {#if unsyncedData.entries.length > 0}
-              <div>
-                <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
-                  Entries
-                </p>
-                <ul class="space-y-1.5 text-sm">
-                  {#each unsyncedData.entries as item}
-                    {@render changeItem(item, 'title', '/entries')}
-                  {/each}
-                </ul>
-              </div>
-            {/if}
-          </div>
+          {@render pendingDetails()}
         </div>
       {/if}
     </div>
-  {/if}
+  </div>
+{/if}
+
+{#if mode === 'banner'}
+  <AlertDialog
+    isOpen={discardConfirmOpen}
+    onOpenChange={(next) => (discardConfirmOpen = next)}
+    title="Discard all unsynced changes?"
+    description="This permanently deletes every local change that has not been synced, then pulls fresh data from the server. This cannot be undone."
+    actionLabel="Discard all"
+    actionVariant="destructive"
+    onAction={handleDiscardAll}
+  />
 {/if}

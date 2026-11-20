@@ -1,108 +1,106 @@
 <script module lang="ts">
-  const modalStack: { close: () => void; isDirty: () => boolean }[] = [];
+  import type { Snippet } from 'svelte';
 
-  if (typeof window !== 'undefined') {
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modalStack.length > 0) {
-        const topModal = modalStack[modalStack.length - 1];
-        const active = document.activeElement as HTMLElement;
-        const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(active?.tagName);
+  export const MODAL_CTX = Symbol('sunder-modal-ctx');
 
-        if (!topModal.isDirty()) {
-          topModal.close();
-          e.preventDefault();
-          e.stopPropagation();
-        } else if (isInput) {
-          active.blur();
-          e.preventDefault();
-          e.stopPropagation();
-        } else {
-          topModal.close();
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }
-    });
+  export interface ModalContext {
+    registerFooter: (footer: Snippet | null) => void;
   }
 </script>
 
 <script lang="ts">
-  import { fade, fly } from 'svelte/transition';
-  import { X } from '@lucide/svelte';
+  import { setContext } from 'svelte';
+  import { Dialog, DialogHeader, Layout, LayoutContent, LayoutFooter } from '@astryx-sv/core';
 
   let {
     open = $bindable(false),
     title,
+    subtitle = undefined,
     isDirty = false,
+    width = 560,
+    footer = undefined,
     children
-  } = $props<{
+  }: {
     open: boolean;
     title: string;
+    subtitle?: string;
     isDirty?: boolean;
-    children: import('svelte').Snippet;
-  }>();
+    width?: number | string;
+    footer?: Snippet;
+    children: Snippet;
+  } = $props();
 
-  let modalRef = {
-    close: () => {
-      open = false;
-    },
-    isDirty: () => isDirty
-  };
+  let registeredFooter = $state<Snippet | null>(null);
+  let effectiveFooter = $derived(footer ?? registeredFooter ?? undefined);
+  let contentWrapperEl = $state<HTMLElement | null>(null);
 
-  $effect(() => {
-    if (open) {
-      modalStack.push(modalRef);
-      return () => {
-        const idx = modalStack.indexOf(modalRef);
-        if (idx !== -1) modalStack.splice(idx, 1);
-      };
+  setContext<ModalContext>(MODAL_CTX, {
+    registerFooter(next) {
+      registeredFooter = next;
     }
   });
 
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node);
-
-    // Focus the first input after a tiny delay to ensure transition starts
-    setTimeout(() => {
-      const firstInput = node.querySelector('input, textarea, select') as HTMLElement;
-      if (firstInput) {
-        firstInput.focus();
-      }
-    }, 10);
-
-    return {
-      destroy() {
-        if (node.parentNode) {
-          node.parentNode.removeChild(node);
+  // Astryx Dialog focuses the first [data-autofocus] element in DOM order, which
+  // is DialogHeader's <h2>. When a form inside the modal marks a primary field
+  // with [data-modal-autofocus], hand focus to that control once the dialog opens.
+  $effect(() => {
+    if (!open) return;
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (!contentWrapperEl) return;
+        const target = contentWrapperEl.querySelector<HTMLElement>(
+          '[data-modal-autofocus] input:not([disabled]):not([type="hidden"]), [data-modal-autofocus] textarea:not([disabled]), input[data-modal-autofocus]:not([disabled])'
+        );
+        if (target && document.activeElement !== target) {
+          target.focus({ preventScroll: true });
         }
-      }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
     };
-  }
+  });
 </script>
 
-{#if open}
-  <div
-    use:portal
-    class="bg-background/80 fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm sm:p-6"
-    transition:fade={{ duration: 150 }}
-  >
-    <div
-      class="bg-card border-border/50 flex max-h-[100dvh] w-full max-w-xl flex-col rounded-xl border shadow-2xl"
-      transition:fly={{ y: 20, duration: 250, opacity: 0 }}
-    >
-      <div class="border-border/50 flex items-center justify-between border-b p-4">
-        <h2 class="text-lg font-semibold tracking-tight">{title}</h2>
-        <button
-          type="button"
-          onclick={() => (open = false)}
-          class="btn-icon border-transparent p-1.5"
-        >
-          <X size={18} />
-        </button>
-      </div>
-      <div class="min-h-0 flex-1 overflow-y-auto p-6">
+{#snippet dialogHeader()}
+  <DialogHeader {title} {subtitle} hasDivider onOpenChange={(next) => (open = next)} />
+{/snippet}
+
+{#snippet dialogFooter()}
+  <LayoutFooter hasDivider>
+    {@render effectiveFooter?.()}
+  </LayoutFooter>
+{/snippet}
+
+<!--
+  Padding contract: the Dialog owns the surface padding and publishes it through
+  the container variables; Layout's header/content/footer regions inherit it
+  (outer padding on the dialog edges, inner padding between regions). Passing
+  padding={0} here would zero those vars, jamming the title and close button
+  against the rounded corners — so the regions below deliberately set no
+  padding of their own.
+-->
+<Dialog
+  isOpen={open}
+  onOpenChange={(next) => (open = next)}
+  {width}
+  purpose={isDirty ? 'form' : 'info'}
+  padding={5}
+>
+  <Layout header={dialogHeader} footer={effectiveFooter ? dialogFooter : undefined}>
+    <LayoutContent>
+      <div bind:this={contentWrapperEl} class="sunder-modal-body-slot">
         {@render children()}
       </div>
-    </div>
-  </div>
-{/if}
+    </LayoutContent>
+  </Layout>
+</Dialog>
+
+<style>
+  .sunder-modal-body-slot {
+    min-width: 0;
+  }
+</style>

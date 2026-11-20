@@ -1,41 +1,67 @@
 <script lang="ts">
-  import { themeStore } from '$lib/themeStore';
-  import { Moon, Sun } from '@lucide/svelte';
-  import { tooltip } from '$lib/tooltip';
+  import { onMount } from 'svelte';
+  import { Button, Icon, IconButton } from '@astryx-sv/core';
+  import { Monitor, Moon, Sun } from '@lucide/svelte';
+  import { themeStore, type ThemeMode } from '$lib/themeStore';
 
   let {
-    class: className,
     showText = false,
-    responsiveText = false
-  }: { class?: string; showText?: boolean; responsiveText?: boolean } = $props();
+    size = 'sm',
+    variant = 'secondary'
+  }: {
+    showText?: boolean;
+    size?: 'sm' | 'md' | 'lg';
+    variant?: 'secondary' | 'ghost';
+  } = $props();
+
+  // Defer reading persisted client mode until after hydration so SSR and initial
+  // client DOM render the same icon component without corrupting SVG children.
+  let mounted = $state(false);
+  onMount(() => {
+    mounted = true;
+  });
+
+  let displayMode = $derived<ThemeMode>(mounted ? $themeStore : 'system');
+
+  let modeLabel = $derived(
+    displayMode === 'dark' ? 'Dark' : displayMode === 'light' ? 'Light' : 'System'
+  );
+
+  let tooltipLabel = $derived(
+    displayMode === 'system'
+      ? 'Theme: System (click for light · Alt+T)'
+      : displayMode === 'light'
+        ? 'Theme: Light (click for dark · Alt+T)'
+        : 'Theme: Dark (click for system · Alt+T)'
+  );
 </script>
 
-<button
-  type="button"
-  onclick={(e) => themeStore.toggle(e)}
-  class="btn btn-outline flex items-center justify-center gap-2 overflow-hidden transition-all {className}"
-  use:tooltip={{ text: 'Toggle Theme', keys: ['Alt', 'T'] }}
-  aria-label="Toggle theme"
->
-  <div class="relative flex size-4 shrink-0 items-center justify-center">
-    <Sun
-      class="absolute scale-100 rotate-0 opacity-100 transition-all duration-500 dark:scale-0 dark:rotate-90 dark:opacity-0"
-      size={16}
-    />
-    <Moon
-      class="absolute scale-0 -rotate-90 opacity-0 transition-all duration-500 dark:scale-100 dark:rotate-0 dark:opacity-100"
-      size={16}
-    />
-  </div>
-
-  {#if showText || responsiveText}
-    <span
-      class="font-medium whitespace-nowrap {responsiveText
-        ? 'hidden sm:inline-block'
-        : 'inline-block'}"
-    >
-      <span class="dark:hidden">Light mode</span>
-      <span class="hidden dark:inline">Dark mode</span>
-    </span>
+{#snippet modeIcon()}
+  {#if displayMode === 'dark'}
+    <Icon icon={Moon} size="sm" />
+  {:else if displayMode === 'light'}
+    <Icon icon={Sun} size="sm" />
+  {:else}
+    <Icon icon={Monitor} size="sm" />
   {/if}
-</button>
+{/snippet}
+
+{#if showText}
+  <Button
+    label={modeLabel}
+    {variant}
+    {size}
+    icon={modeIcon}
+    tooltip={tooltipLabel}
+    onclick={(e) => themeStore.toggle(e)}
+  />
+{:else}
+  <IconButton
+    label={tooltipLabel}
+    {variant}
+    {size}
+    icon={modeIcon}
+    tooltip={tooltipLabel}
+    onclick={(e) => themeStore.toggle(e)}
+  />
+{/if}

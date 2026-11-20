@@ -1,12 +1,14 @@
 <script lang="ts">
+  import './layout.css';
+  import { LayerProvider, Theme } from '@astryx-sv/core';
+  import { neutralTheme } from '@astryx-sv/theme-neutral';
   import { themeStore } from '$lib/themeStore';
   import { onMount } from 'svelte';
   import { initAuth } from '$lib/auth';
   import KeybindListener from '$components/KeybindListener.svelte';
   import KeybindsModal from '$components/KeybindsModal.svelte';
+  import ToastBridge from '$components/ToastBridge.svelte';
   import { keybinds } from '$lib/keybinds.svelte';
-
-  let showKeybinds = $state(false);
 
   $effect(() => {
     let unregTheme = keybinds.register({
@@ -14,20 +16,7 @@
       name: 'Toggle Theme',
       keys: ['alt+t'],
       global: true,
-      action: () => {
-        const btn =
-          document.getElementById('theme-toggle-btn') ||
-          document.getElementById('theme-toggle-btn-mobile');
-        if (btn) {
-          const rect = btn.getBoundingClientRect();
-          themeStore.toggle({
-            clientX: rect.left + rect.width / 2,
-            clientY: rect.top + rect.height / 2
-          } as MouseEvent);
-        } else {
-          themeStore.toggle();
-        }
-      }
+      action: () => themeStore.toggle()
     });
 
     let unregHelp = keybinds.register({
@@ -35,9 +24,7 @@
       name: 'Show Keyboard Shortcuts',
       keys: ['alt+?'],
       global: true,
-      action: () => {
-        showKeybinds = !showKeybinds;
-      }
+      action: () => keybinds.toggleHelp()
     });
 
     let unregHelpAlt = keybinds.register({
@@ -45,9 +32,7 @@
       name: 'Show Keyboard Shortcuts',
       keys: ['alt+/'],
       global: true,
-      action: () => {
-        showKeybinds = !showKeybinds;
-      }
+      action: () => keybinds.toggleHelp()
     });
 
     return () => {
@@ -64,9 +49,11 @@
   let { children } = $props();
 </script>
 
-<KeybindListener />
-<KeybindsModal bind:open={showKeybinds} />
-
-<div class="text-foreground bg-background dark">
-  {@render children()}
-</div>
+<Theme theme={neutralTheme} mode={$themeStore}>
+  <LayerProvider toast={{ position: 'topEnd', maxVisible: 4 }}>
+    <ToastBridge />
+    <KeybindListener />
+    <KeybindsModal bind:open={keybinds.helpOpen} />
+    {@render children()}
+  </LayerProvider>
+</Theme>

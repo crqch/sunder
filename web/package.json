@@ -16,21 +16,25 @@
     "fmt:check": "oxfmt --check",
     "gen": "wrangler types",
     "deploy": "bun run build && wrangler deploy",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "astryx-svelte": "node node_modules/@astryx-sv/cli/bin/astryx-svelte.mjs"
   },
   "dependencies": {
+    "@astryx-sv/core": "0.7.14",
+    "@astryx-sv/theme-neutral": "0.7.14",
     "@icons-pack/svelte-simple-icons": "^7.2.0",
     "@lucide/svelte": "^1.31.0",
     "@paralleldrive/cuid2": "^3.3.0",
+    "@stylexjs/stylex": "0.19.2",
     "dexie": "^4.4.4",
-    "path": "^0.12.7",
-    "svelte-sonner": "^1.2.1"
+    "path": "^0.12.7"
   },
   "devDependencies": {
+    "@astryx-sv/cli": "0.7.14",
+    "@stylexjs/unplugin": "0.19.2",
     "@sveltejs/adapter-cloudflare": "^7.2.8",
     "@sveltejs/kit": "^2.63.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
-    "@tailwindcss/vite": "^4.3.0",
     "@vite-pwa/sveltekit": "^1.1.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
@@ -38,7 +42,6 @@
     "oxlint": "^1.78.0",
     "svelte": "^5.56.1",
     "svelte-check": "^4.6.0",
-    "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "wrangler": "^4.97.0"
@@ -46,5 +49,8 @@
   "lint-staged": {
     "*.{js,ts,jsx,tsx,json,yaml,toml,html,css,md,vue,svelte}": "bunx oxfmt",
     "*.{js,ts,jsx,tsx,svelte}": "bunx oxlint"
+  },
+  "astryx": {
+    "theme": "@astryx-sv/theme-neutral"
   }
 }

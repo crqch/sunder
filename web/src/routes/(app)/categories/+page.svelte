@@ -1,184 +1,393 @@
 <script lang="ts">
+  import {
+    AlertDialog,
+    Badge,
+    Button,
+    EmptyState,
+    Heading,
+    HStack,
+    Icon,
+    IconButton,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    Link,
+    Stack,
+    Table,
+    TableSelectionToolbar,
+    Text,
+    TextInput,
+    VStack,
+    pixel,
+    proportional,
+    useTableSelection,
+    useTableSelectionState,
+    useTableSortable,
+    type TableColumn,
+    type TablePlugin
+  } from '@astryx-sv/core';
+  import { Plus, Search, Trash2 } from '@lucide/svelte';
+  import { goto } from '$app/navigation';
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
-  import type { EntryCategory } from '$lib/types';
-  import { Plus, ChevronRight, Trash2, Check } from '@lucide/svelte';
+  import type { AccountEntry, EntryCategory } from '$lib/types';
   import { modals } from '$lib/modals.svelte';
-  import { tooltip } from '$lib/tooltip';
+  import { currencyStore } from '$lib/currency.svelte';
+  import CategoryDot from '$components/CategoryDot.svelte';
   import Modal from '$components/Modal.svelte';
+  import EntryForm from '$components/EntryForm.svelte';
+
+  interface CategoryRow extends Record<string, unknown> {
+    id: string;
+    category: EntryCategory;
+    title: string;
+    description: string | null;
+    color: string;
+    entryCount: number;
+    netTotal: number;
+  }
 
   let categories = $state<EntryCategory[]>([]);
+  let entries = $state<AccountEntry[]>([]);
 
   $effect(() => {
-    const sub = liveQuery(() =>
+    const subCat = liveQuery(() =>
       db.entry_categories.filter((c) => !c.deleted_at).toArray()
     ).subscribe({ next: (v) => (categories = v) });
-    return () => sub.unsubscribe();
+    const subEnt = liveQuery(() =>
+      db.account_entries.filter((e) => !e.deleted_at).toArray()
+    ).subscribe({ next: (v) => (entries = v) });
+    return () => {
+      subCat.unsubscribe();
+      subEnt.unsubscribe();
+    };
   });
+
+  let defaultCurrency = $derived(currencyStore.defaultCurrencyCode);
   let searchQuery = $state('');
-  let filteredCategories = $derived(
-    categories.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  let sort = $state<Array<{ sortKey: string; direction: 'ascending' | 'descending' }>>([
+    { sortKey: 'title', direction: 'ascending' }
+  ]);
 
-  let selectedIds = $state<string[]>([]);
-  let allSelected = $derived(
-    filteredCategories.length > 0 && selectedIds.length === filteredCategories.length
-  );
-  let deleteModalOpen = $state(false);
+  let categoryRows = $derived.by<CategoryRow[]>(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const rows = categories
+      .filter(
+        (c) =>
+          !q ||
+          c.title.toLowerCase().includes(q) ||
+          (c.description && c.description.toLowerCase().includes(q))
+      )
+      .map((category) => {
+        const catEntries = entries.filter((e) => e.category_id === category.id);
+        const netTotal = catEntries.reduce(
+          (sum, e) => sum + currencyStore.convertEntryToDefault(e),
+          0
+        );
+        return {
+          id: category.id,
+          category,
+          title: category.title,
+          description: category.description,
+          color: category.color,
+          entryCount: catEntries.length,
+          netTotal
+        };
+      });
 
-  function toggleSelectAll() {
-    if (allSelected) {
-      selectedIds = [];
-    } else {
-      selectedIds = filteredCategories.map((c) => c.id);
-    }
-  }
+    const sortKey = sort[0]?.sortKey ?? 'title';
+    const dir = sort[0]?.direction ?? 'ascending';
+    rows.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'title') cmp = a.title.localeCompare(b.title);
+      else if (sortKey === 'entryCount') cmp = a.entryCount - b.entryCount;
+      else if (sortKey === 'netTotal') cmp = a.netTotal - b.netTotal;
+      return dir === 'descending' ? -cmp : cmp;
+    });
 
-  function handleCardClick(e: MouseEvent, id: string) {
-    if (selectedIds.length > 0) {
-      e.preventDefault();
-      if (selectedIds.includes(id)) {
-        selectedIds = selectedIds.filter((x) => x !== id);
-      } else {
-        selectedIds = [...selectedIds, id];
+    return rows;
+  });
+
+  let selectedKeys = $state<Set<string>>(new Set());
+  const selection = useTableSelectionState<CategoryRow>(() => ({
+    data: categoryRows,
+    idKey: 'id',
+    selectedKeys,
+    setSelectedKeys: (next) => (selectedKeys = next)
+  }));
+  const selectionPlugin = useTableSelection<CategoryRow>(() => ({
+    ...selection.selectionConfig,
+    getRowLabel: (item) => item.title
+  }));
+  const sortablePlugin = useTableSortable<CategoryRow>(() => ({
+    sort,
+    onSortChange: (next) => (sort = next)
+  }));
+
+  const rowActivationPlugin = $derived<TablePlugin<CategoryRow>>({
+    transformBodyRow: (props, item) => ({
+      ...props,
+      htmlProps: {
+        ...props.htmlProps,
+        style: `${props.htmlProps.style ? `${props.htmlProps.style};` : ''}cursor: pointer;`,
+        onclick: (event: MouseEvent) => {
+          if ((event.target as HTMLElement).closest('input, button, a, select, textarea') != null) {
+            return;
+          }
+          if (selectedKeys.size > 0) {
+            const next = new Set(selectedKeys);
+            if (next.has(item.id)) next.delete(item.id);
+            else next.add(item.id);
+            selectedKeys = next;
+            return;
+          }
+          goto(`/categories/${item.id}`);
+        }
       }
-    }
-  }
+    })
+  });
 
-  function confirmDelete() {
-    deleteModalOpen = true;
+  const plugins = $derived<Record<string, TablePlugin<CategoryRow>>>({
+    selection: selectionPlugin,
+    sortable: sortablePlugin,
+    rowActivation: rowActivationPlugin
+  });
+
+  const columns = $derived<TableColumn<CategoryRow>[]>([
+    {
+      key: 'title',
+      header: 'Category',
+      width: proportional(2, { minWidth: 220 }),
+      sortable: true,
+      renderCell: categoryCell
+    },
+    {
+      key: 'entryCount',
+      header: 'Entries',
+      width: pixel(110),
+      align: 'end',
+      sortable: true,
+      renderCell: countCell
+    },
+    {
+      key: 'netTotal',
+      header: `Net (${defaultCurrency})`,
+      width: pixel(180),
+      align: 'end',
+      sortable: true,
+      renderCell: totalCell
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: pixel(60),
+      align: 'end',
+      renderCell: actionCell
+    }
+  ]);
+
+  let deleteModalOpen = $state(false);
+  let quickEntryModalOpen = $state(false);
+  let quickEntryCategoryId = $state<string | undefined>(undefined);
+
+  function openQuickEntry(categoryId: string) {
+    quickEntryCategoryId = categoryId;
+    quickEntryModalOpen = true;
   }
 
   async function executeDelete() {
     const now = new Date().toISOString();
     await db.entry_categories
       .where('id')
-      .anyOf(selectedIds)
+      .anyOf([...selectedKeys])
       .modify({ deleted_at: now, updated_at: now });
-    selectedIds = [];
+    selectedKeys = new Set();
     deleteModalOpen = false;
   }
 </script>
 
-<div class="space-y-8 font-sans">
-  <div class="border-border/50 flex flex-col gap-4 border-b pb-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">Categories</h1>
-      <button
-        use:tooltip={{ text: 'New Category', keys: ['Alt', 'N', 'C'] }}
-        onclick={() => (modals.createCategory = true)}
-        class="btn shrink-0 gap-2 text-sm"
-      >
-        <Plus size={16} /> Add
-      </button>
-    </div>
-    <div class="relative w-full">
-      <input
-        type="text"
-        bind:value={searchQuery}
-        placeholder="Search categories..."
-        class="input h-10 w-full"
-      />
-    </div>
-  </div>
+{#snippet searchIcon()}
+  <Icon icon={Search} size="sm" color="secondary" />
+{/snippet}
+{#snippet addIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet trashIcon()}
+  <Icon icon={Trash2} size="sm" />
+{/snippet}
+{#snippet emptyActions()}
+  <Button
+    label="Add category"
+    variant="primary"
+    icon={addIcon}
+    onclick={() => (modals.createCategory = true)}
+  />
+{/snippet}
 
-  {#if categories.length === 0}
-    <div
-      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
-    >
-      No categories found. Create your first category!
-    </div>
-  {:else if filteredCategories.length === 0}
-    <div
-      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
-    >
-      No categories match your search.
-    </div>
+{#snippet categoryCell(row: CategoryRow)}
+  <HStack gap={2} vAlign="center">
+    <CategoryDot color={row.color} />
+    <VStack gap={0}>
+      <Link
+        href={`/categories/${row.id}`}
+        hasUnderline
+        weight="medium"
+        maxLines={1}
+        class="sunder-table-title-link"
+      >
+        {row.title}
+      </Link>
+      {#if row.description}
+        <Text type="supporting" color="secondary" maxLines={1}>{row.description}</Text>
+      {/if}
+    </VStack>
+  </HStack>
+{/snippet}
+
+{#snippet countCell(row: CategoryRow)}
+  <Text type="supporting" color="secondary" hasTabularNumbers>{row.entryCount}</Text>
+{/snippet}
+
+{#snippet totalCell(row: CategoryRow)}
+  {#if row.entryCount === 0}
+    <Text type="supporting" color="secondary" hasTabularNumbers>—</Text>
   {:else}
-    <div class="flex flex-col gap-3">
-      <div class="flex items-center justify-between px-2">
-        <label class="group flex cursor-pointer items-center gap-2.5 text-sm font-medium">
-          <div
-            class="relative flex h-5 w-5 items-center justify-center rounded border-2 transition-all {allSelected
-              ? 'bg-primary border-primary text-primary-foreground'
-              : 'border-border/60 bg-background group-hover:border-primary/50 text-transparent'}"
-          >
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onchange={toggleSelectAll}
-              class="sr-only"
-            />
-            <Check size={12} strokeWidth={3} class={allSelected ? 'opacity-100' : 'opacity-0'} />
-          </div>
-          Select All ({filteredCategories.length})
-        </label>
-
-        {#if selectedIds.length > 0}
-          <button
-            onclick={confirmDelete}
-            class="btn btn-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 gap-1.5"
-          >
-            <Trash2 size={14} /> Delete Selected ({selectedIds.length})
-          </button>
-        {/if}
-      </div>
-
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-        {#each filteredCategories as category}
-          <a
-            href="/categories/{category.id}"
-            onclick={(e) => handleCardClick(e, category.id)}
-            class="bg-card border-border/50 hover:border-border group has-[:checked]:border-primary has-[:checked]:ring-primary/50 has-[:checked]:bg-primary/5 relative block rounded-xl border p-5 shadow-sm transition-all hover:shadow-md has-[:checked]:ring-1"
-          >
-            <label
-              class="absolute top-3 right-3 z-10 -m-2 cursor-pointer p-2"
-              onclick={(e) => e.stopPropagation()}
-            >
-              <input
-                type="checkbox"
-                value={category.id}
-                bind:group={selectedIds}
-                class="peer sr-only"
-              />
-              <div
-                class="peer-checked:bg-primary peer-checked:border-primary peer-checked:text-primary-foreground border-border/60 bg-background hover:border-primary/50 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 text-transparent transition-all peer-checked:scale-110 [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
-              >
-                <Check size={12} strokeWidth={3} />
-              </div>
-            </label>
-            <div class="mb-2 flex items-center gap-3 pr-8">
-              <div
-                class="h-4 w-4 rounded-full shadow-sm"
-                style="background-color: {category.color}"
-              ></div>
-              <h2 class="truncate text-lg font-medium tracking-tight">{category.title}</h2>
-            </div>
-            {#if category.description}
-              <p class="text-muted-foreground line-clamp-2 text-sm">{category.description}</p>
-            {/if}
-          </a>
-        {/each}
-      </div>
-    </div>
+    <Text
+      weight="semibold"
+      hasTabularNumbers
+      class={row.netTotal >= 0 ? 'sunder-positive' : 'sunder-negative'}
+    >
+      {currencyStore.formatAmount(row.netTotal, defaultCurrency, { showPlus: true })}
+    </Text>
   {/if}
-</div>
+{/snippet}
 
-<Modal bind:open={deleteModalOpen} title="Delete Categories">
-  <div class="space-y-4">
-    <p class="text-sm">
-      Are you sure you want to delete <strong class="text-foreground font-semibold"
-        >{selectedIds.length}</strong
-      > categories?
-    </p>
-    <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-      <button
-        onclick={executeDelete}
-        class="btn bg-destructive text-destructive-foreground hover:bg-destructive/90 flex-1"
-      >
-        Delete
-      </button>
-      <button onclick={() => (deleteModalOpen = false)} class="btn-outline flex-1"> Cancel </button>
-    </div>
-  </div>
+{#snippet actionCell(row: CategoryRow)}
+  <IconButton
+    label="Add entry to {row.title}"
+    variant="ghost"
+    size="sm"
+    icon={addIcon}
+    tooltip="Log entry in {row.title}"
+    onclick={() => openQuickEntry(row.id)}
+  />
+{/snippet}
+
+{#snippet bulkActions()}
+  <Button
+    label="Delete"
+    size="sm"
+    variant="destructive"
+    icon={trashIcon}
+    onclick={() => (deleteModalOpen = true)}
+  />
+{/snippet}
+
+{#snippet header()}
+  <LayoutHeader hasDivider padding={4}>
+    <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+      <HStack gap={2} vAlign="center">
+        <Heading level={1}>Categories</Heading>
+        <Badge label={String(categories.length)} />
+      </HStack>
+
+      <HStack gap={2} vAlign="center" wrap="wrap">
+        <TextInput
+          label="Search categories"
+          isLabelHidden
+          type="text"
+          placeholder="Search categories..."
+          value={searchQuery}
+          onChange={(v) => (searchQuery = v)}
+          startIcon={searchIcon}
+          hasClear
+          width={240}
+        />
+        <Button
+          label="Add category"
+          variant="primary"
+          icon={addIcon}
+          tooltip="New category (Alt+N, C)"
+          onclick={() => (modals.createCategory = true)}
+        />
+      </HStack>
+    </HStack>
+  </LayoutHeader>
+{/snippet}
+
+{#snippet content()}
+  <LayoutContent padding={0} label="Categories">
+    {#if categories.length === 0}
+      <Stack padding={8}>
+        <EmptyState
+          title="No categories yet"
+          description="Create your first category to organize your spending and income."
+          actions={emptyActions}
+        />
+      </Stack>
+    {:else if categoryRows.length === 0}
+      <Stack padding={8}>
+        <EmptyState
+          title="No categories match your search"
+          description="Try a different search term."
+        />
+      </Stack>
+    {:else}
+      <VStack gap={0}>
+        {#if selection.selectionState.hasSelection}
+          {#snippet selectionLabel(count: number)}
+            {count} {count === 1 ? 'category' : 'categories'} selected
+          {/snippet}
+          <TableSelectionToolbar
+            selection={selection.selectionState}
+            startContent={bulkActions}
+            renderSelectionLabel={selectionLabel}
+          />
+        {/if}
+        <Table
+          data={categoryRows}
+          {columns}
+          idKey="id"
+          dividers="rows"
+          hasHover
+          {plugins}
+          rowCount={categoryRows.length}
+        />
+      </VStack>
+    {/if}
+  </LayoutContent>
+{/snippet}
+
+<Layout height="fill" {header} {content} />
+
+<Modal bind:open={quickEntryModalOpen} title="Add Entry">
+  {#if quickEntryCategoryId}
+    <EntryForm
+      initialCategoryId={quickEntryCategoryId}
+      onsuccess={() => (quickEntryModalOpen = false)}
+      oncancel={() => (quickEntryModalOpen = false)}
+    />
+  {/if}
 </Modal>
+
+<AlertDialog
+  isOpen={deleteModalOpen}
+  onOpenChange={(next) => (deleteModalOpen = next)}
+  title="Delete {selectedKeys.size} {selectedKeys.size === 1 ? 'category' : 'categories'}?"
+  description="The selected categories will be marked as deleted. Entries keep their category reference."
+  actionLabel="Delete"
+  actionVariant="destructive"
+  onAction={executeDelete}
+/>
+
+<style>
+  :global(.sunder-table-title-link) {
+    cursor: pointer;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+  }
+
+  :global(.sunder-table-title-link:hover) {
+    text-decoration-thickness: 2px;
+  }
+</style>

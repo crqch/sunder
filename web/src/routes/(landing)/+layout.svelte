@@ -1,5 +1,5 @@
 <script lang="ts">
-  import '../layout.css';
+  import { AppShell } from '@astryx-sv/core';
   import favicon from '$lib/assets/favicon.svg';
   import Navbar from '$components/Navbar.svelte';
   import Footer from '$components/Footer.svelte';
@@ -12,10 +12,12 @@
   <link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="flex min-h-screen flex-col">
-  <Navbar />
-  <main class="flex w-full flex-1 flex-col items-center">
-    {@render children()}
-  </main>
+<AppShell height="auto" contentPadding={0}>
+  {#snippet topNav()}
+    <Navbar />
+  {/snippet}
+
+  {@render children()}
+
   <Footer />
-</div>
+</AppShell>

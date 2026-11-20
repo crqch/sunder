@@ -1,17 +1,19 @@
 <script lang="ts">
-  import { db } from '$lib/db';
+  import { Button, FormLayout, HStack, Icon, TextArea, TextInput } from '@astryx-sv/core';
   import { Save } from '@lucide/svelte';
   import { createId } from '@paralleldrive/cuid2';
+  import { db } from '$lib/db';
+  import ColorPicker from './ColorPicker.svelte';
 
   let {
     onsuccess,
     oncancel,
     isDirty = $bindable(false)
-  } = $props<{
+  }: {
     onsuccess: (id: string) => void;
     oncancel?: () => void;
     isDirty?: boolean;
-  }>();
+  } = $props();
 
   let title = $state('');
   let description = $state('');
@@ -21,25 +23,7 @@
     isDirty = title.trim() !== '' || description.trim() !== '' || color !== '#ef4444';
   });
 
-  const PRESET_COLORS = [
-    '#ef4444',
-    '#f97316',
-    '#f59e0b',
-    '#84cc16',
-    '#22c55e',
-    '#10b981',
-    '#06b6d4',
-    '#3b82f6',
-    '#6366f1',
-    '#8b5cf6',
-    '#d946ef',
-    '#f43f5e',
-    '#000000',
-    '#52525b',
-    '#78716c'
-  ];
-
-  async function saveCategory(e: Event) {
+  async function saveCategory(e: SubmitEvent) {
     e.preventDefault();
     if (!title.trim()) return;
 
@@ -60,76 +44,33 @@
   }
 </script>
 
-<form onsubmit={saveCategory} class="space-y-5">
-  <div class="space-y-1.5">
-    <label for="cat-name" class="text-foreground block text-sm font-medium">Category Title</label>
-    <input
-      id="cat-name"
-      type="text"
-      bind:value={title}
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
+{#snippet saveIcon()}
+  <Icon icon={Save} size="sm" />
+{/snippet}
+
+<form onsubmit={saveCategory}>
+  <FormLayout defaultOptionality="optional">
+    <TextInput
+      label="Category title"
       placeholder="e.g., Groceries, Rent, Utilities..."
-      required
-      autofocus
+      value={title}
+      onChange={(v) => (title = v)}
+      isRequired
+      hasAutoFocus
     />
-  </div>
-
-  <div class="space-y-1.5">
-    <label for="cat-description" class="text-foreground block text-sm font-medium"
-      >Description (Optional)</label
-    >
-    <textarea
-      id="cat-description"
-      bind:value={description}
-      rows="2"
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full resize-none rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
-      placeholder="Brief description..."></textarea>
-  </div>
-
-  <div class="border-border/50 space-y-3 border-t pt-4">
-    <label class="text-foreground block text-sm font-medium">Color</label>
-
-    <div class="flex items-center gap-3">
-      <input
-        type="color"
-        bind:value={color}
-        class="h-10 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
-      />
-      <input
-        type="text"
-        bind:value={color}
-        class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary flex-1 rounded-lg border p-2.5 text-sm uppercase focus:ring-2 focus:outline-none"
-        pattern="^#[0-9A-Fa-f]{'{6}'}$"
-      />
-    </div>
-
-    <div class="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-8">
-      {#each PRESET_COLORS as preset}
-        <button
-          type="button"
-          onclick={() => (color = preset)}
-          class="border-border/20 h-8 rounded-full border {color === preset
-            ? 'ring-primary ring-offset-background ring-2 ring-offset-2'
-            : ''} shadow-sm transition-transform hover:scale-110"
-          style="background-color: {preset}"
-          aria-label="Select color {preset}"
-        ></button>
-      {/each}
-    </div>
-  </div>
-
-  <div class="mt-4 flex gap-3 pt-2">
-    {#if oncancel}
-      <button
-        type="button"
-        onclick={oncancel}
-        class="btn-outline flex w-full flex-1 items-center justify-center"
-      >
-        Cancel
-      </button>
-    {/if}
-    <button type="submit" class="btn flex w-full flex-1 items-center justify-center gap-2">
-      <Save size={16} /> Create
-    </button>
-  </div>
+    <TextArea
+      label="Description"
+      placeholder="Brief description..."
+      rows={2}
+      value={description}
+      onChange={(v) => (description = v)}
+    />
+    <ColorPicker bind:value={color} />
+    <HStack gap={3} hAlign="end" paddingBlockStart={2}>
+      {#if oncancel}
+        <Button label="Cancel" variant="secondary" onclick={oncancel} />
+      {/if}
+      <Button label="Create category" type="submit" variant="primary" icon={saveIcon} />
+    </HStack>
+  </FormLayout>
 </form>

@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { HStack, List, ListItem, Text, Kbd } from '@astryx-sv/core';
   import Modal from '$components/Modal.svelte';
   import { keybinds } from '$lib/keybinds.svelte';
 
-  let { open = $bindable(false) } = $props<{ open: boolean }>();
+  let { open = $bindable(false) }: { open: boolean } = $props();
 
-  let groupedCommands = $derived(() => {
+  let groupedCommands = $derived.by(() => {
     const groups: { name: string; bindings: string[][] }[] = [];
     const map = new Map<string, number>();
 
@@ -22,36 +23,30 @@
 </script>
 
 <Modal bind:open title="Keyboard Shortcuts">
-  <div class="space-y-4 pt-2">
-    {#each groupedCommands() as group}
-      <div class="border-border/50 flex items-center justify-between border-b pb-3 last:border-0">
-        <span class="text-sm font-medium">{group.name}</span>
-        <div class="flex flex-wrap items-center justify-end gap-2">
-          {#each group.bindings as keysList, bIndex}
-            <div class="flex items-center gap-2">
-              {#each keysList as chord, i}
-                <div class="flex items-center gap-1">
-                  {#each chord.split('+') as key}
-                    <kbd
-                      class="border-border bg-muted/80 text-muted-foreground rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase shadow-sm"
-                      >{key}</kbd
-                    >
-                  {/each}
-                </div>
-                {#if i < keysList.length - 1}
-                  <span class="text-muted-foreground px-1 text-xs font-medium">then</span>
-                {/if}
-              {/each}
-            </div>
-            {#if bIndex < group.bindings.length - 1}
-              <span class="text-muted-foreground px-1 text-xs font-medium">or</span>
-            {/if}
-          {/each}
-        </div>
-      </div>
-    {/each}
-    {#if keybinds.commands.length === 0}
-      <p class="text-muted-foreground text-center text-sm">No keybinds registered.</p>
-    {/if}
-  </div>
+  {#if keybinds.commands.length === 0}
+    <Text type="supporting" color="secondary">No keybinds registered.</Text>
+  {:else}
+    <List hasDividers edge="flush">
+      {#each groupedCommands as group (group.name)}
+        {#snippet groupKeys()}
+          <HStack gap={2} vAlign="center" wrap="wrap" hAlign="end">
+            {#each group.bindings as keysList, bIndex}
+              <HStack gap={1} vAlign="center">
+                {#each keysList as chord, i}
+                  <Kbd keys={chord} />
+                  {#if i < keysList.length - 1}
+                    <Text type="supporting" color="secondary">then</Text>
+                  {/if}
+                {/each}
+              </HStack>
+              {#if bIndex < group.bindings.length - 1}
+                <Text type="supporting" color="secondary">or</Text>
+              {/if}
+            {/each}
+          </HStack>
+        {/snippet}
+        <ListItem label={group.name} endContent={groupKeys} />
+      {/each}
+    </List>
+  {/if}
 </Modal>

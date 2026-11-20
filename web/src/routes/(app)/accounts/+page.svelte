@@ -1,12 +1,52 @@
 <script lang="ts">
+  import {
+    AlertDialog,
+    Badge,
+    Button,
+    EmptyState,
+    Heading,
+    HStack,
+    Icon,
+    IconButton,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    Link,
+    Stack,
+    Table,
+    TableSelectionToolbar,
+    Text,
+    TextInput,
+    Token,
+    VStack,
+    pixel,
+    proportional,
+    useTableSelection,
+    useTableSelectionState,
+    useTableSortable,
+    type TableColumn,
+    type TablePlugin
+  } from '@astryx-sv/core';
+  import { Plus, Search, Trash2 } from '@lucide/svelte';
+  import { goto } from '$app/navigation';
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
   import type { Account, AccountEntry } from '$lib/types';
-  import { Plus, ChevronRight, Trash2, Check } from '@lucide/svelte';
   import { modals } from '$lib/modals.svelte';
-  import { tooltip } from '$lib/tooltip';
-  import Modal from '$components/Modal.svelte';
   import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
+  import Modal from '$components/Modal.svelte';
+  import EntryForm from '$components/EntryForm.svelte';
+
+  interface AccountRow extends Record<string, unknown> {
+    id: string;
+    account: Account;
+    name: string;
+    displayCurrency: string;
+    hasExplicitCurrency: boolean;
+    entryCount: number;
+    balance: number;
+    defaultCurrencyBalance: number;
+  }
 
   let accounts = $state<Account[]>([]);
   let entries = $state<AccountEntry[]>([]);
@@ -24,209 +64,371 @@
     };
   });
 
+  let defaultCurrency = $derived(currencyStore.defaultCurrencyCode);
   let searchQuery = $state('');
-  let filteredAccounts = $derived(
-    accounts.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  let sort = $state<Array<{ sortKey: string; direction: 'ascending' | 'descending' }>>([
+    { sortKey: 'name', direction: 'ascending' }
+  ]);
+
+  let accountRows = $derived.by<AccountRow[]>(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const rows = accounts
+      .filter((a) => !q || a.name.toLowerCase().includes(q))
+      .map((account) => {
+        const hasExplicitCurrency = !!account.currency_code;
+        const displayCurrency = hasExplicitCurrency
+          ? normalizeCurrencyCode(account.currency_code)
+          : defaultCurrency;
+        const accEntries = entries.filter((e) => e.account_id === account.id);
+        const balance = accEntries.reduce(
+          (sum, e) =>
+            sum +
+            currencyStore.tryConvert(
+              e.amount,
+              e.currency_code,
+              displayCurrency,
+              e.date || e.created_at
+            ).amount,
+          0
+        );
+        const defaultCurrencyBalance = accEntries.reduce(
+          (sum, e) => sum + currencyStore.convertEntryToDefault(e),
+          0
+        );
+        return {
+          id: account.id,
+          account,
+          name: account.name,
+          displayCurrency,
+          hasExplicitCurrency,
+          entryCount: accEntries.length,
+          balance,
+          defaultCurrencyBalance
+        };
+      });
+
+    const sortKey = sort[0]?.sortKey ?? 'name';
+    const dir = sort[0]?.direction ?? 'ascending';
+    rows.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+      else if (sortKey === 'entryCount') cmp = a.entryCount - b.entryCount;
+      else if (sortKey === 'balance') cmp = a.defaultCurrencyBalance - b.defaultCurrencyBalance;
+      return dir === 'descending' ? -cmp : cmp;
+    });
+
+    return rows;
+  });
+
+  let totalNetWorth = $derived(
+    accountRows.reduce((sum, row) => sum + row.defaultCurrencyBalance, 0)
   );
 
-  function getAccountDisplayCurrency(account: Account) {
-    return account.currency_code
-      ? normalizeCurrencyCode(account.currency_code)
-      : currencyStore.defaultCurrencyCode;
-  }
+  let selectedKeys = $state<Set<string>>(new Set());
+  const selection = useTableSelectionState<AccountRow>(() => ({
+    data: accountRows,
+    idKey: 'id',
+    selectedKeys,
+    setSelectedKeys: (next) => (selectedKeys = next)
+  }));
+  const selectionPlugin = useTableSelection<AccountRow>(() => ({
+    ...selection.selectionConfig,
+    getRowLabel: (item) => item.name
+  }));
+  const sortablePlugin = useTableSortable<AccountRow>(() => ({
+    sort,
+    onSortChange: (next) => (sort = next)
+  }));
 
-  function getBalance(account: Account) {
-    const targetCurrency = getAccountDisplayCurrency(account);
-    return entries
-      .filter((e) => e.account_id === account.id)
-      .reduce(
-        (sum, e) =>
-          sum +
-          currencyStore.tryConvert(
-            e.amount,
-            e.currency_code,
-            targetCurrency,
-            e.date || e.created_at
-          ).amount,
-        0
-      );
-  }
-
-  let selectedIds = $state<string[]>([]);
-  let allSelected = $derived(
-    filteredAccounts.length > 0 && selectedIds.length === filteredAccounts.length
-  );
-  let deleteModalOpen = $state(false);
-
-  function toggleSelectAll() {
-    if (allSelected) {
-      selectedIds = [];
-    } else {
-      selectedIds = filteredAccounts.map((a) => a.id);
-    }
-  }
-
-  function handleCardClick(e: MouseEvent, id: string) {
-    if (selectedIds.length > 0) {
-      e.preventDefault();
-      if (selectedIds.includes(id)) {
-        selectedIds = selectedIds.filter((x) => x !== id);
-      } else {
-        selectedIds = [...selectedIds, id];
+  const rowActivationPlugin = $derived<TablePlugin<AccountRow>>({
+    transformBodyRow: (props, item) => ({
+      ...props,
+      htmlProps: {
+        ...props.htmlProps,
+        style: `${props.htmlProps.style ? `${props.htmlProps.style};` : ''}cursor: pointer;`,
+        onclick: (event: MouseEvent) => {
+          if ((event.target as HTMLElement).closest('input, button, a, select, textarea') != null) {
+            return;
+          }
+          if (selectedKeys.size > 0) {
+            const next = new Set(selectedKeys);
+            if (next.has(item.id)) next.delete(item.id);
+            else next.add(item.id);
+            selectedKeys = next;
+            return;
+          }
+          goto(`/accounts/${item.id}`);
+        }
       }
-    }
-  }
+    })
+  });
 
-  function confirmDelete() {
-    deleteModalOpen = true;
+  const plugins = $derived<Record<string, TablePlugin<AccountRow>>>({
+    selection: selectionPlugin,
+    sortable: sortablePlugin,
+    rowActivation: rowActivationPlugin
+  });
+
+  const columns = $derived<TableColumn<AccountRow>[]>([
+    {
+      key: 'name',
+      header: 'Account',
+      width: proportional(2, { minWidth: 200 }),
+      sortable: true,
+      renderCell: nameCell
+    },
+    {
+      key: 'displayCurrency',
+      header: 'Currency',
+      width: pixel(130),
+      renderCell: currencyCell
+    },
+    {
+      key: 'entryCount',
+      header: 'Entries',
+      width: pixel(100),
+      align: 'end',
+      sortable: true,
+      renderCell: countCell
+    },
+    {
+      key: 'balance',
+      header: 'Balance',
+      width: pixel(180),
+      align: 'end',
+      sortable: true,
+      renderCell: balanceCell
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: pixel(60),
+      align: 'end',
+      renderCell: actionCell
+    }
+  ]);
+
+  let deleteModalOpen = $state(false);
+  let quickEntryModalOpen = $state(false);
+  let quickEntryAccountId = $state<string | undefined>(undefined);
+
+  function openQuickEntry(accountId: string) {
+    quickEntryAccountId = accountId;
+    quickEntryModalOpen = true;
   }
 
   async function executeDelete() {
     const now = new Date().toISOString();
-    await db.accounts.where('id').anyOf(selectedIds).modify({ deleted_at: now, updated_at: now });
-    selectedIds = [];
+    await db.accounts
+      .where('id')
+      .anyOf([...selectedKeys])
+      .modify({ deleted_at: now, updated_at: now });
+    selectedKeys = new Set();
     deleteModalOpen = false;
   }
 </script>
 
-<div class="space-y-8 font-sans">
-  <div class="border-border/50 flex flex-col gap-4 border-b pb-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">Accounts</h1>
-      <button
-        use:tooltip={{ text: 'New Account', keys: ['Alt', 'N', 'A'] }}
-        onclick={() => (modals.createAccount = true)}
-        class="btn shrink-0 gap-2 text-sm"
-      >
-        <Plus size={16} /> Add
-      </button>
-    </div>
+{#snippet searchIcon()}
+  <Icon icon={Search} size="sm" color="secondary" />
+{/snippet}
+{#snippet addIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet trashIcon()}
+  <Icon icon={Trash2} size="sm" />
+{/snippet}
+{#snippet emptyActions()}
+  <Button
+    label="Add account"
+    variant="primary"
+    icon={addIcon}
+    onclick={() => (modals.createAccount = true)}
+  />
+{/snippet}
 
-    <div class="relative w-full">
-      <input
-        type="text"
-        bind:value={searchQuery}
-        placeholder="Search accounts..."
-        class="input h-10 w-full"
-      />
-    </div>
-  </div>
+{#snippet nameCell(row: AccountRow)}
+  <Link
+    href={`/accounts/${row.id}`}
+    hasUnderline
+    weight="medium"
+    maxLines={1}
+    class="sunder-table-title-link"
+  >
+    {row.name}
+  </Link>
+{/snippet}
 
-  {#if accounts.length === 0}
-    <div
-      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
+{#snippet currencyCell(row: AccountRow)}
+  <HStack gap={1.5} vAlign="center">
+    <Token label={row.displayCurrency} size="sm" />
+    {#if !row.hasExplicitCurrency}
+      <Text type="supporting" color="secondary">Default</Text>
+    {/if}
+  </HStack>
+{/snippet}
+
+{#snippet countCell(row: AccountRow)}
+  <Text type="supporting" color="secondary" hasTabularNumbers>{row.entryCount}</Text>
+{/snippet}
+
+{#snippet balanceCell(row: AccountRow)}
+  <VStack gap={0} hAlign="end">
+    <Text
+      weight="semibold"
+      hasTabularNumbers
+      class={row.balance >= 0 ? 'sunder-positive' : 'sunder-negative'}
     >
-      No accounts found. Create your first account!
-    </div>
-  {:else if filteredAccounts.length === 0}
-    <div
-      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
-    >
-      No accounts match your search.
-    </div>
-  {:else}
-    <div class="flex flex-col gap-3">
-      <div class="flex items-center justify-between px-2">
-        <label class="group flex cursor-pointer items-center gap-2.5 text-sm font-medium">
-          <div
-            class="relative flex h-5 w-5 items-center justify-center rounded border-2 transition-all {allSelected
-              ? 'bg-primary border-primary text-primary-foreground'
-              : 'border-border/60 bg-background group-hover:border-primary/50 text-transparent'}"
-          >
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onchange={toggleSelectAll}
-              class="sr-only"
-            />
-            <Check size={12} strokeWidth={3} class={allSelected ? 'opacity-100' : 'opacity-0'} />
-          </div>
-          Select All ({filteredAccounts.length})
-        </label>
+      {currencyStore.formatAmount(row.balance, row.displayCurrency)}
+    </Text>
+    {#if row.displayCurrency !== defaultCurrency}
+      <Text type="supporting" color="secondary" hasTabularNumbers>
+        ≈ {currencyStore.formatAmount(row.defaultCurrencyBalance, defaultCurrency)}
+      </Text>
+    {/if}
+  </VStack>
+{/snippet}
 
-        {#if selectedIds.length > 0}
-          <button
-            onclick={confirmDelete}
-            class="btn btn-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 gap-1.5"
-          >
-            <Trash2 size={14} /> Delete Selected ({selectedIds.length})
-          </button>
-        {/if}
-      </div>
+{#snippet actionCell(row: AccountRow)}
+  <IconButton
+    label="Add entry to {row.name}"
+    variant="ghost"
+    size="sm"
+    icon={addIcon}
+    tooltip="Log entry in {row.name}"
+    onclick={() => openQuickEntry(row.id)}
+  />
+{/snippet}
 
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {#each filteredAccounts as account (account.id)}
-          {@const displayCurrency = getAccountDisplayCurrency(account)}
-          {@const balance = getBalance(account)}
-          <a
-            href="/accounts/{account.id}"
-            onclick={(e) => handleCardClick(e, account.id)}
-            class="bg-card border-border/50 hover:border-border group has-[:checked]:border-primary has-[:checked]:ring-primary/50 has-[:checked]:bg-primary/5 relative block rounded-xl border p-6 shadow-sm transition-all hover:shadow-md has-[:checked]:ring-1"
-          >
-            <label
-              class="absolute top-4 right-4 z-10 -m-2 cursor-pointer p-2"
-              onclick={(e) => e.stopPropagation()}
+{#snippet bulkActions()}
+  <Button
+    label="Delete"
+    size="sm"
+    variant="destructive"
+    icon={trashIcon}
+    onclick={() => (deleteModalOpen = true)}
+  />
+{/snippet}
+
+{#snippet header()}
+  <LayoutHeader hasDivider padding={4}>
+    <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+      <VStack gap={0.5}>
+        <HStack gap={2} vAlign="center">
+          <Heading level={1}>Accounts</Heading>
+          <Badge label={String(accounts.length)} />
+        </HStack>
+        {#if accounts.length > 0}
+          <HStack gap={1.5} vAlign="center">
+            <Text type="supporting" color="secondary">Total across shown accounts:</Text>
+            <Text
+              type="supporting"
+              weight="semibold"
+              hasTabularNumbers
+              class={totalNetWorth >= 0 ? 'sunder-positive' : 'sunder-negative'}
             >
-              <input
-                type="checkbox"
-                value={account.id}
-                bind:group={selectedIds}
-                class="peer sr-only"
-              />
-              <div
-                class="peer-checked:bg-primary peer-checked:border-primary peer-checked:text-primary-foreground border-border/60 bg-background hover:border-primary/50 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 text-transparent transition-all peer-checked:scale-110 [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
-              >
-                <Check size={12} strokeWidth={3} />
-              </div>
-            </label>
-            <div class="mb-4 flex items-start justify-between pr-8">
-              <div class="flex items-center gap-2">
-                <h2 class="text-lg font-medium tracking-tight">{account.name}</h2>
-                {#if account.currency_code}
-                  <span
-                    class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
-                  >
-                    {normalizeCurrencyCode(account.currency_code)}
-                  </span>
-                {/if}
-              </div>
-              <ChevronRight
-                size={20}
-                class="text-muted-foreground group-hover:text-foreground transition-colors"
-              />
-            </div>
-            <div>
-              <p class="text-muted-foreground mb-1 text-sm font-medium">Balance</p>
-              <p
-                class="text-3xl font-bold tracking-tight {balance >= 0
-                  ? 'text-emerald-500'
-                  : 'text-destructive'}"
-              >
-                {currencyStore.formatAmount(balance, displayCurrency)}
-              </p>
-            </div>
-          </a>
-        {/each}
-      </div>
-    </div>
-  {/if}
-</div>
+              {currencyStore.formatAmount(totalNetWorth, defaultCurrency)}
+            </Text>
+          </HStack>
+        {/if}
+      </VStack>
 
-<Modal bind:open={deleteModalOpen} title="Delete Accounts">
-  <div class="space-y-4">
-    <p class="text-sm">
-      Are you sure you want to delete <strong class="text-foreground font-semibold"
-        >{selectedIds.length}</strong
-      > accounts?
-    </p>
-    <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-      <button
-        onclick={executeDelete}
-        class="btn bg-destructive text-destructive-foreground hover:bg-destructive/90 flex-1"
-      >
-        Delete
-      </button>
-      <button onclick={() => (deleteModalOpen = false)} class="btn-outline flex-1"> Cancel </button>
-    </div>
-  </div>
+      <HStack gap={2} vAlign="center" wrap="wrap">
+        <TextInput
+          label="Search accounts"
+          isLabelHidden
+          type="text"
+          placeholder="Search accounts..."
+          value={searchQuery}
+          onChange={(v) => (searchQuery = v)}
+          startIcon={searchIcon}
+          hasClear
+          width={240}
+        />
+        <Button
+          label="Add account"
+          variant="primary"
+          icon={addIcon}
+          tooltip="New account (Alt+N, A)"
+          onclick={() => (modals.createAccount = true)}
+        />
+      </HStack>
+    </HStack>
+  </LayoutHeader>
+{/snippet}
+
+{#snippet content()}
+  <LayoutContent padding={0} label="Accounts">
+    {#if accounts.length === 0}
+      <Stack padding={8}>
+        <EmptyState
+          title="No accounts yet"
+          description="Create your first account to start tracking balances."
+          actions={emptyActions}
+        />
+      </Stack>
+    {:else if accountRows.length === 0}
+      <Stack padding={8}>
+        <EmptyState
+          title="No accounts match your search"
+          description="Try a different search term."
+        />
+      </Stack>
+    {:else}
+      <VStack gap={0}>
+        {#if selection.selectionState.hasSelection}
+          {#snippet selectionLabel(count: number)}
+            {count} {count === 1 ? 'account' : 'accounts'} selected
+          {/snippet}
+          <TableSelectionToolbar
+            selection={selection.selectionState}
+            startContent={bulkActions}
+            renderSelectionLabel={selectionLabel}
+          />
+        {/if}
+        <Table
+          data={accountRows}
+          {columns}
+          idKey="id"
+          dividers="rows"
+          hasHover
+          {plugins}
+          rowCount={accountRows.length}
+        />
+      </VStack>
+    {/if}
+  </LayoutContent>
+{/snippet}
+
+<Layout height="fill" {header} {content} />
+
+<Modal bind:open={quickEntryModalOpen} title="Add Entry">
+  {#if quickEntryAccountId}
+    <EntryForm
+      initialAccountId={quickEntryAccountId}
+      onsuccess={() => (quickEntryModalOpen = false)}
+      oncancel={() => (quickEntryModalOpen = false)}
+    />
+  {/if}
 </Modal>
+
+<AlertDialog
+  isOpen={deleteModalOpen}
+  onOpenChange={(next) => (deleteModalOpen = next)}
+  title="Delete {selectedKeys.size} {selectedKeys.size === 1 ? 'account' : 'accounts'}?"
+  description="The selected accounts will be marked as deleted. Their entries stay in the ledger but the accounts disappear from your lists."
+  actionLabel="Delete"
+  actionVariant="destructive"
+  onAction={executeDelete}
+/>
+
+<style>
+  :global(.sunder-table-title-link) {
+    cursor: pointer;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+  }
+
+  :global(.sunder-table-title-link:hover) {
+    text-decoration-thickness: 2px;
+  }
+</style>

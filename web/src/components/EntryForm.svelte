@@ -1,15 +1,29 @@
 <script lang="ts">
-  import { db } from '$lib/db';
+  import { getContext, hasContext, untrack } from 'svelte';
+  import {
+    Button,
+    Divider,
+    FormLayout,
+    Grid,
+    HStack,
+    Icon,
+    SegmentedControl,
+    SegmentedControlItem,
+    TextArea,
+    TextInput
+  } from '@astryx-sv/core';
+  import { Minus, Plus, Save } from '@lucide/svelte';
   import { liveQuery } from 'dexie';
+  import { createId } from '@paralleldrive/cuid2';
+  import { db } from '$lib/db';
   import type { Account, EntryCategory } from '$lib/types';
-  import { Save, Plus, Minus } from '@lucide/svelte';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/toast.svelte';
   import AccountSelect from '$components/AccountSelect.svelte';
   import CategorySelect from '$components/CategorySelect.svelte';
   import CurrencySelect from '$components/CurrencySelect.svelte';
   import DatePicker from '$components/DatePicker.svelte';
+  import { MODAL_CTX, type ModalContext } from '$components/Modal.svelte';
   import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
-  import { createId } from '@paralleldrive/cuid2';
 
   let {
     onsuccess,
@@ -17,18 +31,24 @@
     initialAccountId,
     initialCategoryId,
     isDirty = $bindable(false)
-  } = $props<{
+  }: {
     onsuccess: (id: string) => void;
     oncancel?: () => void;
     initialAccountId?: string;
     initialCategoryId?: string;
     isDirty?: boolean;
-  }>();
+  } = $props();
+
+  const formId = `sunder-entry-form-${createId()}`;
+  const modalCtx = hasContext(MODAL_CTX) ? getContext<ModalContext>(MODAL_CTX) : null;
 
   let title = $state('');
   let amountStr = $state('');
   let description = $state('');
   let location = $state('');
+  let amountError = $state<string | null>(null);
+  let titleError = $state<string | null>(null);
+  let amountWrapEl = $state<HTMLElement | null>(null);
 
   $effect(() => {
     isDirty =
@@ -38,12 +58,22 @@
       location.trim() !== '';
   });
 
+  // Register actions into Modal's sticky LayoutFooter when hosted inside Modal
+  // so Cancel / Create entry stay pinned even on short viewports.
+  $effect(() => {
+    if (!modalCtx) return;
+    modalCtx.registerFooter(formActions);
+    return () => {
+      modalCtx.registerFooter(null);
+    };
+  });
+
   let accounts = $state<Account[]>([]);
   let categories = $state<EntryCategory[]>([]);
 
   let isIncome = $state(false);
-  let account_id = $state<string>(initialAccountId || '');
-  let category_id = $state<string>(initialCategoryId || '');
+  let account_id = $state<string>(untrack(() => initialAccountId || ''));
+  let category_id = $state<string>(untrack(() => initialCategoryId || ''));
   let currency_code = $state<string>(currencyStore.defaultCurrencyCode);
   let currencyManuallyChosen = $state(false);
 
@@ -91,44 +121,66 @@
     }
   });
 
-  function handleAmountInput(e: Event) {
-    const target = e.target as HTMLInputElement;
-    let val = target.value;
-
+  // Typing `-` flips to expense, `+`/`=` to income; keep digits and one dot.
+  function handleAmountInput(val: string) {
     if (val.includes('-')) {
       isIncome = false;
       val = val.replace(/-/g, '');
     }
     if (val.includes('+') || val.includes('=')) {
       isIncome = true;
-      val = val.replace(/[\+=]/g, '');
+      val = val.replace(/[+=]/g, '');
     }
 
-    // Only allow numbers and one decimal point
     val = val.replace(/[^0-9.]/g, '');
     const parts = val.split('.');
     if (parts.length > 2) {
       val = parts[0] + '.' + parts.slice(1).join('');
     }
 
+    // If stripping characters leaves amountStr unchanged, explicitly sync the
+    // DOM input value so rejected characters never remain visible in the field.
+    if (val === amountStr) {
+      const inputEl = amountWrapEl?.querySelector('input');
+      if (inputEl && inputEl.value !== val) {
+        inputEl.value = val;
+      }
+    }
+
     amountStr = val;
-    target.value = val;
+    if (amountError) amountError = null;
   }
 
-  async function saveEntry(e: Event) {
+  async function saveEntry(e: SubmitEvent) {
     e.preventDefault();
 
     let amount = Math.abs(parseFloat(amountStr));
+    let hasError = false;
     if (isNaN(amount) || amount === 0) {
-      toast.error('Please enter a valid amount.');
-      return;
+      amountError = 'Enter a valid amount greater than 0.';
+      hasError = true;
+    } else {
+      amountError = null;
     }
-    if (!isIncome) amount = -amount;
 
-    if (!title.trim() || !account_id || !category_id) {
-      toast.error('Please fill out all required fields.');
+    if (!title.trim()) {
+      titleError = 'Enter a title for this entry.';
+      hasError = true;
+    } else {
+      titleError = null;
+    }
+
+    if (hasError) {
+      toast.error(amountError ?? titleError ?? 'Please fill out all required fields.');
       return;
     }
+
+    if (!account_id || !category_id) {
+      toast.error('Please select an account and category.');
+      return;
+    }
+
+    if (!isIncome) amount = -amount;
 
     const now = new Date().toISOString();
     const transactionDate = entryDateObj ? entryDateObj.toISOString() : new Date().toISOString();
@@ -157,119 +209,125 @@
   }
 </script>
 
-<form onsubmit={saveEntry} class="space-y-5">
-  <div class="flex gap-3">
-    <button
-      type="button"
-      onclick={() => (isIncome = false)}
-      class="flex flex-1 items-center justify-center gap-2 rounded-lg border py-3 text-sm font-medium transition-all {!isIncome
-        ? 'bg-destructive/10 text-destructive border-destructive/20'
-        : 'border-border/50 text-muted-foreground hover:bg-muted bg-transparent'}"
-    >
-      <Minus size={16} /> Expense
-    </button>
-    <button
-      type="button"
-      onclick={() => (isIncome = true)}
-      class="flex flex-1 items-center justify-center gap-2 rounded-lg border py-3 text-sm font-medium transition-all {isIncome
-        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
-        : 'border-border/50 text-muted-foreground hover:bg-muted bg-transparent'}"
-    >
-      <Plus size={16} /> Income
-    </button>
-  </div>
+{#snippet expenseIcon()}
+  <Icon icon={Minus} size="sm" />
+{/snippet}
+{#snippet incomeIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet saveIcon()}
+  <Icon icon={Save} size="sm" />
+{/snippet}
 
-  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-    <div class="space-y-1.5 sm:col-span-2">
-      <label class="text-foreground block text-sm font-medium">Amount</label>
-      <div class="relative">
-        <input
-          type="text"
-          inputmode="decimal"
-          bind:value={amountStr}
-          oninput={handleAmountInput}
-          class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-3 text-2xl font-medium transition-all focus:ring-2 focus:outline-none {isIncome
-            ? 'text-emerald-500'
-            : 'text-destructive'}"
+{#snippet formActions()}
+  <HStack gap={3} hAlign="end" width="100%">
+    {#if oncancel}
+      <Button label="Cancel" variant="secondary" onclick={oncancel} />
+    {/if}
+    <Button label="Create entry" type="submit" form={formId} variant="primary" icon={saveIcon} />
+  </HStack>
+{/snippet}
+
+<form id={formId} onsubmit={saveEntry} novalidate>
+  <FormLayout defaultOptionality="optional">
+    <SegmentedControl
+      label="Entry type"
+      value={isIncome ? 'income' : 'expense'}
+      onChange={(v) => (isIncome = v === 'income')}
+      layout="fill"
+    >
+      <SegmentedControlItem value="expense" label="Expense" icon={expenseIcon} />
+      <SegmentedControlItem value="income" label="Income" icon={incomeIcon} />
+    </SegmentedControl>
+
+    <!-- Amount + Currency hero row: responsive grid keeps both md controls
+         aligned on desktop and lets Currency expand full-width on mobile. -->
+    <div class="sunder-amount-currency-grid">
+      <div bind:this={amountWrapEl} data-modal-autofocus class="sunder-amount-cell">
+        <TextInput
+          label="Amount"
+          size="md"
           placeholder="0.00"
-          required
-          autofocus
+          value={amountStr}
+          onChange={handleAmountInput}
+          status={amountError ? { type: 'error', message: amountError } : undefined}
+          controlClassName={isIncome
+            ? 'sunder-tabular sunder-positive'
+            : 'sunder-tabular sunder-negative'}
+          isRequired
+          hasAutoFocus
+        />
+      </div>
+      <div class="sunder-currency-cell">
+        <CurrencySelect
+          bind:value={currency_code}
+          showLabel
+          isRequired
+          size="md"
+          onchange={() => (currencyManuallyChosen = true)}
         />
       </div>
     </div>
 
-    <div class="space-y-1.5">
-      <label class="text-foreground block text-sm font-medium">Currency</label>
-      <CurrencySelect bind:value={currency_code} onchange={() => (currencyManuallyChosen = true)} />
-    </div>
-  </div>
-
-  <div class="space-y-1.5">
-    <label for="title" class="text-foreground block text-sm font-medium">Title</label>
-    <input
-      id="title"
-      type="text"
-      bind:value={title}
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
+    <TextInput
+      label="Title"
       placeholder="What was this for?"
-      required
+      value={title}
+      onChange={(v) => {
+        title = v;
+        if (titleError && v.trim()) titleError = null;
+      }}
+      status={titleError ? { type: 'error', message: titleError } : undefined}
+      isRequired
     />
-  </div>
 
-  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-    <div class="space-y-1.5">
-      <label class="text-foreground block text-sm font-medium">Account</label>
-      <AccountSelect bind:value={account_id} {accounts} />
-    </div>
+    <Grid columns={{ minWidth: 200, max: 2 }} gap={4}>
+      <AccountSelect bind:value={account_id} {accounts} showLabel isRequired />
+      <CategorySelect bind:value={category_id} {categories} showLabel isRequired />
+    </Grid>
 
-    <div class="space-y-1.5">
-      <label class="text-foreground block text-sm font-medium">Category</label>
-      <CategorySelect bind:value={category_id} {categories} />
-    </div>
-  </div>
+    <Grid columns={{ minWidth: 200, max: 2 }} gap={4}>
+      <DatePicker bind:startDate={entryDateObj} mode="single" label="Date" showLabel />
+      <TextInput
+        label="Location"
+        placeholder="Where did this happen?"
+        value={location}
+        onChange={(v) => (location = v)}
+      />
+    </Grid>
 
-  <div class="space-y-1.5 pt-2">
-    <label for="date" class="text-foreground block text-sm font-medium">Date</label>
-    <DatePicker bind:startDate={entryDateObj} mode="single" />
-  </div>
-
-  <div class="space-y-1.5">
-    <label for="location" class="text-foreground block text-sm font-medium"
-      >Location (Optional)</label
-    >
-    <input
-      id="location"
-      type="text"
-      bind:value={location}
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
-      placeholder="Where did this happen?"
+    <TextArea
+      label="Note"
+      rows={2}
+      placeholder="Additional details..."
+      value={description}
+      onChange={(v) => (description = v)}
     />
-  </div>
 
-  <div class="space-y-1.5">
-    <label for="description" class="text-foreground block text-sm font-medium"
-      >Note (Optional)</label
-    >
-    <textarea
-      id="description"
-      bind:value={description}
-      rows="2"
-      class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full resize-none rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
-      placeholder="Additional details..."></textarea>
-  </div>
-
-  <div class="flex gap-3 pt-2">
-    {#if oncancel}
-      <button
-        type="button"
-        onclick={oncancel}
-        class="btn-outline flex w-full flex-1 items-center justify-center"
-      >
-        Cancel
-      </button>
+    {#if !modalCtx}
+      <Divider />
+      {@render formActions()}
     {/if}
-    <button type="submit" class="btn flex w-full flex-1 items-center justify-center gap-2">
-      <Save size={16} /> Create Entry
-    </button>
-  </div>
+  </FormLayout>
 </form>
+
+<style>
+  .sunder-amount-currency-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(176px, 220px);
+    gap: var(--spacing-4);
+    align-items: start;
+    width: 100%;
+  }
+
+  .sunder-amount-cell,
+  .sunder-currency-cell {
+    min-width: 0;
+  }
+
+  @media (max-width: 480px) {
+    .sunder-amount-currency-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

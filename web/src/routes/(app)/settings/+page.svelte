@@ -1,12 +1,34 @@
 <script lang="ts">
+  import {
+    Avatar,
+    Button,
+    Divider,
+    FileInput,
+    Heading,
+    HStack,
+    Icon,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    MetadataList,
+    MetadataListItem,
+    SegmentedControl,
+    SegmentedControlItem,
+    StackItem,
+    Switch,
+    Text,
+    VStack
+  } from '@astryx-sv/core';
+  import { Download, LogOut, Monitor, Moon, RefreshCw, Sun } from '@lucide/svelte';
   import { authStore, logout, authenticatedFetch } from '$lib/auth';
   import { syncAll, getUnsyncedChanges, clearLocalDatabase } from '$lib/sync';
   import { syncState } from '$lib/syncState.svelte';
   import { currencyStore } from '$lib/currency.svelte';
-  import { LogOut, RefreshCw, Download, Upload, Database } from '@lucide/svelte';
-  import { toast } from 'svelte-sonner';
+  import { themeStore, type ThemeMode } from '$lib/themeStore';
+  import { toast } from '$lib/toast.svelte';
   import Modal from '$components/Modal.svelte';
   import CurrencySelect from '$components/CurrencySelect.svelte';
+  import Select from '$components/Select.svelte';
 
   let lastSync = $state(
     typeof window !== 'undefined'
@@ -22,8 +44,27 @@
     selectedDefaultCurrency = currencyStore.defaultCurrencyCode;
   });
 
+  // Keep "Last synced" fresh whenever background auto-sync or SyncIndicator finishes.
+  $effect(() => {
+    const _status = syncState.status;
+    const _pending = syncState.pendingCount;
+    if (typeof window !== 'undefined') {
+      lastSync = localStorage.getItem('sunder_last_sync_timestamp') || 'Never';
+    }
+  });
+
   let logoutModalOpen = $state(false);
   let unsyncedCount = $state(0);
+
+  let sunderFile = $state<File | null>(null);
+  let bagelsFile = $state<File | null>(null);
+
+  const intervalOptions = [
+    { value: 1, label: 'Every 1 minute' },
+    { value: 5, label: 'Every 5 minutes' },
+    { value: 15, label: 'Every 15 minutes' },
+    { value: 60, label: 'Every 1 hour' }
+  ];
 
   async function handleDefaultCurrencyChange(code: string) {
     if (!code || code === currencyStore.defaultCurrencyCode) return;
@@ -69,7 +110,6 @@
       }
     } catch (err) {
       console.error('Failed to check sync status', err);
-      // Fallback: just try to logout anyway if something is catastrophically broken
       await executeLogout();
     }
   }
@@ -102,20 +142,16 @@
     }
   }
 
-  function handleAutoSyncToggle(e: Event) {
-    const checked = (e.target as HTMLInputElement).checked;
+  function handleAutoSyncToggle(checked: boolean) {
     syncState.autoSyncEnabled = checked;
     localStorage.setItem('sunder_auto_sync', checked.toString());
   }
 
-  function handleIntervalChange(e: Event) {
-    const val = parseInt((e.target as HTMLSelectElement).value);
+  function handleIntervalChange(value: string | number) {
+    const val = Number(value);
     syncState.autoSyncInterval = val;
     localStorage.setItem('sunder_auto_sync_interval', val.toString());
   }
-
-  let fileInputSunder: HTMLInputElement;
-  let fileInputBagels: HTMLInputElement;
 
   async function downloadSunderBackup() {
     try {
@@ -146,7 +182,7 @@
       });
       toast.dismiss();
       if (!res.ok) throw new Error('Import failed');
-      const data = await res.json();
+      const data = (await res.json()) as any;
 
       toast.loading('Syncing to device...');
       await syncAll();
@@ -162,226 +198,307 @@
     }
   }
 
-  function handleSunderImport(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) uploadFile(file, 'sunder');
+  function handleSunderImport(files: File | File[] | null) {
+    const file = Array.isArray(files) ? (files[0] ?? null) : files;
+    sunderFile = file;
+    if (file) {
+      uploadFile(file, 'sunder');
+      sunderFile = null;
+    }
   }
 
-  function handleBagelsImport(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) uploadFile(file, 'bagels');
+  function handleBagelsImport(files: File | File[] | null) {
+    const file = Array.isArray(files) ? (files[0] ?? null) : files;
+    bagelsFile = file;
+    if (file) {
+      uploadFile(file, 'bagels');
+      bagelsFile = null;
+    }
   }
+
+  let formattedLastSync = $derived.by(() => {
+    if (!lastSync || lastSync === 'Never') return 'Never';
+    const d = new Date(lastSync);
+    return Number.isNaN(d.getTime()) ? lastSync : d.toLocaleString();
+  });
 </script>
 
-<div class="space-y-8 font-sans">
-  <div class="border-border/50 flex items-center justify-between border-b pb-4">
-    <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
-  </div>
+{#snippet logoutIcon()}
+  <Icon icon={LogOut} size="sm" />
+{/snippet}
+{#snippet refreshIcon()}
+  <Icon icon={RefreshCw} size="sm" />
+{/snippet}
+{#snippet downloadIcon()}
+  <Icon icon={Download} size="sm" />
+{/snippet}
+{#snippet systemThemeIcon()}
+  <Icon icon={Monitor} size="sm" />
+{/snippet}
+{#snippet lightThemeIcon()}
+  <Icon icon={Sun} size="sm" />
+{/snippet}
+{#snippet darkThemeIcon()}
+  <Icon icon={Moon} size="sm" />
+{/snippet}
 
-  <div class="bg-card border-border/50 space-y-4 rounded-xl border p-6 shadow-sm">
-    <h2 class="border-border/50 mb-4 border-b pb-2 text-lg font-semibold tracking-tight">
-      Account
-    </h2>
-    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-      <div>
-        <p class="text-muted-foreground text-sm font-medium">Username</p>
-        <p class="text-lg font-medium">{$authStore.user?.username || 'Unknown'}</p>
-      </div>
-      <div>
-        <p class="text-muted-foreground text-sm font-medium">Email</p>
-        <p class="text-lg font-medium">{$authStore.user?.email || 'Unknown'}</p>
-      </div>
-    </div>
+{#snippet header()}
+  <!-- Header and content share both padding={6} and scrollbar-gutter: stable so
+       classic-scrollbar platforms never shift centered 800px content left of
+       the header title. -->
+  <LayoutHeader hasDivider padding={6} class="sunder-settings-header">
+    <VStack gap={0.5}>
+      <Heading level={1}>Settings</Heading>
+      <Text type="supporting" color="secondary">
+        Manage your profile, appearance, display currency, background sync, and local backups.
+      </Text>
+    </VStack>
+  </LayoutHeader>
+{/snippet}
 
-    <div class="pt-4">
-      <button onclick={handleLogoutClick} class="btn btn-destructive btn-sm gap-2">
-        <LogOut size={14} /> Logout
-      </button>
-    </div>
-  </div>
+{#snippet content()}
+  <!-- No Section wrappers here: plain stacks keep every heading pixel-aligned
+       with the header title, with full padding={6} breathing room below the
+       header divider. -->
+  <LayoutContent padding={6} label="Settings" class="sunder-settings-content">
+    <VStack gap={6}>
+      <VStack gap={4}>
+        <Heading level={2}>Profile</Heading>
+        <HStack gap={4} vAlign="center" wrap="wrap">
+          <Avatar name={$authStore.user?.username || 'User'} size="lg" tooltip={false} />
+          <StackItem size="fill">
+            <MetadataList orientation="horizontal">
+              <MetadataListItem label="Username">
+                <Text weight="medium">{$authStore.user?.username || 'Unknown'}</Text>
+              </MetadataListItem>
+              <MetadataListItem label="Email">
+                <Text weight="medium">{$authStore.user?.email || 'Unknown'}</Text>
+              </MetadataListItem>
+            </MetadataList>
+          </StackItem>
+        </HStack>
+      </VStack>
 
-  <div class="bg-card border-border/50 space-y-5 rounded-xl border p-6 shadow-sm">
-    <h2 class="border-border/50 border-b pb-2 text-lg font-semibold tracking-tight">Currency</h2>
+      <Divider />
 
-    <div class="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
-      <div>
-        <h3 class="font-medium">Default Display Currency</h3>
-        <p class="text-muted-foreground text-sm">
-          Totals, balances, and spending analytics convert entries to this currency using historical
-          rates on each transaction's date.
-        </p>
-      </div>
-      <div>
-        <CurrencySelect
-          bind:value={selectedDefaultCurrency}
-          disabled={savingCurrency}
-          onchange={handleDefaultCurrencyChange}
-        />
-      </div>
-    </div>
+      <VStack gap={4}>
+        <Heading level={2}>Appearance</Heading>
+        <HStack gap={6} wrap="wrap" vAlign="center" hAlign="between">
+          <StackItem size="fill">
+            <VStack gap={1}>
+              <Text weight="medium">Theme</Text>
+              <Text type="supporting" color="secondary">
+                Follow your operating system setting or pin Sunder to light or dark mode (Alt+T).
+              </Text>
+            </VStack>
+          </StackItem>
+          <SegmentedControl
+            label="Theme mode"
+            value={$themeStore}
+            onChange={(v) => themeStore.set(v as ThemeMode)}
+          >
+            <SegmentedControlItem value="system" label="System" icon={systemThemeIcon} />
+            <SegmentedControlItem value="light" label="Light" icon={lightThemeIcon} />
+            <SegmentedControlItem value="dark" label="Dark" icon={darkThemeIcon} />
+          </SegmentedControl>
+        </HStack>
+      </VStack>
 
-    <div class="border-border/50 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-      <p class="text-muted-foreground text-xs font-medium">
-        {currencyStore.currencies.length} active server currencies ·
-        {currencyStore.sortedDates.length} cached exchange rate {currencyStore.sortedDates
-          .length === 1
-          ? 'day'
-          : 'days'}
-      </p>
-      <button
-        onclick={handleRefreshCurrencyData}
-        disabled={refreshingRates || currencyStore.syncingRates}
-        class="btn btn-outline btn-sm gap-2 disabled:opacity-50"
-      >
-        <RefreshCw
-          size={14}
-          class={refreshingRates || currencyStore.syncingRates ? 'animate-spin' : ''}
-        />
-        {refreshingRates || currencyStore.syncingRates ? 'Refreshing...' : 'Refresh Rates'}
-      </button>
-    </div>
-  </div>
+      <Divider />
 
-  <div class="bg-card border-border/50 space-y-6 rounded-xl border p-6 shadow-sm">
-    <h2 class="border-border/50 border-b pb-2 text-lg font-semibold tracking-tight">Data & Sync</h2>
-
-    <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h3 class="font-medium">Background Auto-Sync</h3>
-          <p class="text-muted-foreground text-sm">Automatically back up your changes.</p>
-        </div>
-        <label class="relative inline-flex cursor-pointer items-center">
-          <input
-            type="checkbox"
-            checked={syncState.autoSyncEnabled}
-            onchange={handleAutoSyncToggle}
-            class="peer sr-only"
+      <VStack gap={4}>
+        <Heading level={2}>Currency</Heading>
+        <HStack gap={6} wrap="wrap" vAlign="center" hAlign="between">
+          <StackItem size="fill">
+            <VStack gap={1}>
+              <Text weight="medium">Default display currency</Text>
+              <Text type="supporting" color="secondary">
+                Totals, balances, and spending analytics convert entries to this currency using
+                historical rates on each transaction's date.
+              </Text>
+            </VStack>
+          </StackItem>
+          <div class="sunder-settings-control">
+            <CurrencySelect
+              bind:value={selectedDefaultCurrency}
+              disabled={savingCurrency}
+              onchange={handleDefaultCurrencyChange}
+            />
+          </div>
+        </HStack>
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={6}>
+          <StackItem size="fill">
+            <Text type="supporting" color="secondary">
+              {currencyStore.currencies.length} active server currencies ·
+              {currencyStore.sortedDates.length} cached exchange rate {currencyStore.sortedDates
+                .length === 1
+                ? 'day'
+                : 'days'}
+            </Text>
+          </StackItem>
+          <Button
+            label={refreshingRates || currencyStore.syncingRates
+              ? 'Refreshing...'
+              : 'Refresh rates'}
+            variant="secondary"
+            size="sm"
+            icon={refreshIcon}
+            isLoading={refreshingRates || currencyStore.syncingRates}
+            onclick={handleRefreshCurrencyData}
           />
-          <div
-            class="peer bg-muted peer-focus:ring-primary/50 peer-checked:bg-primary h-6 w-11 rounded-full peer-focus:ring-2 peer-focus:outline-none after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"
-          ></div>
-        </label>
-      </div>
+        </HStack>
+      </VStack>
 
-      {#if syncState.autoSyncEnabled}
-        <div class="flex items-center justify-between">
-          <label for="sync-interval" class="text-muted-foreground text-sm font-medium"
-            >Sync Interval</label
-          >
-          <select
-            id="sync-interval"
-            value={syncState.autoSyncInterval}
-            onchange={handleIntervalChange}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary rounded-md border p-1 text-sm focus:ring-2 focus:outline-none"
-          >
-            <option value={1}>Every 1 minute</option>
-            <option value={5}>Every 5 minutes</option>
-            <option value={15}>Every 15 minutes</option>
-            <option value={60}>Every 1 hour</option>
-          </select>
-        </div>
-      {/if}
-    </div>
+      <Divider />
 
-    <div class="border-border/50 border-t pt-4">
-      <p class="text-muted-foreground mb-4 text-sm font-medium">Last synced: {lastSync}</p>
-      <button onclick={handleSync} disabled={syncing} class="btn btn-sm gap-2 disabled:opacity-50">
-        <RefreshCw size={14} class={syncing ? 'animate-spin' : ''} />
-        {syncing ? 'Syncing...' : 'Sync Now'}
-      </button>
-    </div>
-  </div>
-
-  <div class="bg-card border-border/50 space-y-6 rounded-xl border p-6 shadow-sm">
-    <h2 class="border-border/50 border-b pb-2 text-lg font-semibold tracking-tight">
-      Data Management
-    </h2>
-
-    <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h3 class="font-medium">Export Data</h3>
-          <p class="text-muted-foreground text-sm">
-            Download your pure data as a Sunder JSON file.
-          </p>
-        </div>
-        <button onclick={downloadSunderBackup} class="btn btn-outline btn-sm gap-2">
-          <Download size={14} /> Download Backup
-        </button>
-      </div>
-
-      <div class="border-border/50 flex items-center justify-between border-t pt-4">
-        <div>
-          <h3 class="font-medium">Import Sunder Backup</h3>
-          <p class="text-muted-foreground text-sm">Restore from a previous Sunder JSON backup.</p>
-        </div>
-        <input
-          type="file"
-          accept=".json"
-          class="hidden"
-          bind:this={fileInputSunder}
-          onchange={handleSunderImport}
+      <VStack gap={4}>
+        <Heading level={2}>Sync & offline</Heading>
+        <Switch
+          label="Background auto-sync"
+          description="Automatically back up local changes to your server in the background."
+          value={syncState.autoSyncEnabled}
+          onChange={handleAutoSyncToggle}
         />
-        <button onclick={() => fileInputSunder.click()} class="btn btn-outline btn-sm gap-2">
-          <Upload size={14} /> Import Sunder JSON
-        </button>
-      </div>
-
-      <div class="border-border/50 flex items-center justify-between border-t pt-4">
-        <div>
-          <h3 class="font-medium">Import Bagels DB</h3>
-          <p class="text-muted-foreground text-sm">
-            Migrate your data from a Bagels SQLite database file.
-          </p>
-        </div>
-        <input
-          type="file"
-          accept=".db,.sqlite,.sqlite3"
-          class="hidden"
-          bind:this={fileInputBagels}
-          onchange={handleBagelsImport}
-        />
-        <button onclick={() => fileInputBagels.click()} class="btn btn-outline btn-sm gap-2">
-          <Database size={14} /> Import Bagels DB
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div class="text-muted-foreground mt-12 text-center text-xs font-medium">
-    <p>Sunder v1.0.0</p>
-  </div>
-</div>
-
-<Modal bind:open={logoutModalOpen} title="Unsynced Changes Detected">
-  <div class="space-y-4">
-    <p class="text-sm">
-      You have <strong class="text-foreground font-semibold"
-        >{unsyncedCount} unsynced changes</strong
-      >. If you log out now without syncing, these changes will be permanently lost from your
-      device.
-    </p>
-    <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-      <button onclick={handleLogoutAndSync} disabled={syncing} class="btn flex-1 gap-2">
-        {#if syncing}
-          <RefreshCw size={14} class="animate-spin" /> Syncing...
-        {:else}
-          <RefreshCw size={14} /> Sync & Logout
+        {#if syncState.autoSyncEnabled}
+          <HStack gap={6} wrap="wrap" vAlign="center" hAlign="between">
+            <StackItem size="fill">
+              <VStack gap={1}>
+                <Text weight="medium">Sync interval</Text>
+                <Text type="supporting" color="secondary">
+                  How often local changes are backed up while auto-sync is on.
+                </Text>
+              </VStack>
+            </StackItem>
+            <div class="sunder-settings-control">
+              <Select
+                value={syncState.autoSyncInterval}
+                options={intervalOptions}
+                label="Sync interval"
+                onchange={handleIntervalChange}
+              />
+            </div>
+          </HStack>
         {/if}
-      </button>
-      <button
-        onclick={executeLogout}
-        class="btn-outline border-destructive/50 hover:bg-destructive/10 text-destructive flex-1"
-      >
-        Discard & Logout
-      </button>
-    </div>
-    <button
-      onclick={() => (logoutModalOpen = false)}
-      class="btn-outline text-muted-foreground w-full"
-    >
-      Cancel
-    </button>
-  </div>
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={6}>
+          <StackItem size="fill">
+            <Text type="supporting" color="secondary">Last synced: {formattedLastSync}</Text>
+          </StackItem>
+          <Button
+            label={syncing ? 'Syncing...' : 'Sync now'}
+            variant="primary"
+            size="sm"
+            icon={refreshIcon}
+            isLoading={syncing}
+            onclick={handleSync}
+          />
+        </HStack>
+      </VStack>
+
+      <Divider />
+
+      <VStack gap={4}>
+        <Heading level={2}>Backup & import</Heading>
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={6}>
+          <StackItem size="fill">
+            <VStack gap={1}>
+              <Text weight="medium">Export data</Text>
+              <Text type="supporting" color="secondary">
+                Download your full ledger as a portable Sunder JSON backup.
+              </Text>
+            </VStack>
+          </StackItem>
+          <Button
+            label="Download backup"
+            variant="secondary"
+            size="sm"
+            icon={downloadIcon}
+            onclick={downloadSunderBackup}
+          />
+        </HStack>
+        <FileInput
+          label="Import Sunder backup"
+          description="Restore accounts, categories, and entries from a Sunder JSON file."
+          accept=".json"
+          value={sunderFile}
+          onChange={handleSunderImport}
+        />
+        <FileInput
+          label="Import Bagels DB"
+          description="Migrate your data from a Bagels SQLite database file."
+          accept=".db,.sqlite,.sqlite3"
+          value={bagelsFile}
+          onChange={handleBagelsImport}
+        />
+      </VStack>
+
+      <Divider />
+
+      <VStack gap={4}>
+        <Heading level={2}>Sign out</Heading>
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={6}>
+          <StackItem size="fill">
+            <VStack gap={1}>
+              <Text weight="medium">End session on this device</Text>
+              <Text type="supporting" color="secondary">
+                Clears the local offline database on this browser before ending your session.
+              </Text>
+            </VStack>
+          </StackItem>
+          <Button
+            label="Sign out"
+            variant="destructive"
+            size="sm"
+            icon={logoutIcon}
+            onclick={handleLogoutClick}
+          />
+        </HStack>
+      </VStack>
+
+      <HStack hAlign="center" paddingBlockStart={2}>
+        <Text type="supporting" color="secondary">Sunder v1.0.0</Text>
+      </HStack>
+    </VStack>
+  </LayoutContent>
+{/snippet}
+
+{#snippet logoutModalFooter()}
+  <HStack gap={3} wrap="wrap" hAlign="end" width="100%">
+    <Button label="Cancel" variant="ghost" onclick={() => (logoutModalOpen = false)} />
+    <Button label="Discard & sign out" variant="destructive" onclick={executeLogout} />
+    <Button
+      label={syncing ? 'Syncing...' : 'Sync & sign out'}
+      variant="primary"
+      icon={refreshIcon}
+      isLoading={syncing}
+      onclick={handleLogoutAndSync}
+    />
+  </HStack>
+{/snippet}
+
+<Layout height="fill" contentWidth={800} {header} {content} />
+
+<Modal bind:open={logoutModalOpen} title="Unsynced Changes Detected" footer={logoutModalFooter}>
+  <Text>
+    You have {unsyncedCount} unsynced {unsyncedCount === 1 ? 'change' : 'changes'}. If you sign out
+    now without syncing, these changes will be permanently lost from this device.
+  </Text>
 </Modal>
+
+<style>
+  /* Reserve identical scrollbar gutter on header & scrolling content so
+     centered 800px columns align to the pixel on classic-scrollbar OSes. */
+  :global(.sunder-settings-header) {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  :global(.sunder-settings-content) {
+    scrollbar-gutter: stable;
+  }
+
+  .sunder-settings-control {
+    width: min(100%, 260px);
+    flex: 0 1 260px;
+    min-width: 0;
+  }
+</style>

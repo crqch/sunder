@@ -9,10 +9,20 @@ export type KeybindCommand = {
 };
 
 let commands: KeybindCommand[] = $state([]);
+let helpOpen = $state(false);
 
 export const keybinds = {
   get commands() {
     return commands;
+  },
+  get helpOpen() {
+    return helpOpen;
+  },
+  set helpOpen(value: boolean) {
+    helpOpen = value;
+  },
+  toggleHelp() {
+    helpOpen = !helpOpen;
   },
   register(cmd: KeybindCommand) {
     if (!cmd) return () => {};
