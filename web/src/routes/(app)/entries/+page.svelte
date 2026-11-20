@@ -1,12 +1,60 @@
 <script lang="ts">
+  import {
+    AlertDialog,
+    Badge,
+    Button,
+    EmptyState,
+    Heading,
+    HStack,
+    Icon,
+    IconButton,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    Link,
+    PowerSearch,
+    Selector,
+    Stack,
+    Table,
+    TableSelectionToolbar,
+    Text,
+    Token,
+    VStack,
+    pixel,
+    proportional,
+    useTableSelection,
+    useTableSelectionState,
+    useTableSortable,
+    useTableStickyColumns,
+    type DateTimeRangePart,
+    type EnumItem,
+    type FilterValue,
+    type PowerSearchConfig,
+    type PowerSearchField,
+    type PowerSearchFilter,
+    type TableColumn,
+    type TablePlugin
+  } from '@astryx-sv/core';
+  import {
+    ArrowDownWideNarrow,
+    ArrowUpNarrowWide,
+    Coins,
+    Plus,
+    Search,
+    Trash2
+  } from '@lucide/svelte';
+  import { goto } from '$app/navigation';
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
   import type { AccountEntry, Account, EntryCategory } from '$lib/types';
-  import { Plus, Filter, SortDesc, SortAsc, Search, X, Trash2, Check, Coins } from '@lucide/svelte';
   import { modals } from '$lib/modals.svelte';
-  import { tooltip } from '$lib/tooltip';
   import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/toast.svelte';
+  import CurrencySelect from '$components/CurrencySelect.svelte';
+  import Modal from '$components/Modal.svelte';
+  import CategoryDot from '$components/CategoryDot.svelte';
+
+  type EntryRow = AccountEntry & Record<string, unknown>;
 
   let entries = $state<AccountEntry[]>([]);
   let accounts = $state<Account[]>([]);
@@ -30,25 +78,12 @@
     };
   });
 
-  import MultiSelect from '$components/MultiSelect.svelte';
-  import Select from '$components/Select.svelte';
-  import CurrencySelect from '$components/CurrencySelect.svelte';
-  import DatePicker from '$components/DatePicker.svelte';
-  import Modal from '$components/Modal.svelte';
+  // PowerSearch filters
+  let filters = $state<PowerSearchFilter[]>([]);
 
-  // Filters state
-  let searchQuery = $state('');
-  let selectedAccounts = $state<any[]>([]);
-  let selectedCategories = $state<any[]>([]);
-  let selectedCurrency = $state<string>('');
-  let minAmount = $state<number | null>(null);
-  let maxAmount = $state<number | null>(null);
-  let startDate = $state<Date | null>(null);
-  let endDate = $state<Date | null>(null);
-
-  // Sorting state
-  let sortField = $state<'date' | 'amount' | 'title'>('date');
-  let sortDirection = $state<'desc' | 'asc'>('desc');
+  let sort = $state<Array<{ sortKey: string; direction: 'ascending' | 'descending' }>>([
+    { sortKey: 'date', direction: 'descending' }
+  ]);
 
   const sortOptions = [
     { value: 'date', label: 'Date' },
@@ -56,53 +91,330 @@
     { value: 'title', label: 'Title' }
   ];
 
-  let showFilters = $state(false);
+  let sortField = $derived(sort[0]?.sortKey ?? 'date');
+  let sortDirection = $derived(sort[0]?.direction ?? 'descending');
+
+  function setSortField(field: string | number) {
+    sort = [{ sortKey: String(field), direction: sortDirection }];
+  }
+  function toggleSortDirection() {
+    sort = [
+      { sortKey: sortField, direction: sortDirection === 'descending' ? 'ascending' : 'descending' }
+    ];
+  }
+
+  const accountFilterOptions = $derived<EnumItem[]>(
+    accounts
+      .map((account) => ({ value: account.id, label: account.name }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  );
+
+  const categoryFilterOptions = $derived<EnumItem[]>(
+    categories
+      .map((category) => ({ value: category.id, label: category.title }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  );
+
+  const currencyFilterOptions = $derived.by<EnumItem[]>(() => {
+    const codes = new Set<string>();
+    for (const entry of entries) codes.add(normalizeCurrencyCode(entry.currency_code));
+    for (const currency of currencyStore.currencies)
+      codes.add(normalizeCurrencyCode(currency.code));
+    return [...codes].sort().map((code) => ({ value: code, label: code }));
+  });
+
+  function enumFilterField(
+    key: string,
+    label: string,
+    values: EnumItem[],
+    description?: string
+  ): PowerSearchField {
+    return {
+      key,
+      label,
+      ...(description ? { description } : {}),
+      defaultOperator: 'is',
+      operators: [
+        { key: 'is', label: 'is', value: { type: 'enum', values } },
+        { key: 'is_not', label: 'is not', value: { type: 'enum', values } },
+        { key: 'in', label: 'is any of', value: { type: 'enum_list', values } },
+        { key: 'not_in', label: 'is none of', value: { type: 'enum_list', values } }
+      ]
+    };
+  }
+
+  const powerSearchConfig = $derived.by<PowerSearchConfig>(() => ({
+    name: 'EntriesSearch',
+    contentSearchFieldKey: 'text',
+    fields: [
+      {
+        key: 'text',
+        label: 'Text',
+        description: 'Search entry title, location, or description',
+        typeaheadAliases: ['title', 'description', 'location', 'note'],
+        defaultOperator: 'contains',
+        operators: [{ key: 'contains', label: 'contains', value: { type: 'string' } }]
+      },
+      enumFilterField('account', 'Account', accountFilterOptions),
+      enumFilterField('category', 'Category', categoryFilterOptions),
+      enumFilterField('currency', 'Currency', currencyFilterOptions),
+      enumFilterField('type', 'Type', [
+        { value: 'income', label: 'Income' },
+        { value: 'expense', label: 'Expense' }
+      ]),
+      {
+        key: 'amount',
+        label: 'Amount',
+        description: 'Compares the absolute value of the entry amount',
+        defaultOperator: 'greater_than',
+        operators: [
+          { key: 'equals', label: '=', value: { type: 'float' } },
+          { key: 'not_equals', label: '≠', value: { type: 'float' } },
+          { key: 'greater_than', label: '>', value: { type: 'float' } },
+          { key: 'greater_than_or_equal', label: '≥', value: { type: 'float' } },
+          { key: 'less_than', label: '<', value: { type: 'float' } },
+          { key: 'less_than_or_equal', label: '≤', value: { type: 'float' } }
+        ]
+      },
+      {
+        key: 'date',
+        label: 'Date',
+        description: 'Entry date, falling back to when it was created',
+        defaultOperator: 'last_30_days',
+        operators: [
+          { key: 'is_today', label: 'is today', value: { type: 'empty' } },
+          { key: 'yesterday', label: 'is yesterday', value: { type: 'empty' } },
+          { key: 'last_7_days', label: 'in the last 7 days', value: { type: 'empty' } },
+          { key: 'last_30_days', label: 'in the last 30 days', value: { type: 'empty' } },
+          { key: 'this_month', label: 'is this month', value: { type: 'empty' } },
+          { key: 'last_month', label: 'is last month', value: { type: 'empty' } },
+          { key: 'this_year', label: 'is this year', value: { type: 'empty' } },
+          {
+            key: 'before',
+            label: 'is before',
+            value: { type: 'date_absolute', isDateOnly: true }
+          },
+          { key: 'after', label: 'is after', value: { type: 'date_absolute', isDateOnly: true } },
+          { key: 'between', label: 'is between', value: { type: 'date_range' } }
+        ]
+      },
+      {
+        key: 'location',
+        label: 'Location',
+        defaultOperator: 'contains',
+        operators: [
+          { key: 'contains', label: 'contains', value: { type: 'string' } },
+          { key: 'is', label: 'is', value: { type: 'string' } },
+          { key: 'is_not', label: 'is not', value: { type: 'string' } },
+          { key: 'starts_with', label: 'starts with', value: { type: 'string' } },
+          { key: 'ends_with', label: 'ends with', value: { type: 'string' } }
+        ]
+      }
+    ]
+  }));
+
+  const RELATIVE_UNIT_MS: Record<string, number> = {
+    second: 1000,
+    minute: 60_000,
+    hour: 3_600_000,
+    day: 86_400_000,
+    week: 604_800_000,
+    month: 2_592_000_000,
+    year: 31_536_000_000
+  };
+
+  function startOfLocalDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function addLocalDays(date: Date, days: number): Date {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  function parseEntryDate(value: string): Date {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+  }
+
+  function resolveDateRangePart(part: DateTimeRangePart, edge: 'start' | 'end'): number {
+    if (part.type === 'ABSOLUTE') {
+      if (part.unixSeconds === 0) {
+        return edge === 'start' ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+      }
+      const date = new Date(part.unixSeconds * 1000);
+      const day = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+      return edge === 'end' ? addLocalDays(day, 1).getTime() - 1 : day.getTime();
+    }
+    if (part.type === 'RELATIVE') {
+      return Date.now() - part.backValue * (RELATIVE_UNIT_MS[part.unit] ?? 0);
+    }
+    return Date.now();
+  }
+
+  function matchesStringValue(
+    actual: string | null | undefined,
+    operator: string,
+    target: string
+  ): boolean {
+    const value = (actual ?? '').toLowerCase();
+    const expected = target.toLowerCase();
+    switch (operator) {
+      case 'contains':
+        return value.includes(expected);
+      case 'not_contains':
+        return !value.includes(expected);
+      case 'is':
+        return value === expected;
+      case 'is_not':
+        return value !== expected;
+      case 'starts_with':
+        return value.startsWith(expected);
+      case 'not_starts_with':
+        return !value.startsWith(expected);
+      case 'ends_with':
+        return value.endsWith(expected);
+      case 'not_ends_with':
+        return !value.endsWith(expected);
+      default:
+        return true;
+    }
+  }
+
+  function matchesEnumValue(actual: string, operator: string, value: FilterValue): boolean {
+    if (value.type === 'enum') {
+      if (operator === 'is') return actual === value.value;
+      if (operator === 'is_not') return actual !== value.value;
+      return true;
+    }
+    if (value.type === 'enum_list') {
+      const included = value.value.includes(actual);
+      if (operator === 'in' || operator === 'is_any_of') return included;
+      if (operator === 'not_in' || operator === 'is_none_of') return !included;
+      return true;
+    }
+    return true;
+  }
+
+  function matchesNumberValue(actual: number, operator: string, target: number): boolean {
+    switch (operator) {
+      case 'equals':
+        return actual === target;
+      case 'not_equals':
+        return actual !== target;
+      case 'greater_than':
+        return actual > target;
+      case 'greater_than_or_equal':
+        return actual >= target;
+      case 'less_than':
+        return actual < target;
+      case 'less_than_or_equal':
+        return actual <= target;
+      default:
+        return true;
+    }
+  }
+
+  function matchesDateValue(entry: AccountEntry, operator: string, value: FilterValue): boolean {
+    const entryDate = parseEntryDate(entry.date || entry.created_at);
+    const entryMs = entryDate.getTime();
+    if (Number.isNaN(entryMs)) return true;
+
+    if (value.type === 'date_absolute') {
+      if (value.unixSeconds === 0) return true;
+      const boundary = new Date(value.unixSeconds * 1000);
+      const boundaryDay = new Date(
+        boundary.getUTCFullYear(),
+        boundary.getUTCMonth(),
+        boundary.getUTCDate()
+      ).getTime();
+      const entryDay = startOfLocalDay(entryDate).getTime();
+      if (operator === 'before') return entryDay < boundaryDay;
+      if (operator === 'after') return entryDay > boundaryDay;
+      return true;
+    }
+
+    if (value.type === 'date_range') {
+      const start = resolveDateRangePart(value.value.start, 'start');
+      const end = resolveDateRangePart(value.value.end, 'end');
+      return entryMs >= start && entryMs <= end;
+    }
+
+    if (value.type === 'empty') {
+      const today = startOfLocalDay(new Date());
+      const todayStart = today.getTime();
+      const tomorrowStart = addLocalDays(today, 1).getTime();
+      switch (operator) {
+        case 'is_today':
+          return entryMs >= todayStart && entryMs < tomorrowStart;
+        case 'yesterday':
+          return entryMs >= addLocalDays(today, -1).getTime() && entryMs < todayStart;
+        case 'last_7_days':
+          return entryMs >= addLocalDays(today, -6).getTime() && entryMs < tomorrowStart;
+        case 'last_30_days':
+          return entryMs >= addLocalDays(today, -29).getTime() && entryMs < tomorrowStart;
+        case 'this_month': {
+          const start = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
+          const end = new Date(today.getFullYear(), today.getMonth() + 1, 1).getTime();
+          return entryMs >= start && entryMs < end;
+        }
+        case 'last_month': {
+          const start = new Date(today.getFullYear(), today.getMonth() - 1, 1).getTime();
+          const end = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
+          return entryMs >= start && entryMs < end;
+        }
+        case 'this_year': {
+          const start = new Date(today.getFullYear(), 0, 1).getTime();
+          const end = new Date(today.getFullYear() + 1, 0, 1).getTime();
+          return entryMs >= start && entryMs < end;
+        }
+        default:
+          return true;
+      }
+    }
+
+    return true;
+  }
+
+  function matchesPowerSearchFilter(entry: AccountEntry, filter: PowerSearchFilter): boolean {
+    const { field, operator, value } = filter;
+    switch (field) {
+      case 'text': {
+        if (value.type !== 'string') return true;
+        const query = value.value.trim().toLowerCase();
+        if (!query) return true;
+        return [entry.title, entry.location, entry.description]
+          .filter((part): part is string => typeof part === 'string')
+          .some((part) => part.toLowerCase().includes(query));
+      }
+      case 'account':
+        return matchesEnumValue(entry.account_id, operator, value);
+      case 'category':
+        return matchesEnumValue(entry.category_id, operator, value);
+      case 'currency':
+        return matchesEnumValue(normalizeCurrencyCode(entry.currency_code), operator, value);
+      case 'type':
+        return matchesEnumValue(entry.amount >= 0 ? 'income' : 'expense', operator, value);
+      case 'amount':
+        return value.type === 'float' || value.type === 'integer'
+          ? matchesNumberValue(Math.abs(entry.amount), operator, value.value)
+          : true;
+      case 'date':
+        return matchesDateValue(entry, operator, value);
+      case 'location':
+        return value.type === 'string'
+          ? matchesStringValue(entry.location, operator, value.value)
+          : true;
+      default:
+        return true;
+    }
+  }
 
   let filteredEntries = $derived.by(() => {
-    let result = entries.filter((e) => {
-      // Search
-      if (searchQuery && !e.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    const result = entries.filter((entry) =>
+      filters.every((filter) => matchesPowerSearchFilter(entry, filter))
+    );
 
-      // Accounts
-      if (selectedAccounts.length > 0 && !selectedAccounts.includes(e.account_id)) return false;
-
-      // Categories
-      if (selectedCategories.length > 0 && !selectedCategories.includes(e.category_id))
-        return false;
-
-      // Currency
-      if (
-        selectedCurrency &&
-        normalizeCurrencyCode(e.currency_code) !== normalizeCurrencyCode(selectedCurrency)
-      ) {
-        return false;
-      }
-
-      // Amount
-      if (minAmount !== null && e.amount < minAmount) return false;
-      if (maxAmount !== null && e.amount > maxAmount) return false;
-
-      // Date
-      if (startDate || endDate) {
-        let entryDate = new Date(e.date || e.created_at);
-        entryDate.setHours(0, 0, 0, 0);
-
-        if (startDate) {
-          let s = new Date(startDate);
-          s.setHours(0, 0, 0, 0);
-          if (entryDate < s) return false;
-        }
-        if (endDate) {
-          let ed = new Date(endDate);
-          ed.setHours(0, 0, 0, 0);
-          if (entryDate > ed) return false;
-        }
-      }
-
-      return true;
-    });
-
-    // Sorting
     result.sort((a, b) => {
       let cmp = 0;
       if (sortField === 'date')
@@ -114,14 +426,14 @@
           Math.abs(currencyStore.convertEntryToDefault(b));
       else if (sortField === 'title') cmp = a.title.localeCompare(b.title);
 
-      return sortDirection === 'desc' ? -cmp : cmp;
+      return sortDirection === 'descending' ? -cmp : cmp;
     });
 
-    return result;
+    return result as EntryRow[];
   });
 
   function getCategoryColor(id: string) {
-    return categories.find((c) => c.id === id)?.color || '#cccccc';
+    return categories.find((c) => c.id === id)?.color || '#71717a';
   }
   function getCategoryName(id: string) {
     return categories.find((c) => c.id === id)?.title || 'Unknown';
@@ -131,47 +443,106 @@
   }
 
   function clearFilters() {
-    searchQuery = '';
-    selectedAccounts = [];
-    selectedCategories = [];
-    selectedCurrency = '';
-    minAmount = null;
-    maxAmount = null;
-    startDate = null;
-    endDate = null;
+    filters = [];
   }
 
-  let selectedIds = $state<string[]>([]);
-  let allSelected = $derived(
-    filteredEntries.length > 0 && selectedIds.length === filteredEntries.length
-  );
+  // Selection
+  let selectedKeys = $state<Set<string>>(new Set());
+  const selection = useTableSelectionState<EntryRow>(() => ({
+    data: filteredEntries,
+    idKey: 'id',
+    selectedKeys,
+    setSelectedKeys: (next) => (selectedKeys = next)
+  }));
+  const selectionPlugin = useTableSelection<EntryRow>(() => ({
+    ...selection.selectionConfig,
+    getRowLabel: (item) => item.title
+  }));
+  const sortablePlugin = useTableSortable<EntryRow>(() => ({
+    sort,
+    onSortChange: (next) => (sort = next)
+  }));
+  const stickyColumnsPlugin = useTableStickyColumns<EntryRow>(() => ({
+    endKeys: ['amount']
+  }));
+
+  const rowActivationPlugin = $derived<TablePlugin<EntryRow>>({
+    transformBodyRow: (props, item) => ({
+      ...props,
+      htmlProps: {
+        ...props.htmlProps,
+        style: `${props.htmlProps.style ? `${props.htmlProps.style};` : ''}cursor: pointer;`,
+        onclick: (event: MouseEvent) => {
+          if ((event.target as HTMLElement).closest('input, button, a, select, textarea') != null) {
+            return;
+          }
+          if (selectedKeys.size > 0) {
+            const next = new Set(selectedKeys);
+            if (next.has(item.id)) next.delete(item.id);
+            else next.add(item.id);
+            selectedKeys = next;
+            return;
+          }
+          goto(`/entries/${item.id}`);
+        }
+      }
+    })
+  });
+
+  const plugins = $derived<Record<string, TablePlugin<EntryRow>>>({
+    selection: selectionPlugin,
+    sortable: sortablePlugin,
+    rowActivation: rowActivationPlugin,
+    stickyColumns: stickyColumnsPlugin
+  });
+
+  const columns = $derived<TableColumn<EntryRow>[]>([
+    {
+      key: 'title',
+      header: 'Title',
+      width: proportional(2, { minWidth: 220 }),
+      sortable: true,
+      renderCell: titleCell
+    },
+    {
+      key: 'category_id',
+      header: 'Category',
+      width: proportional(1, { minWidth: 150 }),
+      renderCell: categoryCell
+    },
+    {
+      key: 'account_id',
+      header: 'Account',
+      width: proportional(1, { minWidth: 140 }),
+      renderCell: accountCell
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      width: pixel(120),
+      sortable: true,
+      renderCell: dateCell
+    },
+    {
+      key: 'currency_code',
+      header: 'Currency',
+      width: pixel(96),
+      renderCell: currencyCell
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      width: pixel(148),
+      align: 'end',
+      sortable: true,
+      renderCell: amountCell
+    }
+  ]);
+
   let deleteModalOpen = $state(false);
   let currencyModalOpen = $state(false);
   let bulkCurrencyCode = $state<string>(currencyStore.defaultCurrencyCode);
   let updatingCurrency = $state(false);
-
-  function toggleSelectAll() {
-    if (allSelected) {
-      selectedIds = [];
-    } else {
-      selectedIds = filteredEntries.map((e) => e.id);
-    }
-  }
-
-  function handleCardClick(e: MouseEvent, id: string) {
-    if (selectedIds.length > 0) {
-      e.preventDefault();
-      if (selectedIds.includes(id)) {
-        selectedIds = selectedIds.filter((x) => x !== id);
-      } else {
-        selectedIds = [...selectedIds, id];
-      }
-    }
-  }
-
-  function confirmDelete() {
-    deleteModalOpen = true;
-  }
 
   function openBulkCurrencyModal() {
     bulkCurrencyCode = currencyStore.defaultCurrencyCode;
@@ -179,17 +550,17 @@
   }
 
   async function executeBulkCurrencyChange() {
-    if (selectedIds.length === 0 || !bulkCurrencyCode) return;
+    if (selectedKeys.size === 0 || !bulkCurrencyCode) return;
     updatingCurrency = true;
     try {
       const targetCode = normalizeCurrencyCode(bulkCurrencyCode);
       const now = new Date().toISOString();
-      const count = selectedIds.length;
+      const count = selectedKeys.size;
       await db.account_entries
         .where('id')
-        .anyOf(selectedIds)
+        .anyOf([...selectedKeys])
         .modify({ currency_code: targetCode, updated_at: now });
-      selectedIds = [];
+      selectedKeys = new Set();
       currencyModalOpen = false;
       toast.success(`Updated ${count} ${count === 1 ? 'entry' : 'entries'} to ${targetCode}`);
       currencyStore.refreshRatesForEntries().catch(() => {});
@@ -205,326 +576,284 @@
     const now = new Date().toISOString();
     await db.account_entries
       .where('id')
-      .anyOf(selectedIds)
+      .anyOf([...selectedKeys])
       .modify({ deleted_at: now, updated_at: now });
-    selectedIds = [];
+    selectedKeys = new Set();
     deleteModalOpen = false;
   }
 </script>
 
-<div class="space-y-6 font-sans">
-  <div class="border-border/50 flex flex-col gap-4 border-b pb-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">Entries</h1>
-      <div class="flex items-center gap-3">
-        <button
-          onclick={() => (showFilters = !showFilters)}
-          class="btn btn-outline shrink-0 gap-2 text-sm {showFilters ? 'bg-muted' : ''}"
-        >
-          <Filter size={16} /> Filters
-        </button>
-        <button
-          use:tooltip={{ text: 'New Entry', keys: ['Alt', 'N', 'E'] }}
-          onclick={() => (modals.createEntry = true)}
-          class="btn shrink-0 gap-2 text-sm"
-        >
-          <Plus size={16} /> Add
-        </button>
-      </div>
-    </div>
-    <div class="relative w-full">
-      <Search class="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2" size={16} />
-      <input
-        type="text"
-        bind:value={searchQuery}
-        placeholder="Search entries..."
-        class="input h-10 w-full pl-9"
+{#snippet searchIcon()}
+  <Icon icon={Search} size="sm" color="secondary" />
+{/snippet}
+{#snippet addIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet coinsIcon()}
+  <Icon icon={Coins} size="sm" />
+{/snippet}
+{#snippet trashIcon()}
+  <Icon icon={Trash2} size="sm" />
+{/snippet}
+{#snippet sortDescIcon()}
+  <Icon icon={ArrowDownWideNarrow} size="sm" />
+{/snippet}
+{#snippet sortAscIcon()}
+  <Icon icon={ArrowUpNarrowWide} size="sm" />
+{/snippet}
+
+{#snippet titleCell(entry: EntryRow)}
+  <VStack gap={0}>
+    <Link
+      href={`/entries/${entry.id}`}
+      hasUnderline
+      weight="medium"
+      maxLines={1}
+      class="sunder-table-title-link"
+    >
+      {entry.title}
+    </Link>
+    {#if entry.location}
+      <Text type="supporting" color="secondary" maxLines={1}>{entry.location}</Text>
+    {/if}
+  </VStack>
+{/snippet}
+
+{#snippet categoryCell(entry: EntryRow)}
+  <HStack gap={2} vAlign="center">
+    <CategoryDot color={getCategoryColor(entry.category_id)} size="sm" />
+    <Link
+      href={`/categories/${entry.category_id}`}
+      color="inherit"
+      maxLines={1}
+      class="sunder-table-inline-link"
+    >
+      {getCategoryName(entry.category_id)}
+    </Link>
+  </HStack>
+{/snippet}
+
+{#snippet accountCell(entry: EntryRow)}
+  <Link
+    href={`/accounts/${entry.account_id}`}
+    color="inherit"
+    maxLines={1}
+    class="sunder-table-inline-link"
+  >
+    {getAccountName(entry.account_id)}
+  </Link>
+{/snippet}
+
+{#snippet dateCell(entry: EntryRow)}
+  <Text type="supporting" color="secondary" hasTabularNumbers>
+    {new Date(entry.date || entry.created_at).toLocaleDateString()}
+  </Text>
+{/snippet}
+
+{#snippet currencyCell(entry: EntryRow)}
+  <Token label={normalizeCurrencyCode(entry.currency_code)} size="sm" />
+{/snippet}
+
+{#snippet amountCell(entry: EntryRow)}
+  {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
+  {@const isForeign = entryCode !== currencyStore.defaultCurrencyCode}
+  {@const converted = isForeign
+    ? currencyStore.tryConvert(
+        entry.amount,
+        entryCode,
+        currencyStore.defaultCurrencyCode,
+        entry.date || entry.created_at
+      )
+    : null}
+  <VStack gap={0} hAlign="end">
+    <Text
+      weight="semibold"
+      hasTabularNumbers
+      class={entry.amount >= 0 ? 'sunder-positive' : 'sunder-negative'}
+    >
+      {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
+    </Text>
+    {#if converted?.converted}
+      <Text type="supporting" color="secondary" hasTabularNumbers>
+        ≈ {currencyStore.formatAmount(converted.amount, currencyStore.defaultCurrencyCode, {
+          showPlus: true
+        })}
+      </Text>
+    {/if}
+  </VStack>
+{/snippet}
+
+{#snippet bulkActions()}
+  <Button label="Change currency" size="sm" icon={coinsIcon} onclick={openBulkCurrencyModal} />
+  <Button
+    label="Delete"
+    size="sm"
+    variant="destructive"
+    icon={trashIcon}
+    onclick={() => (deleteModalOpen = true)}
+  />
+{/snippet}
+
+{#snippet emptyActions()}
+  <Button
+    label="Add entry"
+    variant="primary"
+    icon={addIcon}
+    onclick={() => (modals.createEntry = true)}
+  />
+{/snippet}
+
+{#snippet clearFiltersActions()}
+  <Button label="Clear filters" onclick={clearFilters} />
+{/snippet}
+
+{#snippet header()}
+  <LayoutHeader hasDivider padding={4}>
+    <VStack gap={3}>
+      <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+        <HStack gap={2} vAlign="center">
+          <Heading level={1}>Entries</Heading>
+          <Badge
+            label={filteredEntries.length === entries.length
+              ? String(entries.length)
+              : `${filteredEntries.length} / ${entries.length}`}
+          />
+        </HStack>
+
+        <HStack gap={2} vAlign="center" wrap="wrap">
+          <Selector
+            label="Sort entries"
+            isLabelHidden
+            size="sm"
+            variant="secondary"
+            width={148}
+            options={sortOptions}
+            value={sortField}
+            onChange={(value: string) => setSortField(value)}
+          />
+          <IconButton
+            label="Toggle sort direction"
+            variant="secondary"
+            size="sm"
+            icon={sortDirection === 'descending' ? sortDescIcon : sortAscIcon}
+            onclick={toggleSortDirection}
+          />
+          <Button
+            label="Add entry"
+            variant="primary"
+            icon={addIcon}
+            tooltip="New entry (Alt+N, E)"
+            onclick={() => (modals.createEntry = true)}
+          />
+        </HStack>
+      </HStack>
+
+      <PowerSearch
+        config={powerSearchConfig}
+        {filters}
+        onChange={(next) => {
+          filters = [...next];
+        }}
+        label="Search and filter entries"
+        placeholder="Search entries or type a filter…"
+        startIcon={searchIcon}
+        size="sm"
+        resultCount={filteredEntries.length}
+        maxTokenLength={48}
       />
-    </div>
-  </div>
+    </VStack>
+  </LayoutHeader>
+{/snippet}
 
-  {#if showFilters}
-    <div
-      class="bg-card border-border/50 animate-in slide-in-from-top-2 fade-in space-y-6 rounded-xl border p-5 shadow-sm duration-200"
-    >
-      <div class="mb-2 flex items-center justify-between">
-        <h3 class="font-medium">Advanced Filters</h3>
-        <button
-          onclick={clearFilters}
-          class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
-        >
-          <X size={14} /> Clear all
-        </button>
-      </div>
-
-      <div class="space-y-5">
-        <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <!-- Sort By (Custom Select) -->
-          <div class="relative z-30 space-y-2">
-            <label class="text-muted-foreground text-sm font-medium">Sort By</label>
-            <div class="flex items-center gap-2">
-              <div class="flex-1">
-                <Select bind:value={sortField} options={sortOptions} />
-              </div>
-              <button
-                onclick={() => (sortDirection = sortDirection === 'desc' ? 'asc' : 'desc')}
-                class="btn btn-outline h-[38px] shrink-0 px-2.5"
-                title="Toggle sort direction"
-              >
-                {#if sortDirection === 'desc'}
-                  <SortDesc size={16} />
-                {:else}
-                  <SortAsc size={16} />
-                {/if}
-              </button>
-            </div>
-          </div>
-
-          <!-- Date Range (Custom Picker) -->
-          <div class="relative z-20 space-y-2">
-            <label class="text-muted-foreground text-sm font-medium">Date Range</label>
-            <DatePicker bind:startDate bind:endDate />
-          </div>
-
-          <!-- Amount Filter -->
-          <div class="space-y-2">
-            <label class="text-muted-foreground text-sm font-medium">Amount Range</label>
-            <div class="flex items-center gap-2">
-              <input
-                type="number"
-                bind:value={minAmount}
-                placeholder="Min"
-                class="input h-[38px] w-full min-w-0 text-sm"
-              />
-              <span class="text-muted-foreground">-</span>
-              <input
-                type="number"
-                bind:value={maxAmount}
-                placeholder="Max"
-                class="input h-[38px] w-full min-w-0 text-sm"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <!-- Accounts Filter -->
-          <div class="relative z-10 space-y-2">
-            <label class="text-muted-foreground text-sm font-medium">Accounts</label>
-            <MultiSelect
-              bind:value={selectedAccounts}
-              options={accounts as any}
-              placeholder="All Accounts"
-            />
-          </div>
-
-          <!-- Categories Filter -->
-          <div class="relative space-y-2">
-            <label class="text-muted-foreground text-sm font-medium">Categories</label>
-            <MultiSelect
-              bind:value={selectedCategories}
-              options={categories.map((c) => ({ id: c.id, name: c.title, color: c.color })) as any}
-              placeholder="All Categories"
-            />
-          </div>
-
-          <!-- Currency Filter -->
-          <div class="relative space-y-2">
-            <label class="text-muted-foreground text-sm font-medium">Currency</label>
-            <CurrencySelect
-              bind:value={selectedCurrency}
-              allowEmpty={true}
-              emptyLabel="All Currencies"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  {#if entries.length === 0}
-    <div
-      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
-    >
-      No entries found. Create your first transaction!
-    </div>
-  {:else if filteredEntries.length === 0}
-    <div
-      class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
-    >
-      No entries match your current filters.
-      <button onclick={clearFilters} class="text-primary ml-1 hover:underline">Clear filters</button
-      >
-    </div>
-  {:else}
-    <div class="flex flex-col gap-3">
-      <div
-        class="text-muted-foreground flex flex-wrap items-center justify-between gap-2 px-2 text-xs font-medium"
-      >
-        <label class="group flex cursor-pointer items-center gap-2.5 text-sm font-medium">
-          <div
-            class="relative flex h-5 w-5 items-center justify-center rounded border-2 transition-all {allSelected
-              ? 'bg-primary border-primary text-primary-foreground'
-              : 'border-border/60 bg-background group-hover:border-primary/50 text-transparent'}"
-          >
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onchange={toggleSelectAll}
-              class="sr-only"
-            />
-            <Check size={12} strokeWidth={3} class={allSelected ? 'opacity-100' : 'opacity-0'} />
-          </div>
-          Select All ({filteredEntries.length})
-        </label>
-
-        {#if selectedIds.length > 0}
-          <div class="flex flex-wrap items-center gap-2">
-            <button onclick={openBulkCurrencyModal} class="btn btn-outline btn-sm h-8 gap-1.5">
-              <Coins size={14} /> Change Currency ({selectedIds.length})
-            </button>
-            <button
-              onclick={confirmDelete}
-              class="btn btn-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 gap-1.5"
-            >
-              <Trash2 size={14} /> Delete Selected ({selectedIds.length})
-            </button>
-          </div>
+{#snippet content()}
+  <LayoutContent padding={0} label="Entries">
+    {#if entries.length === 0}
+      <Stack padding={8}>
+        <EmptyState
+          title="No entries yet"
+          description="Create your first transaction to start tracking your spending."
+          actions={emptyActions}
+        />
+      </Stack>
+    {:else if filteredEntries.length === 0}
+      <Stack padding={8}>
+        <EmptyState
+          title="No entries match your filters"
+          description="Try broadening your search or clearing the active filters."
+          actions={clearFiltersActions}
+        />
+      </Stack>
+    {:else}
+      <VStack gap={0}>
+        {#if selection.selectionState.hasSelection}
+          {#snippet selectionLabel(count: number)}
+            {count} {count === 1 ? 'entry' : 'entries'} selected
+          {/snippet}
+          <TableSelectionToolbar
+            selection={selection.selectionState}
+            startContent={bulkActions}
+            renderSelectionLabel={selectionLabel}
+          />
         {/if}
-      </div>
-      {#each filteredEntries as entry (entry.id)}
-        {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
-        {@const isForeign = entryCode !== currencyStore.defaultCurrencyCode}
-        {@const converted = isForeign
-          ? currencyStore.tryConvert(
-              entry.amount,
-              entryCode,
-              currencyStore.defaultCurrencyCode,
-              entry.date || entry.created_at
-            )
-          : null}
-        <a
-          href="/entries/{entry.id}"
-          onclick={(e) => handleCardClick(e, entry.id)}
-          class="group bg-card border-border/50 hover:border-border has-[:checked]:border-primary has-[:checked]:ring-primary/50 has-[:checked]:bg-primary/5 relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md has-[:checked]:ring-1"
-        >
-          <div class="flex items-center justify-between sm:items-start">
-            <div class="flex items-center gap-4">
-              <label
-                class="-m-1 flex cursor-pointer items-center p-1"
-                onclick={(e) => e.stopPropagation()}
-              >
-                <input
-                  type="checkbox"
-                  value={entry.id}
-                  bind:group={selectedIds}
-                  class="peer sr-only"
-                />
-                <div
-                  class="peer-checked:bg-primary peer-checked:border-primary peer-checked:text-primary-foreground border-border/60 bg-background hover:border-primary/50 flex h-5 w-5 items-center justify-center rounded-full border-2 text-transparent transition-all peer-checked:scale-110 [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
-                >
-                  <Check size={12} strokeWidth={3} />
-                </div>
-              </label>
-              <div
-                class="h-10 w-3 shrink-0 rounded-full"
-                style="background-color: {getCategoryColor(entry.category_id)}"
-              ></div>
-              <div class="flex flex-col">
-                <p class="text-foreground font-semibold tracking-tight">{entry.title}</p>
-                <div class="mt-1 flex flex-wrap items-center gap-2">
-                  <span class="text-muted-foreground text-xs font-medium"
-                    >{getCategoryName(entry.category_id)}</span
-                  >
-                  <span class="text-border text-xs">•</span>
-                  <span class="text-muted-foreground text-xs"
-                    >{getAccountName(entry.account_id)}</span
-                  >
-                  <span class="text-border text-xs">•</span>
-                  <span class="text-muted-foreground text-xs"
-                    >{new Date(entry.date || entry.created_at).toLocaleDateString()}</span
-                  >
-                  <span
-                    class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
-                  >
-                    {entryCode}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div class="flex flex-col items-end">
-              <p
-                class="text-lg font-bold tracking-tight {entry.amount >= 0
-                  ? 'text-emerald-500'
-                  : 'text-destructive'}"
-              >
-                {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
-              </p>
-              {#if converted?.converted}
-                <p class="text-muted-foreground text-xs">
-                  ≈ {currencyStore.formatAmount(
-                    converted.amount,
-                    currencyStore.defaultCurrencyCode,
-                    {
-                      showPlus: true
-                    }
-                  )}
-                </p>
-              {/if}
-            </div>
-          </div>
-        </a>
-      {/each}
-    </div>
+        <Table
+          data={filteredEntries}
+          {columns}
+          idKey="id"
+          dividers="rows"
+          hasHover
+          {plugins}
+          rowCount={filteredEntries.length}
+        />
+      </VStack>
+    {/if}
+  </LayoutContent>
+{/snippet}
 
-    <Modal bind:open={currencyModalOpen} title="Change Entry Currency">
-      <div class="space-y-4">
-        <p class="text-muted-foreground text-sm">
-          Change the currency tag for
-          <strong class="text-foreground font-semibold">{selectedIds.length}</strong>
-          selected {selectedIds.length === 1 ? 'entry' : 'entries'}. Numeric amounts stay as-is
-          (useful for reassigning migrated entries).
-        </p>
+<Layout height="fill" {header} {content} />
 
-        <div class="space-y-1.5">
-          <label class="text-foreground block text-sm font-medium">Target Currency</label>
-          <CurrencySelect bind:value={bulkCurrencyCode} />
-        </div>
+<Modal bind:open={currencyModalOpen} title="Change Entry Currency">
+  <VStack gap={4}>
+    <Text type="supporting" color="secondary">
+      Change the currency tag for {selectedKeys.size} selected
+      {selectedKeys.size === 1 ? 'entry' : 'entries'}. Numeric amounts stay as-is (useful for
+      reassigning migrated entries).
+    </Text>
+    <CurrencySelect bind:value={bulkCurrencyCode} label="Target currency" showLabel />
+    <HStack gap={3} hAlign="end">
+      <Button label="Cancel" variant="secondary" onclick={() => (currencyModalOpen = false)} />
+      <Button
+        label={updatingCurrency ? 'Updating...' : `Set to ${bulkCurrencyCode || '...'}`}
+        variant="primary"
+        isLoading={updatingCurrency}
+        isDisabled={!bulkCurrencyCode}
+        onclick={executeBulkCurrencyChange}
+      />
+    </HStack>
+  </VStack>
+</Modal>
 
-        <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-          <button
-            onclick={executeBulkCurrencyChange}
-            disabled={updatingCurrency || !bulkCurrencyCode}
-            class="btn flex-1 disabled:opacity-50"
-          >
-            {updatingCurrency ? 'Updating...' : `Set to ${bulkCurrencyCode || '...'}`}
-          </button>
-          <button onclick={() => (currencyModalOpen = false)} class="btn-outline flex-1">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </Modal>
+<AlertDialog
+  isOpen={deleteModalOpen}
+  onOpenChange={(next) => (deleteModalOpen = next)}
+  title="Delete {selectedKeys.size} {selectedKeys.size === 1 ? 'entry' : 'entries'}?"
+  description="The selected entries will be marked as deleted and removed from your totals. This syncs across your devices."
+  actionLabel="Delete"
+  actionVariant="destructive"
+  onAction={executeDelete}
+/>
 
-    <Modal bind:open={deleteModalOpen} title="Delete Entries">
-      <div class="space-y-4">
-        <p class="text-sm">
-          Are you sure you want to delete <strong class="text-foreground font-semibold"
-            >{selectedIds.length}</strong
-          > entries?
-        </p>
-        <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-          <button
-            onclick={executeDelete}
-            class="btn bg-destructive text-destructive-foreground hover:bg-destructive/90 flex-1"
-          >
-            Delete
-          </button>
-          <button onclick={() => (deleteModalOpen = false)} class="btn-outline flex-1">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </Modal>
-  {/if}
-</div>
+<style>
+  :global(.sunder-table-title-link),
+  :global(.sunder-table-inline-link) {
+    cursor: pointer;
+  }
+
+  :global(.sunder-table-title-link) {
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+  }
+
+  :global(.sunder-table-title-link:hover) {
+    text-decoration-thickness: 2px;
+  }
+</style>

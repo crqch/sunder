@@ -1,41 +1,33 @@
 <script lang="ts">
+  import { Button, HStack, TopNav, TopNavHeading, TopNavItem } from '@astryx-sv/core';
+  import BrandMark from '$components/BrandMark.svelte';
   import ThemeButton from '$components/ThemeButton.svelte';
-  import favicon from '$lib/assets/favicon.svg';
   import { authStore } from '$lib/auth';
 </script>
 
-<div
-  class="bg-popover/90 text-secondary-foreground border-border/40 sticky top-0 z-50 flex h-20 w-full border-b backdrop-blur-md"
->
-  <div class="mx-auto flex w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-    <div class="flex items-center gap-8">
-      <a href="/" class="group inline-flex items-center gap-3">
-        <img
-          src={favicon}
-          alt="Logo"
-          class="size-8 scale-[.98] object-scale-down transition-transform duration-500 group-hover:rotate-180 dark:invert"
-        />
-        <b class="text-lg font-bold tracking-widest">SUNDER</b>
-      </a>
+{#snippet brandLogo()}
+  <BrandMark size={24} />
+{/snippet}
 
-      <nav class="text-muted-foreground hidden items-center gap-6 text-sm font-medium md:flex">
-        <a href="/#features" class="hover:text-foreground transition-colors">Features</a>
-        <a href="/#demo" class="hover:text-foreground transition-colors">Interactive Demo</a>
-        <a href="/#experience" class="hover:text-foreground transition-colors">Apps & Platform</a>
-      </nav>
-    </div>
+{#snippet brand()}
+  <TopNavHeading heading="Sunder" headingHref="/" logo={brandLogo} />
+{/snippet}
 
-    <div class="flex items-center gap-3">
-      <ThemeButton responsiveText={true} class="btn-sm" />
-      {#if $authStore.isAuthenticated && $authStore.user}
-        <a href="/dashboard" class="btn btn-sm max-w-[120px] truncate">{$authStore.user.username}</a
-        >
-      {:else}
-        <a href="/auth/sign-in" class="btn btn-outline btn-sm hidden truncate sm:inline-flex"
-          >Sign in</a
-        >
-        <a href="/auth/sign-up" class="btn btn-sm truncate">Get started</a>
-      {/if}
-    </div>
-  </div>
-</div>
+{#snippet navLinks()}
+  <TopNavItem label="Features" href="/#features" />
+  <TopNavItem label="Platforms" href="/#experience" />
+{/snippet}
+
+{#snippet actions()}
+  <HStack gap={2} vAlign="center">
+    <ThemeButton size="sm" variant="secondary" />
+    {#if $authStore.isAuthenticated && $authStore.user}
+      <Button label={$authStore.user.username} variant="primary" size="sm" href="/dashboard" />
+    {:else}
+      <Button label="Sign in" variant="secondary" size="sm" href="/auth/sign-in" />
+      <Button label="Get started" variant="primary" size="sm" href="/auth/sign-up" />
+    {/if}
+  </HStack>
+{/snippet}
+
+<TopNav label="Main navigation" heading={brand} startContent={navLinks} endContent={actions} />

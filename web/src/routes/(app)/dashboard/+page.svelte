@@ -1,11 +1,32 @@
 <script lang="ts">
+  import {
+    Button,
+    Card,
+    Divider,
+    EmptyState,
+    Grid,
+    Heading,
+    HStack,
+    Icon,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    Link,
+    List,
+    ListItem,
+    ProgressBar,
+    Text,
+    Token,
+    VStack
+  } from '@astryx-sv/core';
+  import { ArrowRight, Plus, Wallet } from '@lucide/svelte';
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
   import type { Account, AccountEntry, EntryCategory } from '$lib/types';
-  import { Plus, Wallet, ArrowRight } from '@lucide/svelte';
   import { modals } from '$lib/modals.svelte';
-  import { tooltip } from '$lib/tooltip';
   import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
+  import CategoryDot from '$components/CategoryDot.svelte';
+  import ExchangeRatesPanel from '$components/ExchangeRatesPanel.svelte';
 
   let accounts = $state<Account[]>([]);
   let entries = $state<AccountEntry[]>([]);
@@ -37,16 +58,17 @@
   let totalBalance = $derived(
     entries.reduce((sum, entry) => sum + currencyStore.convertEntryToDefault(entry), 0)
   );
+  let incomeEntries = $derived(entries.filter((e) => e.amount > 0));
+  let expenseEntries = $derived(entries.filter((e) => e.amount < 0));
+
   let income = $derived(
-    entries
-      .filter((e) => e.amount > 0)
-      .reduce((sum, e) => sum + currencyStore.convertEntryToDefault(e), 0)
+    incomeEntries.reduce((sum, e) => sum + currencyStore.convertEntryToDefault(e), 0)
   );
   let expenses = $derived(
-    entries
-      .filter((e) => e.amount < 0)
-      .reduce((sum, e) => sum + Math.abs(currencyStore.convertEntryToDefault(e)), 0)
+    expenseEntries.reduce((sum, e) => sum + Math.abs(currencyStore.convertEntryToDefault(e)), 0)
   );
+  let savingsRate = $derived(income > 0 ? ((income - expenses) / income) * 100 : null);
+
   let recentEntries = $derived(entries.slice(0, 10));
 
   let categorySpending = $derived.by(() => {
@@ -59,186 +81,358 @@
     });
     return Object.entries(spending)
       .map(([id, amount]) => ({
+        id,
         category: categories.find((c) => c.id === id),
-        amount
+        amount,
+        share: expenses > 0 ? (amount / expenses) * 100 : 0
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
   });
 
+  let accountSummaries = $derived.by(() => {
+    return accounts
+      .map((account) => {
+        const displayCurrency = account.currency_code
+          ? normalizeCurrencyCode(account.currency_code)
+          : defaultCurrency;
+        const accountEntries = entries.filter((e) => e.account_id === account.id);
+        const balance = accountEntries.reduce(
+          (sum, e) =>
+            sum +
+            currencyStore.tryConvert(
+              e.amount,
+              e.currency_code,
+              displayCurrency,
+              e.date || e.created_at
+            ).amount,
+          0
+        );
+        return {
+          account,
+          displayCurrency,
+          balance,
+          count: accountEntries.length
+        };
+      })
+      .slice(0, 6);
+  });
+
   function getCategoryColor(id: string) {
-    return categories.find((c) => c.id === id)?.color || '#cccccc';
+    return categories.find((c) => c.id === id)?.color || '#71717a';
   }
   function getCategoryName(id: string) {
     return categories.find((c) => c.id === id)?.title || 'Unknown';
   }
+  function getAccountName(id: string) {
+    return accounts.find((a) => a.id === id)?.name || 'Unknown';
+  }
 </script>
 
-<div class="space-y-8 font-sans">
-  <div class="flex items-center justify-between">
-    <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
-    <a
-      href="/settings"
-      class="bg-muted text-muted-foreground hover:text-foreground rounded-full px-3 py-1 font-mono text-xs font-medium transition-colors"
-      title="Change default display currency in Settings"
-    >
-      Totals in {defaultCurrency}
-    </a>
-  </div>
+{#snippet addIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet walletIcon()}
+  <Icon icon={Wallet} size="sm" />
+{/snippet}
+{#snippet viewAllIcon()}
+  <Icon icon={ArrowRight} size="sm" />
+{/snippet}
+{#snippet emptyEntryAction()}
+  <Button
+    label="Add entry"
+    variant="primary"
+    icon={addIcon}
+    onclick={() => (modals.createEntry = true)}
+  />
+{/snippet}
+{#snippet emptyAccountAction()}
+  <Button
+    label="Add account"
+    variant="secondary"
+    icon={walletIcon}
+    onclick={() => (modals.createAccount = true)}
+  />
+{/snippet}
 
-  <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-    <div
-      class="bg-card border-border/50 relative flex flex-col justify-center overflow-hidden rounded-xl border p-6 shadow-sm"
-    >
-      <div class="bg-primary/10 absolute -top-6 -right-6 h-24 w-24 rounded-full blur-2xl"></div>
-      <h2 class="text-muted-foreground mb-1 text-sm font-medium">Total Balance</h2>
-      <p
-        class="text-3xl font-bold tracking-tight {totalBalance >= 0
-          ? 'text-emerald-500'
-          : 'text-destructive'}"
-      >
-        {currencyStore.formatAmount(totalBalance, defaultCurrency)}
-      </p>
-    </div>
+{#snippet header()}
+  <LayoutHeader hasDivider padding={6}>
+    <HStack hAlign="between" vAlign="center" wrap="wrap" gap={4}>
+      <VStack gap={1}>
+        <HStack gap={2} vAlign="center" wrap="wrap">
+          <Heading level={1}>Dashboard</Heading>
+          <Token
+            label="Totals in {defaultCurrency}"
+            size="sm"
+            href="/settings"
+            description="Change default display currency in Settings"
+          />
+        </HStack>
+        <Text type="supporting" color="secondary">
+          {accounts.length}
+          {accounts.length === 1 ? 'account' : 'accounts'} · {entries.length}
+          {entries.length === 1 ? 'entry' : 'entries'}
+        </Text>
+      </VStack>
 
-    <div
-      class="bg-card border-border/50 relative flex flex-col justify-center overflow-hidden rounded-xl border p-6 shadow-sm"
-    >
-      <div class="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl"></div>
-      <h2 class="text-muted-foreground mb-1 text-sm font-medium">Total Income</h2>
-      <p class="text-3xl font-bold tracking-tight text-emerald-500">
-        {currencyStore.formatAmount(income, defaultCurrency, { showPlus: true })}
-      </p>
-    </div>
+      <HStack gap={2} wrap="wrap">
+        <Button
+          label="Add account"
+          variant="secondary"
+          icon={walletIcon}
+          tooltip="New account (Alt+N, A)"
+          onclick={() => (modals.createAccount = true)}
+        />
+        <Button
+          label="Add entry"
+          variant="primary"
+          icon={addIcon}
+          tooltip="New entry (Alt+Space)"
+          onclick={() => (modals.createEntry = true)}
+        />
+      </HStack>
+    </HStack>
+  </LayoutHeader>
+{/snippet}
 
-    <div
-      class="bg-card border-border/50 relative flex flex-col justify-center overflow-hidden rounded-xl border p-6 shadow-sm"
-    >
-      <div class="bg-destructive/10 absolute -top-6 -right-6 h-24 w-24 rounded-full blur-2xl"></div>
-      <h2 class="text-muted-foreground mb-1 text-sm font-medium">Total Expenses</h2>
-      <p class="text-destructive text-3xl font-bold tracking-tight">
-        {currencyStore.formatAmount(-expenses, defaultCurrency)}
-      </p>
-    </div>
-  </div>
-
-  <div class="flex flex-col gap-3 sm:flex-row">
-    <button
-      use:tooltip={{ text: 'New Entry', keys: ['Alt', 'Space'] }}
-      onclick={() => (modals.createEntry = true)}
-      class="btn flex-1 gap-2"
-    >
-      <Plus size={16} /> Add Entry
-    </button>
-    <button
-      use:tooltip={{ text: 'New Account', keys: ['Alt', 'N', 'A'] }}
-      onclick={() => (modals.createAccount = true)}
-      class="btn btn-outline flex-1 gap-2"
-    >
-      <Wallet size={16} /> Add Account
-    </button>
-  </div>
-
-  <div class="grid grid-cols-1 gap-6 pt-4 lg:grid-cols-3">
-    <!-- Left Column: Transactions -->
-    <div class="lg:col-span-2">
-      <div class="border-border/50 mb-4 flex items-center justify-between border-b pb-2">
-        <h2 class="text-lg font-semibold tracking-tight">Recent Transactions</h2>
-        <a
-          href="/entries"
-          class="text-primary hover:text-primary/80 flex items-center gap-1 text-sm font-medium transition-colors"
-          >View All <ArrowRight size={14} /></a
-        >
-      </div>
-
-      {#if recentEntries.length === 0}
-        <div
-          class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
-        >
-          No transactions yet. Start by adding an entry!
-        </div>
-      {:else}
-        <div class="flex flex-col gap-2">
-          {#each recentEntries as entry (entry.id)}
-            {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
-            {@const isForeign = entryCode !== defaultCurrency}
-            {@const converted = isForeign
-              ? currencyStore.tryConvert(
-                  entry.amount,
-                  entryCode,
-                  defaultCurrency,
-                  entry.date || entry.created_at
-                )
-              : null}
-            <a
-              href="/entries/{entry.id}"
-              class="group bg-card border-border/50 hover:border-border rounded-lg border p-3.5 shadow-sm transition-all hover:shadow-md"
+{#snippet content()}
+  <LayoutContent padding={6} label="Dashboard">
+    <VStack gap={6}>
+      <Grid columns={{ minWidth: 210, max: 4 }} gap={4}>
+        <Card padding={5}>
+          <VStack gap={1}>
+            <Text type="supporting" color="secondary">Net balance</Text>
+            <Heading
+              level={2}
+              class={totalBalance >= 0
+                ? 'sunder-tabular sunder-positive'
+                : 'sunder-tabular sunder-negative'}
             >
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3.5">
-                  <div
-                    class="h-8 w-2.5 rounded-full"
-                    style="background-color: {getCategoryColor(entry.category_id)}"
-                  ></div>
-                  <div>
-                    <p class="text-foreground text-sm font-medium">{entry.title}</p>
-                    <p class="text-muted-foreground mt-0.5 text-xs">
-                      {getCategoryName(entry.category_id)}
-                    </p>
-                  </div>
-                </div>
-                <div class="text-right">
-                  <p
-                    class="text-sm font-semibold {entry.amount >= 0
-                      ? 'text-emerald-500'
-                      : 'text-destructive'}"
-                  >
-                    {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
-                  </p>
-                  {#if converted?.converted}
-                    <p class="text-muted-foreground text-[11px]">
-                      ≈ {currencyStore.formatAmount(converted.amount, defaultCurrency, {
-                        showPlus: true
-                      })}
-                    </p>
-                  {/if}
-                </div>
-              </div>
-            </a>
-          {/each}
-        </div>
-      {/if}
-    </div>
+              {currencyStore.formatAmount(totalBalance, defaultCurrency)}
+            </Heading>
+            <Text type="supporting" color="secondary">
+              Across {accounts.length}
+              {accounts.length === 1 ? 'account' : 'accounts'}
+            </Text>
+          </VStack>
+        </Card>
 
-    <!-- Right Column: Analytics -->
-    <div class="lg:col-span-1">
-      <div class="bg-card border-border/50 rounded-xl border p-5 shadow-sm">
-        <h2 class="mb-4 text-base font-semibold tracking-tight">Top Spending Categories</h2>
-        {#if categorySpending.length === 0}
-          <p class="text-muted-foreground text-sm">No expenses yet.</p>
-        {:else}
-          <div class="space-y-4">
-            {#each categorySpending as item}
-              <div>
-                <div class="mb-1.5 flex justify-between text-sm font-medium">
-                  <span class="text-foreground">{item.category?.title || 'Unknown'}</span>
-                  <span class="text-muted-foreground">
-                    {currencyStore.formatAmount(item.amount, defaultCurrency, { absolute: true })}
-                  </span>
-                </div>
-                <div class="bg-muted h-2 w-full overflow-hidden rounded-full">
-                  <div
-                    class="h-full rounded-full transition-all duration-1000"
-                    style="width: {expenses > 0
-                      ? (item.amount / expenses) * 100
-                      : 0}%; background-color: {item.category?.color || '#ccc'};"
-                  ></div>
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    </div>
-  </div>
-</div>
+        <Card padding={5}>
+          <VStack gap={1}>
+            <Text type="supporting" color="secondary">Total income</Text>
+            <Heading level={2} class="sunder-tabular sunder-positive">
+              {currencyStore.formatAmount(income, defaultCurrency, { showPlus: true })}
+            </Heading>
+            <Text type="supporting" color="secondary">
+              {incomeEntries.length}
+              {incomeEntries.length === 1 ? 'entry' : 'entries'}
+            </Text>
+          </VStack>
+        </Card>
+
+        <Card padding={5}>
+          <VStack gap={1}>
+            <Text type="supporting" color="secondary">Total expenses</Text>
+            <Heading level={2} class="sunder-tabular sunder-negative">
+              {currencyStore.formatAmount(-expenses, defaultCurrency)}
+            </Heading>
+            <Text type="supporting" color="secondary">
+              {expenseEntries.length}
+              {expenseEntries.length === 1 ? 'entry' : 'entries'}
+            </Text>
+          </VStack>
+        </Card>
+
+        <Card padding={5}>
+          <VStack gap={1}>
+            <Text type="supporting" color="secondary">Savings rate</Text>
+            <Heading
+              level={2}
+              class={savingsRate === null
+                ? 'sunder-tabular'
+                : savingsRate >= 0
+                  ? 'sunder-tabular sunder-positive'
+                  : 'sunder-tabular sunder-negative'}
+            >
+              {savingsRate === null ? '—' : `${savingsRate.toFixed(1)}%`}
+            </Heading>
+            <Text type="supporting" color="secondary">
+              {savingsRate === null
+                ? 'Log income to calculate'
+                : savingsRate >= 0
+                  ? 'Net positive cash flow'
+                  : 'Spending exceeds income'}
+            </Text>
+          </VStack>
+        </Card>
+      </Grid>
+
+      <ExchangeRatesPanel />
+
+      <Grid columns={{ minWidth: 340, max: 2 }} gap={6}>
+        <Card padding={0}>
+          <VStack gap={0}>
+            <HStack paddingInline={5} paddingBlock={4} hAlign="between" vAlign="center" gap={3}>
+              <Heading level={3}>Recent transactions</Heading>
+              <Link href="/entries" type="supporting">
+                <HStack gap={1} vAlign="center">View all {@render viewAllIcon()}</HStack>
+              </Link>
+            </HStack>
+            <Divider />
+            {#if recentEntries.length === 0}
+              <EmptyState
+                isCompact
+                title="No transactions yet"
+                description="Start by adding your first entry."
+                actions={emptyEntryAction}
+              />
+            {:else}
+              <List hasDividers edge="bleed">
+                {#each recentEntries as entry (entry.id)}
+                  {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
+                  {@const isForeign = entryCode !== defaultCurrency}
+                  {@const converted = isForeign
+                    ? currencyStore.tryConvert(
+                        entry.amount,
+                        entryCode,
+                        defaultCurrency,
+                        entry.date || entry.created_at
+                      )
+                    : null}
+                  {#snippet entryStart()}
+                    <CategoryDot color={getCategoryColor(entry.category_id)} />
+                  {/snippet}
+                  {#snippet entryEnd()}
+                    <VStack gap={0} hAlign="end">
+                      <Text
+                        weight="semibold"
+                        hasTabularNumbers
+                        class={entry.amount >= 0 ? 'sunder-positive' : 'sunder-negative'}
+                      >
+                        {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
+                      </Text>
+                      {#if converted?.converted}
+                        <Text type="supporting" color="secondary" hasTabularNumbers>
+                          ≈ {currencyStore.formatAmount(converted.amount, defaultCurrency, {
+                            showPlus: true
+                          })}
+                        </Text>
+                      {/if}
+                    </VStack>
+                  {/snippet}
+                  <ListItem
+                    label={entry.title}
+                    description="{getCategoryName(entry.category_id)} · {getAccountName(
+                      entry.account_id
+                    )} · {new Date(entry.date || entry.created_at).toLocaleDateString()}"
+                    href="/entries/{entry.id}"
+                    startContent={entryStart}
+                    endContent={entryEnd}
+                  />
+                {/each}
+              </List>
+            {/if}
+          </VStack>
+        </Card>
+
+        <VStack gap={6}>
+          <Card padding={5}>
+            <VStack gap={4}>
+              <HStack hAlign="between" vAlign="center" gap={3}>
+                <Heading level={3}>Top spending categories</Heading>
+                <Link href="/categories" type="supporting">
+                  <HStack gap={1} vAlign="center">All categories {@render viewAllIcon()}</HStack>
+                </Link>
+              </HStack>
+
+              {#if categorySpending.length === 0}
+                <Text type="supporting" color="secondary">
+                  Expense breakdowns appear here once you log spending.
+                </Text>
+              {:else}
+                <VStack gap={4}>
+                  {#each categorySpending as item (item.id)}
+                    <VStack gap={1.5}>
+                      <HStack hAlign="between" vAlign="center" gap={2}>
+                        <HStack gap={2} vAlign="center">
+                          <CategoryDot color={item.category?.color || '#71717a'} size="sm" />
+                          {#if item.category}
+                            <Link href="/categories/{item.category.id}" type="inherit">
+                              <Text weight="medium" maxLines={1}>{item.category.title}</Text>
+                            </Link>
+                          {:else}
+                            <Text weight="medium" maxLines={1}>Unknown</Text>
+                          {/if}
+                        </HStack>
+                        <HStack gap={2} vAlign="center">
+                          <Text type="supporting" color="secondary" hasTabularNumbers>
+                            {item.share.toFixed(0)}%
+                          </Text>
+                          <Text weight="medium" hasTabularNumbers>
+                            {currencyStore.formatAmount(item.amount, defaultCurrency, {
+                              absolute: true
+                            })}
+                          </Text>
+                        </HStack>
+                      </HStack>
+                      <ProgressBar
+                        label="{item.category?.title || 'Unknown'} share of spending"
+                        isLabelHidden
+                        value={item.share}
+                      />
+                    </VStack>
+                  {/each}
+                </VStack>
+              {/if}
+            </VStack>
+          </Card>
+
+          <Card padding={0}>
+            <VStack gap={0}>
+              <HStack paddingInline={5} paddingBlock={4} hAlign="between" vAlign="center" gap={3}>
+                <Heading level={3}>Accounts</Heading>
+                <Link href="/accounts" type="supporting">
+                  <HStack gap={1} vAlign="center">Manage {@render viewAllIcon()}</HStack>
+                </Link>
+              </HStack>
+              <Divider />
+              {#if accountSummaries.length === 0}
+                <EmptyState
+                  isCompact
+                  title="No accounts yet"
+                  description="Create an account to organize your balances."
+                  actions={emptyAccountAction}
+                />
+              {:else}
+                <List hasDividers edge="bleed">
+                  {#each accountSummaries as item (item.account.id)}
+                    {#snippet accountEnd()}
+                      <HStack gap={2} vAlign="center">
+                        <Token label={item.displayCurrency} size="sm" />
+                        <Text
+                          weight="semibold"
+                          hasTabularNumbers
+                          class={item.balance >= 0 ? 'sunder-positive' : 'sunder-negative'}
+                        >
+                          {currencyStore.formatAmount(item.balance, item.displayCurrency)}
+                        </Text>
+                      </HStack>
+                    {/snippet}
+                    <ListItem
+                      label={item.account.name}
+                      description="{item.count} {item.count === 1 ? 'entry' : 'entries'}"
+                      href="/accounts/{item.account.id}"
+                      endContent={accountEnd}
+                    />
+                  {/each}
+                </List>
+              {/if}
+            </VStack>
+          </Card>
+        </VStack>
+      </Grid>
+    </VStack>
+  </LayoutContent>
+{/snippet}
+
+<Layout height="fill" contentWidth={1280} {header} {content} />

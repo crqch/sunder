@@ -5,7 +5,7 @@ import type { AccountEntry, Currency, ExchangeRateSnapshot } from '$lib/types';
 
 const DEFAULT_CURRENCY_STORAGE_KEY = 'sunder_default_currency';
 const CANONICAL_BASE = 'USD';
-const MAX_HISTORY_CHUNK_DAYS = 360;
+const MAX_HISTORY_CHUNK_DAYS = 366;
 
 export function normalizeCurrencyCode(code?: string | null): string {
   const cleaned = (code || CANONICAL_BASE).trim().toUpperCase();
@@ -225,7 +225,7 @@ class CurrencyStore {
     if (!res.ok) {
       throw new Error(`Failed to fetch currencies (${res.status})`);
     }
-    const data = await res.json();
+    const data = (await res.json()) as { currencies?: Currency[] };
     const activeList: Currency[] = (data.currencies || []).map((c: Currency) => ({
       code: normalizeCurrencyCode(c.code),
       name: c.name,
@@ -300,11 +300,13 @@ class CurrencyStore {
     }
     const res = await apiFetch(`/currencies/rates?${params.toString()}`);
     if (!res.ok) return;
-    const data = await res.json();
+    const data = (await res.json()) as { date?: string; rates?: Record<string, number> };
     if (data?.date && data?.rates) {
       await this.mergeAndStoreSnapshots({ [data.date]: data.rates });
     }
   }
+
+  private recentRangeFetches = new Map<string, number>();
 
   private async fetchHistoryRange(fromStr: string, toStr: string, symbolsParam: string) {
     let cursor = new Date(`${fromStr}T00:00:00Z`);
@@ -318,21 +320,140 @@ class CurrencyStore {
       const params = new URLSearchParams({
         base: CANONICAL_BASE,
         from: cursor.toISOString().slice(0, 10),
-        to: effectiveEnd.toISOString().slice(0, 10),
-        symbols: symbolsParam
+        to: effectiveEnd.toISOString().slice(0, 10)
       });
+      if (symbolsParam) {
+        params.set('symbols', symbolsParam);
+      }
 
       const res = await apiFetch(`/currencies/rates/history?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.rates && typeof data.rates === 'object') {
-          await this.mergeAndStoreSnapshots(data.rates);
-        }
+      if (!res.ok) {
+        throw new Error(`Failed to fetch exchange rate history (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as {
+        rates?: Record<string, Record<string, number>>;
+      };
+      if (data?.rates && typeof data.rates === 'object') {
+        await this.mergeAndStoreSnapshots(data.rates);
       }
 
       cursor = new Date(effectiveEnd.getTime());
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
+  }
+
+  private countWeekdays(fromStr: string, toStr: string): number {
+    let count = 0;
+    const cursor = new Date(`${fromStr}T00:00:00Z`);
+    const end = new Date(`${toStr}T00:00:00Z`);
+    while (cursor <= end) {
+      const dow = cursor.getUTCDay();
+      if (dow !== 0 && dow !== 6) count++;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return count;
+  }
+
+  private hasRangeCoverage(fromStr: string, toStr: string, symbols: string[]): boolean {
+    const dates = this.sortedDates.filter((d) => d >= fromStr && d <= toStr);
+    if (dates.length === 0) return false;
+
+    let expected = this.countWeekdays(fromStr, toStr);
+    // Today's rates may not be published upstream yet; don't require them.
+    if (toStr === toDateKey(new Date()) && expected > 0) expected -= 1;
+    // Allow ~15% tolerance for ECB public holidays so holiday-spanning windows
+    // do not trigger redundant refetches on every mount.
+    const minRequired =
+      expected <= 5 ? Math.max(expected - 1, 1) : Math.max(Math.floor(expected * 0.85), 1);
+    if (dates.length < minRequired) return false;
+
+    const firstDateMs = Date.parse(`${dates[0]}T00:00:00Z`);
+    const fromDateMs = Date.parse(`${fromStr}T00:00:00Z`);
+    if (Number.isFinite(firstDateMs) && Number.isFinite(fromDateMs)) {
+      const leadingGapDays = (firstDateMs - fromDateMs) / 86_400_000;
+      if (leadingGapDays > 7) return false;
+    }
+
+    if (symbols.length > 0) {
+      const first = dates[0];
+      const last = dates[dates.length - 1];
+      if (!this.hasRateForAllSymbolsOnDate(first, symbols)) return false;
+      if (!this.hasRateForAllSymbolsOnDate(last, symbols)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Ensures daily USD-based snapshots covering [fromStr, toStr] are present in
+   * IndexedDB and the reactive store, fetching (chunked) history from the API
+   * when local coverage is sparse. An empty/omitted `symbols` list fetches all
+   * stored currencies for the range.
+   */
+  async ensureHistoryForRange(fromStr: string, toStr: string, symbols?: string[], force = false) {
+    if (typeof window === 'undefined') return;
+    const from = toDateKey(fromStr);
+    const today = toDateKey(new Date());
+    const requestedTo = toDateKey(toStr);
+    const to = requestedTo > today ? today : requestedTo;
+    if (from > to) return;
+
+    const normalizedSymbols = Array.from(
+      new Set(
+        (symbols ?? []).map((s) => normalizeCurrencyCode(s)).filter((s) => s !== CANONICAL_BASE)
+      )
+    ).sort();
+
+    if (!force && this.hasRangeCoverage(from, to, normalizedSymbols)) return;
+
+    const cacheKey = `${from}:${to}:${normalizedSymbols.join(',')}`;
+    const lastFetched = this.recentRangeFetches.get(cacheKey);
+    if (!force && lastFetched && Date.now() - lastFetched < 5 * 60 * 1000) {
+      return;
+    }
+
+    await this.fetchHistoryRange(from, to, normalizedSymbols.join(','));
+    this.recentRangeFetches.set(cacheKey, Date.now());
+  }
+
+  /**
+   * Clean daily cross-rate series (usdToTarget / usdToBase) for every stored
+   * snapshot date within [fromStr, toStr]. Dates missing either leg are skipped.
+   */
+  getRateSeries(
+    baseCode: string,
+    targetCode: string,
+    fromStr: string,
+    toStr: string
+  ): Array<{ date: string; rate: number }> {
+    const base = normalizeCurrencyCode(baseCode);
+    const target = normalizeCurrencyCode(targetCode);
+    const from = toDateKey(fromStr);
+    const to = toDateKey(toStr);
+    if (from > to) return [];
+
+    const series: Array<{ date: string; rate: number }> = [];
+    for (const date of this.sortedDates) {
+      if (date < from) continue;
+      if (date > to) break;
+      if (base === target) {
+        series.push({ date, rate: 1 });
+        continue;
+      }
+      const table = this.ratesByDate[date];
+      if (!table) continue;
+      const usdToBase = base === CANONICAL_BASE ? 1 : table[base];
+      const usdToTarget = target === CANONICAL_BASE ? 1 : table[target];
+      if (
+        typeof usdToBase !== 'number' ||
+        usdToBase <= 0 ||
+        typeof usdToTarget !== 'number' ||
+        usdToTarget <= 0
+      ) {
+        continue;
+      }
+      series.push({ date, rate: usdToTarget / usdToBase });
+    }
+    return series;
   }
 
   private hasRateForAllSymbolsOnDate(date: string, symbols: string[]): boolean {
@@ -403,7 +524,7 @@ class CurrencyStore {
     try {
       const res = await authenticatedFetch('/dashboard/eco/preferences');
       if (!res.ok) return;
-      const data = await res.json();
+      const data = (await res.json()) as { default_currency_code?: string };
       if (data?.default_currency_code) {
         this.setDefaultCurrencyLocal(data.default_currency_code);
         authStore.update((s) =>
@@ -424,7 +545,10 @@ class CurrencyStore {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ default_currency_code: normalized })
     });
-    const data = await res.json();
+    const data = (await res.json()) as {
+      error?: string;
+      default_currency_code?: string;
+    };
     if (!res.ok) {
       throw new Error(data.error || 'Failed to update default currency');
     }

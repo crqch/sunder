@@ -1,21 +1,52 @@
 <script lang="ts">
+  import {
+    AlertDialog,
+    Badge,
+    Button,
+    Card,
+    CheckboxInput,
+    DateInput,
+    EmptyState,
+    FormLayout,
+    Grid,
+    Heading,
+    HStack,
+    Icon,
+    IconButton,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    NumberInput,
+    Section,
+    SegmentedControl,
+    SegmentedControlItem,
+    Spinner,
+    Stack,
+    StackItem,
+    Switch,
+    Tab,
+    Table,
+    TabList,
+    Text,
+    TextInput,
+    Token,
+    VStack,
+    pixel,
+    proportional,
+    type ISODateString,
+    type TableColumn
+  } from '@astryx-sv/core';
+  import { Eye, EyeOff, Pencil, Plus, RefreshCw, Search, Trash2 } from '@lucide/svelte';
+  import { onMount } from 'svelte';
   import { authenticatedFetch } from '$lib/auth';
   import { currencyStore } from '$lib/currency.svelte';
   import type { Currency } from '$lib/types';
-  import { onMount } from 'svelte';
-  import {
-    Trash2,
-    Plus,
-    ShieldCheck,
-    Eye,
-    EyeOff,
-    Pencil,
-    RefreshCw,
-    Search,
-    Coins
-  } from '@lucide/svelte';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/toast.svelte';
   import Modal from '$components/Modal.svelte';
+
+  type AdminTab = 'users' | 'invites' | 'currencies' | 'rates';
+
+  let activeTab = $state<AdminTab>('users');
 
   let users = $state<any[]>([]);
   let invites = $state<any[]>([]);
@@ -58,6 +89,10 @@
   let manualRate = $state('');
   let manualDate = $state(new Date().toISOString().slice(0, 10));
   let savingManualRate = $state(false);
+
+  // Destructive confirmations
+  let userToDelete = $state<any>(null);
+  let inviteToDelete = $state<any>(null);
 
   let filteredCurrencies = $derived.by(() => {
     const q = currencySearch.trim().toLowerCase();
@@ -116,18 +151,20 @@
 
   onMount(loadData);
 
-  async function deleteUser(id: string) {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-    const res = await authenticatedFetch(`/admin/users/${id}`, { method: 'DELETE' });
+  async function deleteUser() {
+    if (!userToDelete) return;
+    const res = await authenticatedFetch(`/admin/users/${userToDelete.id}`, { method: 'DELETE' });
     if (res.ok) {
       toast.success('User deleted');
-      users = users.filter((u) => u.id !== id);
+      users = users.filter((u) => u.id !== userToDelete.id);
     } else {
       toast.error('Failed to delete user');
     }
+    userToDelete = null;
   }
 
-  async function saveUser() {
+  async function saveUser(e?: SubmitEvent) {
+    e?.preventDefault();
     if (!editingUser) return;
 
     const flagsArray = editFlags
@@ -160,12 +197,13 @@
     }
   }
 
-  async function createInvite() {
-    if (!newInviteToken) return;
+  async function createInvite(e?: SubmitEvent) {
+    e?.preventDefault();
+    if (!newInviteToken.trim()) return;
     const res = await authenticatedFetch(`/admin/invites`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: newInviteToken })
+      body: JSON.stringify({ token: newInviteToken.trim() })
     });
     if (res.ok) {
       toast.success('Invite created');
@@ -177,15 +215,18 @@
     }
   }
 
-  async function deleteInvite(id: string) {
-    if (!confirm('Delete this invite?')) return;
-    const res = await authenticatedFetch(`/admin/invites/${id}`, { method: 'DELETE' });
+  async function deleteInvite() {
+    if (!inviteToDelete) return;
+    const res = await authenticatedFetch(`/admin/invites/${inviteToDelete.id}`, {
+      method: 'DELETE'
+    });
     if (res.ok) {
       toast.success('Invite deleted');
-      invites = invites.filter((i) => i.id !== id);
+      invites = invites.filter((i) => i.id !== inviteToDelete.id);
     } else {
       toast.error('Failed to delete invite');
     }
+    inviteToDelete = null;
   }
 
   function openCreateCurrencyModal() {
@@ -210,7 +251,8 @@
     currencyModalOpen = true;
   }
 
-  async function saveCurrency() {
+  async function saveCurrency(e?: SubmitEvent) {
+    e?.preventDefault();
     const code = currCode.trim().toUpperCase();
     if (!code || !currName.trim() || !currSymbol.trim()) {
       toast.error('Code, name, and symbol are required');
@@ -321,7 +363,8 @@
     }
   }
 
-  async function saveManualRate() {
+  async function saveManualRate(e?: SubmitEvent) {
+    e?.preventDefault();
     const rateNum = parseFloat(manualRate);
     if (!manualTarget.trim() || isNaN(rateNum) || rateNum <= 0) {
       toast.error('Please enter a valid target currency and positive rate');
@@ -355,478 +398,548 @@
       savingManualRate = false;
     }
   }
+
+  const userColumns = $derived<TableColumn<any>[]>([
+    {
+      key: 'username',
+      header: 'Username',
+      width: proportional(1, { minWidth: 160 }),
+      renderCell: userNameCell
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      width: proportional(1, { minWidth: 200 }),
+      renderCell: userEmailCell
+    },
+    {
+      key: 'flags',
+      header: 'Flags',
+      width: proportional(1, { minWidth: 150 }),
+      renderCell: userFlagsCell
+    },
+    { key: 'id', header: 'ID', width: pixel(180), renderCell: userIdCell },
+    {
+      key: 'actions',
+      header: '',
+      width: pixel(100),
+      align: 'end',
+      renderCell: userActionsCell
+    }
+  ]);
+
+  const inviteColumns = $derived<TableColumn<any>[]>([
+    {
+      key: 'token',
+      header: 'Token',
+      width: proportional(1, { minWidth: 180 }),
+      renderCell: inviteTokenCell
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: proportional(1, { minWidth: 160 }),
+      renderCell: inviteStatusCell
+    },
+    { key: 'id', header: 'ID', width: pixel(180), renderCell: inviteIdCell },
+    {
+      key: 'actions',
+      header: '',
+      width: pixel(72),
+      align: 'end',
+      renderCell: inviteActionsCell
+    }
+  ]);
+
+  const currencyColumns = $derived<TableColumn<Currency>[]>([
+    { key: 'code', header: 'Code', width: pixel(96), renderCell: currCodeCell },
+    {
+      key: 'name',
+      header: 'Name',
+      width: proportional(1, { minWidth: 180 }),
+      renderCell: currNameCell
+    },
+    { key: 'symbol', header: 'Symbol', width: pixel(150), renderCell: currSymbolCell },
+    {
+      key: 'decimal_digits',
+      header: 'Decimals',
+      width: pixel(100),
+      align: 'end',
+      renderCell: currDecimalsCell
+    },
+    { key: 'is_active', header: 'Active', width: pixel(90), renderCell: currStatusCell },
+    {
+      key: 'actions',
+      header: '',
+      width: pixel(72),
+      align: 'end',
+      renderCell: currActionsCell
+    }
+  ]);
 </script>
 
-<div class="mx-auto flex max-w-5xl flex-col gap-8 py-6">
-  <div class="border-border flex items-center gap-3 border-b pb-4">
-    <ShieldCheck class="text-primary size-8" />
-    <div>
-      <h1 class="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-      <p class="text-muted-foreground text-sm">
-        Manage users, invite codes, supported currencies, and exchange rates
-      </p>
-    </div>
-  </div>
+{#snippet plusIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet editIcon()}
+  <Icon icon={Pencil} size="sm" />
+{/snippet}
+{#snippet trashIcon()}
+  <Icon icon={Trash2} size="sm" />
+{/snippet}
+{#snippet refreshIcon()}
+  <Icon icon={RefreshCw} size="sm" />
+{/snippet}
+{#snippet searchIcon()}
+  <Icon icon={Search} size="sm" color="secondary" />
+{/snippet}
+{#snippet eyeIcon()}
+  <Icon icon={Eye} size="sm" />
+{/snippet}
+{#snippet eyeOffIcon()}
+  <Icon icon={EyeOff} size="sm" />
+{/snippet}
 
-  {#if loading}
-    <div class="text-muted-foreground animate-pulse py-10 text-center">Loading admin data...</div>
-  {:else}
-    <!-- Users Section -->
-    <section class="flex flex-col gap-4">
-      <h2 class="text-2xl font-bold">Users</h2>
-      <div class="border-border bg-card overflow-x-auto rounded-xl border">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-muted/50 border-border border-b">
-            <tr>
-              <th class="p-3 font-semibold">ID</th>
-              <th class="p-3 font-semibold">Username</th>
-              <th class="p-3 font-semibold">Email</th>
-              <th class="p-3 font-semibold">Flags</th>
-              <th class="p-3 text-right font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each users as user}
-              <tr class="border-border/50 hover:bg-muted/20 border-b last:border-0">
-                <td class="p-3 font-mono text-xs">{user.id}</td>
-                <td class="p-3 font-medium">{user.username}</td>
-                <td class="text-muted-foreground p-3">{user.email}</td>
-                <td class="p-3">
-                  {#if user.flags && user.flags.length > 0}
-                    <div class="flex gap-1">
-                      {#each user.flags as flag}
-                        <span
-                          class="bg-primary/10 text-primary rounded px-2 py-0.5 text-xs font-medium"
-                          >{flag}</span
-                        >
-                      {/each}
-                    </div>
-                  {:else}
-                    <span class="text-muted-foreground text-xs italic">none</span>
-                  {/if}
-                </td>
-                <td class="p-3 text-right">
-                  <button
-                    class="btn btn-outline mr-2 h-auto p-1.5 text-xs"
-                    onclick={() => {
-                      editingUser = user;
-                      editUsername = user.username;
-                      editEmail = user.email;
-                      editFlags = user.flags ? user.flags.join(', ') : '';
-                      editPassword = '';
-                      editModalOpen = true;
-                      showPassword = false;
-                    }}
-                    title="Edit User"
-                  >
-                    <Pencil class="size-4" />
-                  </button>
-                  <button
-                    class="btn bg-destructive text-destructive-foreground h-auto p-1.5 text-xs"
-                    onclick={() => deleteUser(user.id)}
-                    title="Delete User"
-                  >
-                    <Trash2 class="size-4" />
-                  </button>
-                </td>
-              </tr>
-            {/each}
-            {#if users.length === 0}
-              <tr
-                ><td colspan="5" class="text-muted-foreground p-6 text-center">No users found.</td
-                ></tr
-              >
-            {/if}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Invites Section -->
-    <section class="flex flex-col gap-4">
-      <h2 class="text-2xl font-bold">Invite Codes</h2>
-      <div class="flex gap-2">
-        <input
-          type="text"
-          class="input flex-1"
-          placeholder="New invite code (e.g. BETA-2024)"
-          bind:value={newInviteToken}
-        />
-        <button
-          class="btn bg-primary text-primary-foreground px-4"
-          onclick={createInvite}
-          disabled={!newInviteToken}
-        >
-          <Plus class="mr-2 size-4" /> Create Invite
-        </button>
-      </div>
-
-      <div class="border-border bg-card overflow-x-auto rounded-xl border">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-muted/50 border-border border-b">
-            <tr>
-              <th class="p-3 font-semibold">ID</th>
-              <th class="p-3 font-semibold">Token</th>
-              <th class="p-3 font-semibold">Status</th>
-              <th class="p-3 text-right font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each invites as invite}
-              <tr class="border-border/50 hover:bg-muted/20 border-b last:border-0">
-                <td class="p-3 font-mono text-xs">{invite.id}</td>
-                <td class="p-3 font-mono font-medium">{invite.token}</td>
-                <td class="p-3">
-                  {#if invite.used_by}
-                    <span
-                      class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs font-medium"
-                      >Used by {invite.used_by}</span
-                    >
-                  {:else}
-                    <span
-                      class="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-500"
-                      >Available</span
-                    >
-                  {/if}
-                </td>
-                <td class="p-3 text-right">
-                  <button
-                    class="btn bg-destructive text-destructive-foreground h-auto p-1.5 text-xs"
-                    onclick={() => deleteInvite(invite.id)}
-                    title="Delete Invite"
-                  >
-                    <Trash2 class="size-4" />
-                  </button>
-                </td>
-              </tr>
-            {/each}
-            {#if invites.length === 0}
-              <tr
-                ><td colspan="4" class="text-muted-foreground p-6 text-center"
-                  >No invite codes found.</td
-                ></tr
-              >
-            {/if}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Exchange Rates Section -->
-    <section class="flex flex-col gap-4">
-      <div class="flex items-center gap-2">
-        <Coins class="text-primary size-6" />
-        <h2 class="text-2xl font-bold">Exchange Rates</h2>
-      </div>
-
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <!-- Sync & Backfill Card -->
-        <div class="border-border bg-card space-y-4 rounded-xl border p-5">
-          <div>
-            <h3 class="font-semibold">Sync Rates from Upstream Providers</h3>
-            <p class="text-muted-foreground text-xs">
-              Fetch latest daily rates, a specific historical date, or backfill trailing days.
-            </p>
-          </div>
-
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onclick={() => (syncMode = 'latest')}
-              class="btn btn-sm {syncMode === 'latest' ? '' : 'btn-outline'}"
-            >
-              Latest
-            </button>
-            <button
-              type="button"
-              onclick={() => (syncMode = 'date')}
-              class="btn btn-sm {syncMode === 'date' ? '' : 'btn-outline'}"
-            >
-              Specific Date
-            </button>
-            <button
-              type="button"
-              onclick={() => (syncMode = 'days')}
-              class="btn btn-sm {syncMode === 'days' ? '' : 'btn-outline'}"
-            >
-              Backfill Days
-            </button>
-          </div>
-
-          {#if syncMode === 'date'}
-            <label class="flex flex-col gap-1 text-xs font-medium">
-              Date (YYYY-MM-DD)
-              <input type="date" class="input h-9 text-sm" bind:value={syncDate} />
-            </label>
-          {:else if syncMode === 'days'}
-            <div class="flex flex-wrap items-center gap-3">
-              <label class="flex flex-1 flex-col gap-1 text-xs font-medium">
-                Trailing Days (1-366)
-                <input
-                  type="number"
-                  min="1"
-                  max="366"
-                  class="input h-9 text-sm"
-                  bind:value={syncDays}
-                />
-              </label>
-              <label class="mt-4 flex cursor-pointer items-center gap-2 text-xs font-medium">
-                <input type="checkbox" bind:checked={syncForce} />
-                Force re-fetch
-              </label>
-            </div>
-          {/if}
-
-          <button
-            onclick={triggerRateSync}
-            disabled={syncingRates}
-            class="btn btn-sm w-full gap-2 disabled:opacity-50"
-          >
-            <RefreshCw size={14} class={syncingRates ? 'animate-spin' : ''} />
-            {syncingRates
-              ? 'Syncing...'
-              : syncMode === 'latest'
-                ? 'Sync Latest Rates'
-                : syncMode === 'date'
-                  ? `Sync ${syncDate}`
-                  : `Backfill Last ${syncDays} Days`}
-          </button>
-        </div>
-
-        <!-- Manual Rate Override Card -->
-        <div class="border-border bg-card space-y-4 rounded-xl border p-5">
-          <div>
-            <h3 class="font-semibold">Manual Rate Override</h3>
-            <p class="text-muted-foreground text-xs">
-              Upsert an exact exchange rate for a currency pair on a specific date.
-            </p>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <label class="flex flex-col gap-1 text-xs font-medium">
-              Base Code
-              <input
-                type="text"
-                maxlength="10"
-                class="input h-9 font-mono text-sm uppercase"
-                bind:value={manualBase}
-                placeholder="USD"
-              />
-            </label>
-            <label class="flex flex-col gap-1 text-xs font-medium">
-              Target Code
-              <input
-                type="text"
-                maxlength="10"
-                class="input h-9 font-mono text-sm uppercase"
-                bind:value={manualTarget}
-                placeholder="EUR"
-              />
-            </label>
-            <label class="flex flex-col gap-1 text-xs font-medium">
-              Rate (1 Base = X Target)
-              <input
-                type="number"
-                step="any"
-                min="0"
-                class="input h-9 text-sm"
-                bind:value={manualRate}
-                placeholder="0.9250"
-              />
-            </label>
-            <label class="flex flex-col gap-1 text-xs font-medium">
-              Rate Date
-              <input type="date" class="input h-9 text-sm" bind:value={manualDate} />
-            </label>
-          </div>
-
-          <button
-            onclick={saveManualRate}
-            disabled={savingManualRate || !manualRate}
-            class="btn btn-outline btn-sm w-full disabled:opacity-50"
-          >
-            {savingManualRate ? 'Saving...' : 'Save Manual Rate'}
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Currencies Section -->
-    <section class="flex flex-col gap-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="text-2xl font-bold">Supported Currencies</h2>
-          <p class="text-muted-foreground text-xs">
-            {activeCurrencyCount} active of {currencies.length} total server currencies
-          </p>
-        </div>
-        <button onclick={openCreateCurrencyModal} class="btn btn-sm gap-1.5">
-          <Plus size={14} /> Add Currency
-        </button>
-      </div>
-
-      <div class="flex flex-col gap-2 sm:flex-row">
-        <div class="relative flex-1">
-          <Search
-            size={15}
-            class="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2"
-          />
-          <input
-            type="text"
-            bind:value={currencySearch}
-            placeholder="Search by code, name, or symbol..."
-            class="input h-9 w-full pl-9 text-sm"
-          />
-        </div>
-        <div class="flex gap-1.5">
-          <button
-            type="button"
-            onclick={() => (currencyFilter = 'all')}
-            class="btn btn-sm {currencyFilter === 'all' ? '' : 'btn-outline'}"
-          >
-            All ({currencies.length})
-          </button>
-          <button
-            type="button"
-            onclick={() => (currencyFilter = 'active')}
-            class="btn btn-sm {currencyFilter === 'active' ? '' : 'btn-outline'}"
-          >
-            Active ({activeCurrencyCount})
-          </button>
-          <button
-            type="button"
-            onclick={() => (currencyFilter = 'inactive')}
-            class="btn btn-sm {currencyFilter === 'inactive' ? '' : 'btn-outline'}"
-          >
-            Inactive ({currencies.length - activeCurrencyCount})
-          </button>
-        </div>
-      </div>
-
-      <div class="border-border bg-card max-h-[28rem] overflow-auto rounded-xl border">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-muted/80 border-border sticky top-0 border-b backdrop-blur">
-            <tr>
-              <th class="p-3 font-semibold">Code</th>
-              <th class="p-3 font-semibold">Name</th>
-              <th class="p-3 font-semibold">Symbol</th>
-              <th class="p-3 font-semibold">Decimals</th>
-              <th class="p-3 font-semibold">Status</th>
-              <th class="p-3 text-right font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each filteredCurrencies as curr (curr.code)}
-              <tr class="border-border/50 hover:bg-muted/20 border-b last:border-0">
-                <td class="p-3 font-mono font-semibold">{curr.code}</td>
-                <td class="p-3">{curr.name}</td>
-                <td class="p-3 font-mono text-xs">
-                  {curr.symbol}
-                  <span class="text-muted-foreground ml-1">
-                    ({curr.symbol_after ? 'after' : 'before'})
-                  </span>
-                </td>
-                <td class="p-3 font-mono text-xs">{curr.decimal_digits}</td>
-                <td class="p-3">
-                  <button
-                    type="button"
-                    onclick={() => toggleCurrencyActive(curr)}
-                    class="rounded px-2 py-0.5 text-xs font-medium transition-colors {curr.is_active
-                      ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                    title="Click to toggle active status"
-                  >
-                    {curr.is_active ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-                <td class="p-3 text-right">
-                  <button
-                    class="btn btn-outline h-auto p-1.5 text-xs"
-                    onclick={() => openEditCurrencyModal(curr)}
-                    title="Edit Currency"
-                  >
-                    <Pencil class="size-3.5" />
-                  </button>
-                </td>
-              </tr>
-            {/each}
-            {#if filteredCurrencies.length === 0}
-              <tr>
-                <td colspan="6" class="text-muted-foreground p-6 text-center">
-                  No currencies match your filter.
-                </td>
-              </tr>
-            {/if}
-          </tbody>
-        </table>
-      </div>
-    </section>
+{#snippet usersCountBadge()}
+  {#if !loading}
+    <Badge label={String(users.length)} />
   {/if}
-</div>
+{/snippet}
+{#snippet invitesCountBadge()}
+  {#if !loading}
+    <Badge label={String(invites.length)} />
+  {/if}
+{/snippet}
+{#snippet currenciesCountBadge()}
+  {#if !loading}
+    <Badge label={String(currencies.length)} />
+  {/if}
+{/snippet}
+
+{#snippet userIdCell(user: any)}
+  <Text type="code" size="sm" color="secondary" maxLines={1}>{user.id}</Text>
+{/snippet}
+{#snippet userNameCell(user: any)}
+  <Text weight="medium">{user.username}</Text>
+{/snippet}
+{#snippet userEmailCell(user: any)}
+  <Text color="secondary">{user.email}</Text>
+{/snippet}
+{#snippet userFlagsCell(user: any)}
+  {#if user.flags && user.flags.length > 0}
+    <HStack gap={1} wrap="wrap">
+      {#each user.flags as flag (flag)}
+        <Token label={flag} size="sm" />
+      {/each}
+    </HStack>
+  {:else}
+    <Text type="supporting" color="secondary">none</Text>
+  {/if}
+{/snippet}
+{#snippet userActionsCell(user: any)}
+  <HStack gap={1} hAlign="end">
+    <IconButton
+      label="Edit user"
+      size="sm"
+      variant="ghost"
+      icon={editIcon}
+      onclick={() => {
+        editingUser = user;
+        editUsername = user.username;
+        editEmail = user.email;
+        editFlags = user.flags ? user.flags.join(', ') : '';
+        editPassword = '';
+        editModalOpen = true;
+        showPassword = false;
+      }}
+    />
+    <IconButton
+      label="Delete user"
+      size="sm"
+      variant="destructive"
+      icon={trashIcon}
+      onclick={() => (userToDelete = user)}
+    />
+  </HStack>
+{/snippet}
+
+{#snippet inviteIdCell(invite: any)}
+  <Text type="code" size="sm" color="secondary" maxLines={1}>{invite.id}</Text>
+{/snippet}
+{#snippet inviteTokenCell(invite: any)}
+  <Text type="code" weight="medium">{invite.token}</Text>
+{/snippet}
+{#snippet inviteStatusCell(invite: any)}
+  {#if invite.used_by}
+    <Badge label="Used by {invite.used_by}" />
+  {:else}
+    <Badge label="Available" variant="success" />
+  {/if}
+{/snippet}
+{#snippet inviteActionsCell(invite: any)}
+  <HStack gap={1} hAlign="end">
+    <IconButton
+      label="Delete invite"
+      size="sm"
+      variant="destructive"
+      icon={trashIcon}
+      onclick={() => (inviteToDelete = invite)}
+    />
+  </HStack>
+{/snippet}
+
+{#snippet currCodeCell(curr: Currency)}
+  <Text type="code" weight="semibold">{curr.code}</Text>
+{/snippet}
+{#snippet currNameCell(curr: Currency)}
+  <Text>{curr.name}</Text>
+{/snippet}
+{#snippet currSymbolCell(curr: Currency)}
+  <Text type="code" size="sm">
+    {curr.symbol} ({curr.symbol_after ? 'after' : 'before'})
+  </Text>
+{/snippet}
+{#snippet currDecimalsCell(curr: Currency)}
+  <Text type="code" size="sm" hasTabularNumbers>{curr.decimal_digits}</Text>
+{/snippet}
+{#snippet currStatusCell(curr: Currency)}
+  <Switch
+    label="{curr.code} active"
+    isLabelHidden
+    size="sm"
+    value={curr.is_active ?? true}
+    onChange={() => toggleCurrencyActive(curr)}
+  />
+{/snippet}
+{#snippet currActionsCell(curr: Currency)}
+  <HStack gap={1} hAlign="end">
+    <IconButton
+      label="Edit currency"
+      size="sm"
+      variant="ghost"
+      icon={editIcon}
+      onclick={() => openEditCurrencyModal(curr)}
+    />
+  </HStack>
+{/snippet}
+
+{#snippet header()}
+  <LayoutHeader hasDivider padding={5} paddingBlockEnd={0}>
+    <VStack gap={4}>
+      <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+        <VStack gap={0.5}>
+          <Heading level={1}>Admin</Heading>
+          <Text type="supporting" color="secondary">
+            Manage users, invite codes, supported currencies, and exchange rates.
+          </Text>
+        </VStack>
+        {#if activeTab === 'currencies'}
+          <Button
+            label="Add currency"
+            variant="primary"
+            size="sm"
+            icon={plusIcon}
+            onclick={openCreateCurrencyModal}
+          />
+        {/if}
+      </HStack>
+
+      <TabList
+        value={activeTab}
+        onChange={(v) => (activeTab = v as AdminTab)}
+        isFullBleed
+        role="tablist"
+      >
+        <Tab value="users" label="Users" panelId="admin-panel-users" endContent={usersCountBadge} />
+        <Tab
+          value="invites"
+          label="Invites"
+          panelId="admin-panel-invites"
+          endContent={invitesCountBadge}
+        />
+        <Tab
+          value="currencies"
+          label="Currencies"
+          panelId="admin-panel-currencies"
+          endContent={currenciesCountBadge}
+        />
+        <Tab value="rates" label="Exchange rates" panelId="admin-panel-rates" />
+      </TabList>
+    </VStack>
+  </LayoutHeader>
+{/snippet}
+
+{#snippet content()}
+  <LayoutContent padding={0} label="Admin workspace">
+    {#if loading}
+      <Stack padding={8}>
+        <HStack hAlign="center">
+          <Spinner size="lg" label="Loading admin data..." />
+        </HStack>
+      </Stack>
+    {:else if activeTab === 'users'}
+      <Section id="admin-panel-users" role="tabpanel" variant="transparent" padding={0}>
+        {#if users.length === 0}
+          <Stack padding={8}>
+            <EmptyState title="No users found" />
+          </Stack>
+        {:else}
+          <Table
+            data={users}
+            columns={userColumns}
+            idKey="id"
+            dividers="rows"
+            hasHover
+            density="compact"
+          />
+        {/if}
+      </Section>
+    {:else if activeTab === 'invites'}
+      <Section id="admin-panel-invites" role="tabpanel" variant="transparent" padding={0}>
+        <Section variant="transparent" padding={4} dividers={['bottom']}>
+          <form onsubmit={createInvite}>
+            <HStack gap={2} wrap="wrap" vAlign="center">
+              <StackItem size="fill">
+                <TextInput
+                  label="New invite code"
+                  isLabelHidden
+                  placeholder="New invite code (e.g. BETA-2025)"
+                  value={newInviteToken}
+                  onChange={(v) => (newInviteToken = v)}
+                />
+              </StackItem>
+              <Button
+                label="Create invite"
+                type="submit"
+                variant="primary"
+                icon={plusIcon}
+                isDisabled={!newInviteToken.trim()}
+              />
+            </HStack>
+          </form>
+        </Section>
+        {#if invites.length === 0}
+          <Stack padding={8}>
+            <EmptyState
+              title="No invite codes yet"
+              description="Create an invite code above to allow new sign-ups."
+            />
+          </Stack>
+        {:else}
+          <Table
+            data={invites}
+            columns={inviteColumns}
+            idKey="id"
+            dividers="rows"
+            hasHover
+            density="compact"
+          />
+        {/if}
+      </Section>
+    {:else if activeTab === 'currencies'}
+      <Section id="admin-panel-currencies" role="tabpanel" variant="transparent" padding={0}>
+        <Section variant="transparent" padding={4} dividers={['bottom']}>
+          <HStack gap={3} wrap="wrap" vAlign="center" hAlign="between">
+            <StackItem size="fill">
+              <TextInput
+                label="Search currencies"
+                isLabelHidden
+                type="text"
+                placeholder="Search by code, name, or symbol..."
+                value={currencySearch}
+                onChange={(v) => (currencySearch = v)}
+                startIcon={searchIcon}
+                hasClear
+              />
+            </StackItem>
+            <SegmentedControl
+              label="Currency filter"
+              value={currencyFilter}
+              onChange={(v) => (currencyFilter = v as typeof currencyFilter)}
+              size="sm"
+            >
+              <SegmentedControlItem value="all" label="All ({currencies.length})" />
+              <SegmentedControlItem value="active" label="Active ({activeCurrencyCount})" />
+              <SegmentedControlItem
+                value="inactive"
+                label="Inactive ({currencies.length - activeCurrencyCount})"
+              />
+            </SegmentedControl>
+          </HStack>
+        </Section>
+        {#if filteredCurrencies.length === 0}
+          <Stack padding={8}>
+            <EmptyState
+              title="No matching currencies"
+              description="Adjust your search or status filter."
+            />
+          </Stack>
+        {:else}
+          <Table
+            data={filteredCurrencies}
+            columns={currencyColumns}
+            idKey="code"
+            dividers="rows"
+            hasHover
+            density="compact"
+          />
+        {/if}
+      </Section>
+    {:else if activeTab === 'rates'}
+      <Section id="admin-panel-rates" role="tabpanel" variant="transparent" padding={6}>
+        <Grid columns={{ minWidth: 320, max: 2 }} gap={5}>
+          <Card padding={5}>
+            <VStack gap={4}>
+              <VStack gap={1}>
+                <Heading level={3}>Sync from upstream providers</Heading>
+                <Text type="supporting" color="secondary">
+                  Fetch latest daily rates, a specific historical date, or backfill trailing days.
+                </Text>
+              </VStack>
+              <SegmentedControl
+                label="Sync mode"
+                value={syncMode}
+                onChange={(v) => (syncMode = v as typeof syncMode)}
+                layout="fill"
+                size="sm"
+              >
+                <SegmentedControlItem value="latest" label="Latest" />
+                <SegmentedControlItem value="date" label="Specific date" />
+                <SegmentedControlItem value="days" label="Backfill days" />
+              </SegmentedControl>
+
+              {#if syncMode === 'date'}
+                <DateInput
+                  label="Date"
+                  value={syncDate as ISODateString}
+                  onChange={(v: string | undefined) => (syncDate = v ?? '')}
+                  format="system_date"
+                />
+              {:else if syncMode === 'days'}
+                <HStack gap={4} wrap="wrap" vAlign="end">
+                  <NumberInput
+                    label="Trailing days (1-366)"
+                    min={1}
+                    max={366}
+                    value={syncDays}
+                    onChange={(v: number | null) => (syncDays = v ?? 30)}
+                    isIntegerOnly
+                  />
+                  <CheckboxInput
+                    label="Force re-fetch"
+                    value={syncForce}
+                    onChange={(checked) => (syncForce = checked)}
+                  />
+                </HStack>
+              {/if}
+
+              <Button
+                label={syncingRates
+                  ? 'Syncing...'
+                  : syncMode === 'latest'
+                    ? 'Sync latest rates'
+                    : syncMode === 'date'
+                      ? `Sync ${syncDate}`
+                      : `Backfill last ${syncDays} days`}
+                variant="primary"
+                icon={refreshIcon}
+                isLoading={syncingRates}
+                onclick={triggerRateSync}
+                width="100%"
+              />
+            </VStack>
+          </Card>
+
+          <Card padding={5}>
+            <form onsubmit={saveManualRate}>
+              <FormLayout>
+                <VStack gap={1}>
+                  <Heading level={3}>Manual rate override</Heading>
+                  <Text type="supporting" color="secondary">
+                    Upsert an exact exchange rate for a currency pair on a specific date.
+                  </Text>
+                </VStack>
+                <Grid columns={2} gap={3}>
+                  <TextInput
+                    label="Base code"
+                    value={manualBase}
+                    onChange={(v) => (manualBase = v)}
+                    placeholder="USD"
+                  />
+                  <TextInput
+                    label="Target code"
+                    value={manualTarget}
+                    onChange={(v) => (manualTarget = v)}
+                    placeholder="EUR"
+                  />
+                  <TextInput
+                    label="Rate (1 base = X target)"
+                    value={manualRate}
+                    onChange={(v) => (manualRate = v)}
+                    placeholder="0.9250"
+                  />
+                  <DateInput
+                    label="Rate date"
+                    value={manualDate as ISODateString}
+                    onChange={(v: string | undefined) => (manualDate = v ?? '')}
+                    format="system_date"
+                  />
+                </Grid>
+                <Button
+                  label={savingManualRate ? 'Saving...' : 'Save manual rate'}
+                  type="submit"
+                  variant="secondary"
+                  isLoading={savingManualRate}
+                  isDisabled={!manualRate}
+                  width="100%"
+                />
+              </FormLayout>
+            </form>
+          </Card>
+        </Grid>
+      </Section>
+    {/if}
+  </LayoutContent>
+{/snippet}
+
+<Layout height="fill" {header} {content} />
 
 <Modal bind:open={editModalOpen} title="Edit User">
   {#if editingUser}
-    <div class="flex flex-col gap-4">
-      <p class="text-muted-foreground -mt-4 text-sm">
-        Editing <span class="text-foreground font-bold">{editingUser.username}</span>
-      </p>
-
-      <label class="flex flex-col gap-1.5 text-sm font-medium">
-        Username
-        <input type="text" class="input" bind:value={editUsername} />
-      </label>
-
-      <label class="flex flex-col gap-1.5 text-sm font-medium">
-        Email
-        <input type="email" class="input" bind:value={editEmail} />
-      </label>
-
-      <label class="flex flex-col gap-1.5 text-sm font-medium">
-        Flags (comma separated)
-        <input
-          type="text"
-          class="input"
-          bind:value={editFlags}
+    <form onsubmit={saveUser}>
+      <FormLayout>
+        <Text type="supporting" color="secondary">
+          Editing {editingUser.username}
+        </Text>
+        <TextInput label="Username" value={editUsername} onChange={(v) => (editUsername = v)} />
+        <TextInput label="Email" type="email" value={editEmail} onChange={(v) => (editEmail = v)} />
+        <TextInput
+          label="Flags (comma separated)"
           placeholder="e.g. is_admin, beta_tester"
+          value={editFlags}
+          onChange={(v) => (editFlags = v)}
         />
-      </label>
-
-      <label class="relative mt-2 flex flex-col gap-1.5 text-sm font-medium">
-        New Password <span class="text-muted-foreground text-xs font-normal"
-          >(Leave blank to keep current)</span
-        >
-        <div class="relative">
-          <input
-            type={showPassword ? 'text' : 'password'}
-            class="input w-full pr-10"
-            bind:value={editPassword}
-          />
-          <button
-            type="button"
-            class="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 p-1"
+        <HStack gap={2} vAlign="end">
+          <StackItem size="fill">
+            <TextInput
+              label="New password (leave blank to keep current)"
+              type={showPassword ? 'text' : 'password'}
+              value={editPassword}
+              onChange={(v) => (editPassword = v)}
+            />
+          </StackItem>
+          <IconButton
+            label={showPassword ? 'Hide password' : 'Show password'}
+            icon={showPassword ? eyeOffIcon : eyeIcon}
             onclick={() => (showPassword = !showPassword)}
-            title={showPassword ? 'Hide password' : 'Show password'}
-          >
-            {#if showPassword}
-              <EyeOff class="size-4" />
-            {:else}
-              <Eye class="size-4" />
-            {/if}
-          </button>
-        </div>
-      </label>
-      <div class="border-border mt-2 flex justify-end gap-3 border-t pt-4">
-        <button
-          class="btn btn-outline px-4 py-2"
-          onclick={() => {
-            editModalOpen = false;
-          }}>Cancel</button
-        >
-        <button class="btn bg-primary text-primary-foreground px-4 py-2" onclick={saveUser}
-          >Save Changes</button
-        >
-      </div>
-    </div>
+          />
+        </HStack>
+        <HStack gap={3} hAlign="end" paddingBlockStart={2}>
+          <Button label="Cancel" variant="secondary" onclick={() => (editModalOpen = false)} />
+          <Button label="Save changes" type="submit" variant="primary" />
+        </HStack>
+      </FormLayout>
+    </form>
   {/if}
 </Modal>
 
@@ -834,58 +947,80 @@
   bind:open={currencyModalOpen}
   title={editingCurrencyCode ? `Edit Currency (${editingCurrencyCode})` : 'Add Currency'}
 >
-  <div class="flex flex-col gap-4">
-    <div class="grid grid-cols-2 gap-3">
-      <label class="flex flex-col gap-1.5 text-sm font-medium">
-        Code
-        <input
-          type="text"
-          class="input font-mono uppercase"
-          bind:value={currCode}
-          disabled={editingCurrencyCode !== null}
+  <form onsubmit={saveCurrency}>
+    <FormLayout>
+      <Grid columns={2} gap={3}>
+        <TextInput
+          label="Code"
+          value={currCode}
+          onChange={(v) => (currCode = v)}
+          isDisabled={editingCurrencyCode !== null}
           placeholder="BTC"
-          maxlength="10"
         />
-      </label>
-      <label class="flex flex-col gap-1.5 text-sm font-medium">
-        Symbol
-        <input type="text" class="input" bind:value={currSymbol} placeholder="₿" maxlength="10" />
-      </label>
-    </div>
-
-    <label class="flex flex-col gap-1.5 text-sm font-medium">
-      Name
-      <input type="text" class="input" bind:value={currName} placeholder="Bitcoin" />
-    </label>
-
-    <div class="grid grid-cols-2 gap-3">
-      <label class="flex flex-col gap-1.5 text-sm font-medium">
-        Decimal Digits
-        <input type="number" min="0" max="8" class="input" bind:value={currDecimalDigits} />
-      </label>
-      <div class="flex flex-col justify-end gap-2 pb-1">
-        <label class="flex cursor-pointer items-center gap-2 text-sm font-medium">
-          <input type="checkbox" bind:checked={currSymbolAfter} />
-          Symbol after amount
-        </label>
-        <label class="flex cursor-pointer items-center gap-2 text-sm font-medium">
-          <input type="checkbox" bind:checked={currIsActive} />
-          Active (selectable by users)
-        </label>
-      </div>
-    </div>
-
-    <div class="border-border mt-2 flex justify-end gap-3 border-t pt-4">
-      <button class="btn btn-outline px-4 py-2" onclick={() => (currencyModalOpen = false)}>
-        Cancel
-      </button>
-      <button
-        class="btn bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
-        disabled={savingCurrency}
-        onclick={saveCurrency}
-      >
-        {savingCurrency ? 'Saving...' : 'Save Currency'}
-      </button>
-    </div>
-  </div>
+        <TextInput
+          label="Symbol"
+          value={currSymbol}
+          onChange={(v) => (currSymbol = v)}
+          placeholder="₿"
+        />
+      </Grid>
+      <TextInput
+        label="Name"
+        value={currName}
+        onChange={(v) => (currName = v)}
+        placeholder="Bitcoin"
+      />
+      <NumberInput
+        label="Decimal digits"
+        min={0}
+        max={8}
+        value={currDecimalDigits}
+        onChange={(v: number | null) => (currDecimalDigits = v ?? 2)}
+        isIntegerOnly
+      />
+      <CheckboxInput
+        label="Symbol after amount"
+        value={currSymbolAfter}
+        onChange={(checked) => (currSymbolAfter = checked)}
+      />
+      <CheckboxInput
+        label="Active (selectable by users)"
+        value={currIsActive}
+        onChange={(checked) => (currIsActive = checked)}
+      />
+      <HStack gap={3} hAlign="end" paddingBlockStart={2}>
+        <Button label="Cancel" variant="secondary" onclick={() => (currencyModalOpen = false)} />
+        <Button
+          label={savingCurrency ? 'Saving...' : 'Save currency'}
+          type="submit"
+          variant="primary"
+          isLoading={savingCurrency}
+        />
+      </HStack>
+    </FormLayout>
+  </form>
 </Modal>
+
+<AlertDialog
+  isOpen={userToDelete !== null}
+  onOpenChange={(next) => {
+    if (!next) userToDelete = null;
+  }}
+  title="Delete {userToDelete?.username ?? 'user'}?"
+  description="This permanently removes the user and their access. This cannot be undone."
+  actionLabel="Delete user"
+  actionVariant="destructive"
+  onAction={deleteUser}
+/>
+
+<AlertDialog
+  isOpen={inviteToDelete !== null}
+  onOpenChange={(next) => {
+    if (!next) inviteToDelete = null;
+  }}
+  title="Delete invite {inviteToDelete?.token ?? ''}?"
+  description="The invite code will stop working immediately."
+  actionLabel="Delete invite"
+  actionVariant="destructive"
+  onAction={deleteInvite}
+/>

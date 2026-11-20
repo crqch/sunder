@@ -1,182 +1,501 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap');
-@import 'tailwindcss';
+@import '@astryx-sv/core/base.css';
+@import '@astryx-sv/core/astryx.css';
+@import '@astryx-sv/theme-neutral/theme.css';
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@layer product {
+  /* Semantic financial amounts & prose utilities (beats @layer astryx-theme text colors). */
+  .sunder-positive,
+  .sunder-positive input {
+    color: var(--color-text-success);
+  }
 
-:root {
-  --background: oklch(0.98 0.01 240);
-  --foreground: oklch(0.15 0.02 240);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 240);
-  --primary: oklch(0.5 0.25 255);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.96 0.01 240);
-  --secondary-foreground: oklch(0.2 0.02 240);
-  --muted: oklch(0.96 0.01 240);
-  --muted-foreground: oklch(0.5 0.02 240);
-  --accent: oklch(0.96 0.01 240);
-  --accent-foreground: oklch(0.2 0.02 240);
-  --destructive: oklch(0.6 0.2 20);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.9 0.01 240);
-  --input: oklch(0.9 0.01 240);
-  --ring: oklch(0.5 0.25 255);
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.15 0.02 240);
-  --sidebar-border: oklch(0.9 0.01 240);
-  --sidebar-accent: oklch(0.96 0.01 240);
-  --sidebar-accent-foreground: oklch(0.15 0.02 240);
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --radius: 0.5rem;
-  --tracking-normal: 0;
+  .sunder-negative,
+  .sunder-negative input {
+    color: var(--color-text-error);
+  }
+
+  .sunder-tabular,
+  .sunder-tabular input {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sunder-pre-wrap {
+    white-space: pre-wrap;
+  }
+
+  /* User-defined category color dot (data, not theme). */
+  .sunder-category-dot {
+    width: var(--dot-size);
+    height: var(--dot-size);
+    border-radius: var(--radius-full);
+    background-color: var(--dot-color);
+    flex-shrink: 0;
+  }
+
+  /* Category color picker swatches. */
+  .sunder-color-picker-swatch {
+    position: relative;
+    width: var(--spacing-10);
+    height: var(--spacing-10);
+    flex-shrink: 0;
+    border-radius: var(--radius-element);
+    background-color: var(--swatch-color);
+    border: var(--border-width) solid var(--color-border);
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .sunder-color-picker-swatch:focus-within {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .sunder-color-picker-native {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .sunder-color-swatch {
+    width: var(--spacing-8);
+    height: var(--spacing-8);
+    border-radius: var(--radius-full);
+    background-color: var(--swatch-color);
+    border: var(--border-width) solid var(--color-border);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .sunder-color-swatch-selected {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------------------------------------------------------------------
+     Table links — crisp underlined clickable titles & subtle inline links
+     --------------------------------------------------------------------- */
+
+  .sunder-table-title-link {
+    cursor: pointer;
+    min-width: 0;
+    max-width: 100%;
+    text-decoration-line: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+  }
+
+  .sunder-table-title-link > .astryx-text {
+    text-decoration-line: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: inherit;
+    padding-bottom: 1px;
+  }
+
+  .sunder-table-title-link:hover,
+  .sunder-table-title-link:focus-visible {
+    text-decoration-thickness: 2px;
+  }
+
+  .sunder-table-inline-link {
+    cursor: pointer;
+    min-width: 0;
+    max-width: 100%;
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
+    text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+  }
+
+  .sunder-table-inline-link > .astryx-text {
+    text-decoration-line: underline;
+    text-decoration-style: inherit;
+    text-decoration-color: inherit;
+    text-underline-offset: 2px;
+    text-decoration-thickness: inherit;
+    padding-bottom: 1px;
+  }
+
+  .sunder-table-inline-link:hover,
+  .sunder-table-inline-link:focus-visible {
+    text-decoration-style: solid;
+    text-decoration-color: currentColor;
+  }
+
+  .sunder-table-cell-truncate {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .sunder-table-cell-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* ---------------------------------------------------------------------
+     Sidebar — collapse/resize motion and narrow-width hardening
+     --------------------------------------------------------------------- */
+
+  .sunder-sidenav-shell {
+    display: contents;
+  }
+
+  .sunder-sidenav {
+    transition: background-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (min-width: 769px) {
+    .sunder-sidenav-shell {
+      position: relative;
+      display: flex;
+      height: 100%;
+      flex-shrink: 0;
+    }
+
+    .sunder-sidenav {
+      transition:
+        width 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Drop the width ease while actively dragging so the panel tracks the cursor 1:1. */
+    .sunder-sidenav.is-resizing {
+      transition: none;
+    }
+
+    .sunder-sidenav-resize-handle {
+      position: absolute;
+      top: 0;
+      right: -3px;
+      width: 7px;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 5;
+      touch-action: none;
+    }
+
+    .sunder-sidenav-resize-handle::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 3px;
+      height: 36px;
+      border-radius: var(--radius-full);
+      background-color: var(--color-border-emphasized);
+      transform: translate(-50%, -50%) scaleY(0.75);
+      opacity: 0;
+      transition:
+        opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .sunder-sidenav-resize-handle:hover::after,
+    .sunder-sidenav-resize-handle:focus-visible::after,
+    .sunder-sidenav-resize-handle[data-resizing]::after {
+      opacity: 1;
+      transform: translate(-50%, -50%) scaleY(1);
+    }
+
+    .sunder-sidenav-resize-handle[data-resizing]::after,
+    .sunder-sidenav-resize-handle:focus-visible::after {
+      background-color: var(--color-accent);
+    }
+
+    /* Collapsed rail (desktop only): compact sync control + icon rail. */
+    .sunder-sidenav.is-collapsed .sunder-sidenav-footer {
+      gap: 0;
+      padding: 0;
+      width: 100%;
+    }
+
+    .sunder-sidenav.is-collapsed .sunder-sidenav-top-content {
+      justify-content: center;
+    }
+
+    .sunder-sidenav.is-collapsed .sunder-sidenav-user {
+      max-height: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .sunder-sidenav:not(.is-collapsed) .sunder-nav-item a:hover svg,
+    .sunder-sidenav:not(.is-collapsed) .sunder-nav-item button:hover svg {
+      transform: translateX(1.5px) scale(1.05);
+    }
+  }
+
+  .sunder-sidenav-top-content {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .sunder-sidenav-new-entry {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .sunder-sidenav-footer {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .sunder-sidenav-user {
+    min-width: 0;
+    max-width: 100%;
+    max-height: 6rem;
+    overflow: hidden;
+    border-radius: var(--radius-element);
+    transition:
+      background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      max-height 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sunder-sidenav-user:hover {
+    background-color: var(--color-overlay-hover);
+  }
+
+  .sunder-sidenav-user-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .sunder-sidenav-user-item,
+  .sunder-sidenav-user-text {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .sunder-sidenav-user-text > * {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sunder-sidenav-avatar,
+  .sunder-sidenav-currency {
+    flex-shrink: 0;
+  }
+
+  .sunder-sidenav-currency {
+    max-width: 45%;
+  }
+
+  .sunder-sidenav .sunder-nav-item a,
+  .sunder-sidenav .sunder-nav-item button {
+    transition:
+      background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sunder-sidenav .sunder-nav-item svg {
+    transition:
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* ---------------------------------------------------------------------
+     Sync indicator — banner, status swap, drawer and sidebar pill
+     --------------------------------------------------------------------- */
+
+  .sunder-sync-banner-shell,
+  .sunder-sync-banner-inner,
+  .sunder-sync-pill,
+  .sunder-sync-pill-inner {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Status colours are class swaps; ease them instead of snapping. */
+  .sunder-sync-banner,
+  .sunder-sync-banner > div {
+    transition:
+      background-color 280ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 280ms cubic-bezier(0.22, 1, 0.36, 1),
+      color 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Overlay outgoing & incoming marks on a single grid cell so text never jitters. */
+  .sunder-sync-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .sunder-sync-mark-swap {
+    grid-area: 1 / 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .sunder-sync-details {
+    min-width: 0;
+    max-width: 100%;
+    /* Mirrors Banner's content-area treatment; living on the sliding node lets
+       `slide` ease the padding and bottom border along with the height. */
+    padding-block: var(--spacing-3);
+    padding-inline: var(--spacing-4);
+    background-color: var(--color-background-card);
+    border-inline: var(--border-width) solid var(--color-border);
+    border-bottom: var(--border-width) solid var(--color-border);
+  }
+
+  .sunder-sync-chevron {
+    display: inline-flex;
+    transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sunder-sync-chevron[data-open] {
+    transform: rotate(180deg);
+  }
+
+  .sunder-sync-details ul > * {
+    animation: sunder-sync-item-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .sunder-sync-details ul > *:nth-child(2) {
+    animation-delay: 28ms;
+  }
+
+  .sunder-sync-details ul > *:nth-child(3) {
+    animation-delay: 56ms;
+  }
+
+  .sunder-sync-details ul > *:nth-child(4) {
+    animation-delay: 84ms;
+  }
+
+  .sunder-sync-details ul > *:nth-child(5) {
+    animation-delay: 112ms;
+  }
+
+  .sunder-sync-pill-inner {
+    border-radius: var(--radius-element);
+    transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sunder-sync-pill-inner:hover {
+    background-color: var(--color-overlay-hover);
+  }
+
+  .sunder-sync-pill-row {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .sunder-sync-pill-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  /* Only truncate the text label span so StatusDot's pulsing ring is never clipped. */
+  .sunder-sync-pill-button > span {
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .sunder-sync-pill-button > span > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sunder-sync-pill-expand,
+  .sunder-sync-compact-button {
+    flex-shrink: 0;
+  }
+
+  .sunder-sync-compact {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sunder-sync-pill[data-status='syncing'] .sunder-sync-pill-inner {
+    animation: sunder-sync-breathe 1.8s ease-in-out infinite;
+  }
+
+  @keyframes sunder-sync-item-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes sunder-sync-breathe {
+    0%,
+    100% {
+      background-color: transparent;
+    }
+    50% {
+      background-color: var(--color-overlay-hover);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sunder-sidenav,
+    .sunder-sidenav-user,
+    .sunder-sidenav-user-text,
+    .sunder-sidenav-resize-handle::after,
+    .sunder-sidenav .sunder-nav-item a,
+    .sunder-sidenav .sunder-nav-item button,
+    .sunder-sidenav .sunder-nav-item svg,
+    .sunder-sync-banner,
+    .sunder-sync-banner > div,
+    .sunder-sync-chevron,
+    .sunder-sync-pill-inner {
+      transition: none;
+    }
+
+    .sunder-sidenav:not(.is-collapsed) .sunder-nav-item a:hover svg,
+    .sunder-sidenav:not(.is-collapsed) .sunder-nav-item button:hover svg {
+      transform: none;
+    }
+
+    .sunder-sync-details ul > *,
+    .sunder-sync-pill[data-status='syncing'] .sunder-sync-pill-inner {
+      animation: none;
+    }
+  }
 }
 
-[data-theme='dark'] {
-  --background: oklch(0.12 0.01 240);
-  --foreground: oklch(0.98 0.01 240);
-  --card: oklch(0.15 0.02 240);
-  --card-foreground: oklch(0.98 0.01 240);
-  --popover: oklch(0.15 0.02 240);
-  --popover-foreground: oklch(0.98 0.01 240);
-  --primary: oklch(0.6 0.25 255);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.2 0.02 240);
-  --secondary-foreground: oklch(0.98 0.01 240);
-  --muted: oklch(0.2 0.02 240);
-  --muted-foreground: oklch(0.7 0.02 240);
-  --accent: oklch(0.2 0.02 240);
-  --accent-foreground: oklch(0.98 0.01 240);
-  --destructive: oklch(0.6 0.2 20);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.25 0.02 240);
-  --input: oklch(0.25 0.02 240);
-  --ring: oklch(0.6 0.25 255);
-  --sidebar: oklch(0.15 0.02 240);
-  --sidebar-foreground: oklch(0.98 0.01 240);
-  --sidebar-border: oklch(0.25 0.02 240);
-  --sidebar-accent: oklch(0.2 0.02 240);
-  --sidebar-accent-foreground: oklch(0.98 0.01 240);
-  --radius: 0.5rem;
-  --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-sm: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-  --shadow-xl: 0 35px 60px -15px rgb(0 0 0 / 0.3);
-  --shadow-2xl: 0 45px 70px -20px rgb(0 0 0 / 0.4);
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-serif: var(--font-serif);
-
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-
-  --shadow-2xs: var(--shadow-2xs);
-  --shadow-xs: var(--shadow-xs);
-  --shadow-sm: var(--shadow-sm);
-  --shadow: var(--shadow);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
-  --shadow-2xl: var(--shadow-2xl);
-
-  --tracking-tighter: -0.05em;
-  --tracking-tight: -0.025em;
-  --tracking-normal: 0em;
-  --tracking-wide: 0.025em;
-  --tracking-wider: 0.05em;
-  --tracking-widest: 0.1em;
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-    letter-spacing: var(--tracking-normal);
-  }
-  button {
-    @apply cursor-pointer;
-  }
-}
-
-@layer components {
-  .btn {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90 border-primary-foreground/40 inline-flex w-fit cursor-pointer items-center justify-center self-center rounded-none border px-4 py-2 shadow-sm transition-all hover:shadow-md;
-  }
-
-  .btn-outline {
-    @apply border-border text-foreground hover:bg-muted cursor-pointer rounded-none border bg-transparent shadow-sm transition-colors;
-  }
-
-  .btn-ghost {
-    @apply text-foreground hover:bg-muted cursor-pointer rounded-none bg-transparent transition-colors;
-  }
-
-  .btn-destructive {
-    @apply bg-destructive text-destructive-foreground border-destructive-foreground/20 hover:bg-destructive/90 inline-flex w-fit cursor-pointer items-center justify-center self-center rounded-none border px-4 py-2 shadow-sm transition-all hover:shadow-md;
-  }
-
-  .btn-sm {
-    @apply px-3 py-1.5 text-xs;
-  }
-
-  .btn-icon {
-    @apply border-border/50 text-foreground hover:bg-muted inline-flex aspect-square cursor-pointer items-center justify-center rounded-none border bg-transparent p-2 transition-colors;
-  }
-
-  .btn-icon-destructive {
-    @apply border-border/50 text-destructive hover:bg-destructive/10 hover:border-destructive/30 inline-flex aspect-square cursor-pointer items-center justify-center rounded-none border bg-transparent p-2 transition-colors;
-  }
-
-  .input {
-    @apply bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm transition-all focus:ring-2 focus:outline-none;
-  }
-}
-
+/* Theme toggle view-transition (driven by $lib/themeStore). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;

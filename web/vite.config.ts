@@ -1,13 +1,10 @@
-import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import { defineConfig } from 'vite';
-import path from 'path';
 
 export default defineConfig({
   plugins: [
-    tailwindcss(),
     sveltekit({
       typescript: {
         config: (config) => {
@@ -87,5 +84,14 @@ export default defineConfig({
       }
     })
   ],
-  resolve: { alias: { $components: path.resolve('./src/components') } }
+  resolve: { alias: { $components: new URL('./src/components', import.meta.url).pathname } },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:4010',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
+    }
+  }
 });

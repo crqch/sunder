@@ -1,9 +1,17 @@
 import { db } from '$lib/db';
 import { authenticatedFetch, authStore } from '$lib/auth';
 import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
+import type { Account, AccountEntry, EntryCategory } from '$lib/types';
 
 const LAST_SYNC_KEY = 'sunder_last_sync_timestamp';
 const EPOCH = '1970-01-01T00:00:00.000Z';
+
+type SyncResponse = {
+  accounts?: Account[];
+  categories?: EntryCategory[];
+  entries?: AccountEntry[];
+  default_currency_code?: string;
+};
 
 export async function syncAll() {
   let lastSync = localStorage.getItem(LAST_SYNC_KEY);
@@ -48,13 +56,13 @@ export async function syncAll() {
     throw new Error('Sync failed with status ' + res.status);
   }
 
-  const serverData = await res.json();
+  const serverData = (await res.json()) as SyncResponse;
   const now = new Date().toISOString();
 
   await db.transaction('rw', db.accounts, db.entry_categories, db.account_entries, async () => {
     if (serverData.accounts?.length) {
       await db.accounts.bulkPut(
-        serverData.accounts.map((a: Record<string, unknown>) => ({
+        serverData.accounts.map((a) => ({
           ...a,
           currency_code:
             typeof a.currency_code === 'string' ? normalizeCurrencyCode(a.currency_code) : null
@@ -66,7 +74,7 @@ export async function syncAll() {
     }
     if (serverData.entries?.length) {
       await db.account_entries.bulkPut(
-        serverData.entries.map((e: Record<string, unknown>) => ({
+        serverData.entries.map((e) => ({
           ...e,
           currency_code: normalizeCurrencyCode(
             typeof e.currency_code === 'string' ? e.currency_code : null

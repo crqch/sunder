@@ -17,6 +17,17 @@ export interface AuthState {
   loading: boolean;
 }
 
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  message?: string;
+}
+
+interface ProfileResponse extends User {
+  id: string;
+  username: string;
+}
+
 const initialState: AuthState = {
   isAuthenticated: false,
   user: null,
@@ -53,7 +64,7 @@ export async function login(login: string, pass: string) {
     body: JSON.stringify({ login, pass })
   });
 
-  const data = await res.json();
+  const data = (await res.json()) as TokenResponse;
 
   if (!res.ok) {
     throw new Error(data.message || 'Login failed');
@@ -76,7 +87,7 @@ export async function register(invite: string, email: string, username: string, 
     body: JSON.stringify({ email, username, pass })
   });
 
-  const data = await res.json();
+  const data = (await res.json()) as Record<string, unknown>;
 
   if (!res.ok) {
     throw data;
@@ -105,7 +116,7 @@ export async function refreshAccessToken() {
     throw new Error('Failed to refresh token');
   }
 
-  const data = await res.json();
+  const data = (await res.json()) as TokenResponse;
 
   if (typeof document !== 'undefined') {
     document.cookie = `authorization=${data.access_token}; path=/`;
@@ -122,7 +133,7 @@ export async function refreshAccessToken() {
     throw new Error('Failed to fetch user profile');
   }
 
-  const profileData = await profileRes.json();
+  const profileData = (await profileRes.json()) as ProfileResponse;
 
   if (typeof window !== 'undefined' && profileData.default_currency_code) {
     localStorage.setItem('sunder_default_currency', profileData.default_currency_code);

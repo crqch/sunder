@@ -1,58 +1,71 @@
 import { writable } from 'svelte/store';
 
-type Theme = 'light' | 'dark';
+export type ThemeMode = 'system' | 'light' | 'dark';
+
+const CYCLE_ORDER: ThemeMode[] = ['system', 'light', 'dark'];
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value === 'system' || value === 'light' || value === 'dark';
+}
 
 function createThemeStore() {
-  const getInitialTheme = (): Theme => {
+  const getInitialTheme = (): ThemeMode => {
     if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('theme');
+        if (isThemeMode(saved)) return saved;
+      } catch {
+        // Ignore storage errors
+      }
       const attr = document.documentElement.getAttribute('data-theme');
       if (attr === 'dark' || attr === 'light') return attr;
     }
-    return 'light';
+    return 'system';
   };
 
-  const { subscribe, set, update } = writable<Theme>(getInitialTheme());
+  let currentValue: ThemeMode = getInitialTheme();
+  const { subscribe, set } = writable<ThemeMode>(currentValue);
 
-  const applyTheme = (value: Theme) => {
+  const applyTheme = (value: ThemeMode) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('theme', value);
-      document.documentElement.setAttribute('data-theme', value);
+      try {
+        localStorage.setItem('theme', value);
+      } catch {
+        // Ignore storage errors
+      }
+      if (value === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', value);
+      }
     }
   };
 
-  const internalSet = (value: Theme) => {
+  const internalSet = (value: ThemeMode) => {
+    currentValue = value;
     applyTheme(value);
     set(value);
   };
 
   let isTransitioning = false;
 
-  return {
-    subscribe,
-    set: internalSet,
-    toggle: (e?: MouseEvent | { clientX: number; clientY: number }) => {
-      if (isTransitioning) return;
+  const transitionTo = (next: ThemeMode) => {
+    if (next === currentValue || isTransitioning) return;
 
-      let next: Theme;
-      update((current) => {
-        next = current === 'light' ? 'dark' : 'light';
-        return current; // Don't change state yet
-      });
+    if (typeof document === 'undefined' || !document.startViewTransition) {
+      internalSet(next);
+      return;
+    }
 
-      if (!document.startViewTransition) {
-        internalSet(next!);
-        return;
-      }
+    isTransitioning = true;
+    document.documentElement.classList.add('theme-transitioning');
 
-      isTransitioning = true;
+    const transition = document.startViewTransition(() => {
+      internalSet(next);
+    });
 
-      document.documentElement.classList.add('theme-transitioning');
-
-      const transition = document.startViewTransition(() => {
-        internalSet(next!);
-      });
-
-      transition.ready.then(() => {
+    transition.ready
+      .then(() => {
         const style = document.createElement('style');
         const animationNameOut = `theme-flip-out-${Date.now()}`;
         const animationNameIn = `theme-flip-in-${Date.now()}`;
@@ -87,7 +100,19 @@ function createThemeStore() {
             document.documentElement.classList.remove('theme-transitioning');
             isTransitioning = false;
           });
+      })
+      .catch(() => {
+        document.documentElement.classList.remove('theme-transitioning');
+        isTransitioning = false;
       });
+  };
+
+  return {
+    subscribe,
+    set: (value: ThemeMode) => transitionTo(value),
+    toggle: (_e?: MouseEvent | { clientX: number; clientY: number }) => {
+      const next = CYCLE_ORDER[(CYCLE_ORDER.indexOf(currentValue) + 1) % CYCLE_ORDER.length];
+      transitionTo(next);
     }
   };
 }

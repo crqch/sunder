@@ -1,13 +1,40 @@
 <script lang="ts">
+  import {
+    AlertDialog,
+    Badge,
+    BreadcrumbItem,
+    Breadcrumbs,
+    Button,
+    Card,
+    Divider,
+    EmptyState,
+    FormLayout,
+    Grid,
+    Heading,
+    HStack,
+    Icon,
+    Layout,
+    LayoutContent,
+    LayoutHeader,
+    List,
+    ListItem,
+    Stack,
+    Text,
+    TextArea,
+    TextInput,
+    VStack
+  } from '@astryx-sv/core';
+  import { Check, Pencil, Plus, Trash2, X } from '@lucide/svelte';
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { liveQuery } from 'dexie';
   import { db } from '$lib/db';
   import type { EntryCategory, AccountEntry, Account } from '$lib/types';
-  import { goto } from '$app/navigation';
-  import { Trash2, Pencil, Check, X, ArrowLeft, Plus } from '@lucide/svelte';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/toast.svelte';
   import Modal from '$components/Modal.svelte';
   import EntryForm from '$components/EntryForm.svelte';
+  import ColorPicker from '$components/ColorPicker.svelte';
+  import CategoryDot from '$components/CategoryDot.svelte';
   import { currencyStore, normalizeCurrencyCode } from '$lib/currency.svelte';
 
   let id = $derived($page.params.id || '');
@@ -22,6 +49,7 @@
   let editColor = $state('');
 
   let createEntryModalOpen = $state(false);
+  let deleteConfirmOpen = $state(false);
 
   $effect(() => {
     const subCat = liveQuery(() => db.entry_categories.get(id)).subscribe({
@@ -57,205 +85,289 @@
     };
   });
 
-  async function handleDelete() {
+  function requestDelete() {
     if (!category) return;
-
     if (entries.length > 0) {
       toast.error(`Cannot delete category while it has ${entries.length} active entries.`);
       return;
     }
-
-    if (confirm('Are you sure you want to delete this category?')) {
-      const now = new Date().toISOString();
-      await db.entry_categories.update(id, {
-        deleted_at: now,
-        updated_at: now
-      });
-      goto('/categories');
-    }
+    deleteConfirmOpen = true;
   }
 
-  async function handleSaveEdit() {
+  async function handleDelete() {
+    if (!category) return;
+    const now = new Date().toISOString();
+    await db.entry_categories.update(id, {
+      deleted_at: now,
+      updated_at: now
+    });
+    deleteConfirmOpen = false;
+    goto('/categories');
+  }
+
+  async function handleSaveEdit(e: SubmitEvent) {
+    e.preventDefault();
     if (!category || !editName.trim()) return;
     await db.entry_categories.update(id, {
-      title: editName,
+      title: editName.trim(),
       description: editDescription.trim() || null,
       color: editColor,
       updated_at: new Date().toISOString()
     });
     editing = false;
+    toast.success('Category updated');
+  }
+
+  function cancelEdit() {
+    editing = false;
+    if (category) {
+      editName = category.title;
+      editDescription = category.description || '';
+      editColor = category.color;
+    }
   }
 
   function getAccountName(accId: string) {
     return accounts.find((a) => a.id === accId)?.name || 'Unknown';
   }
 
+  let defaultCurrency = $derived(currencyStore.defaultCurrencyCode);
   let categoryTotal = $derived(
     entries.reduce((sum, e) => sum + currencyStore.convertEntryToDefault(e), 0)
   );
+  let averageEntry = $derived(entries.length > 0 ? categoryTotal / entries.length : 0);
 </script>
 
-{#if !category}
-  <div class="text-muted-foreground p-12 text-center font-bold tracking-widest uppercase">
-    Category not found or deleted.
-    <br /><br />
-    <a href="/categories" class="btn btn-outline inline-block">Back to Categories</a>
-  </div>
-{:else}
-  <div class="space-y-8 font-sans">
-    <div class="border-border/50 flex items-center gap-4 border-b pb-4">
-      <a href="/categories" class="btn-icon">
-        <ArrowLeft size={20} />
-      </a>
+{#snippet editIcon()}
+  <Icon icon={Pencil} size="sm" />
+{/snippet}
+{#snippet deleteIcon()}
+  <Icon icon={Trash2} size="sm" />
+{/snippet}
+{#snippet addIcon()}
+  <Icon icon={Plus} size="sm" />
+{/snippet}
+{#snippet saveIcon()}
+  <Icon icon={Check} size="sm" />
+{/snippet}
+{#snippet cancelIcon()}
+  <Icon icon={X} size="sm" />
+{/snippet}
+{#snippet notFoundActions()}
+  <Button label="Back to categories" href="/categories" />
+{/snippet}
 
-      {#if editing}
-        <form
-          onsubmit={(e) => {
-            e.preventDefault();
-            handleSaveEdit();
-          }}
-          class="bg-card border-border/50 flex flex-1 flex-col gap-4 rounded-xl border p-4 shadow-sm"
-        >
-          <input
-            type="text"
-            bind:value={editName}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-            placeholder="Name"
-            autofocus
-          />
-          <textarea
-            bind:value={editDescription}
-            class="bg-background border-border/50 focus:ring-primary/50 focus:border-primary w-full resize-none rounded-lg border p-2.5 text-sm focus:ring-2 focus:outline-none"
-            placeholder="Description"></textarea>
-          <div class="flex items-center gap-3">
-            <input
-              type="color"
-              bind:value={editColor}
-              class="h-10 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
-            />
-            <div class="ml-auto flex gap-2">
-              <button type="submit" class="btn btn-sm">Save</button>
-              <button
-                type="button"
-                onclick={() => {
-                  editing = false;
-                  editName = category!.title;
-                  editDescription = category!.description || '';
-                  editColor = category!.color;
-                }}
-                class="btn-outline btn-sm">Cancel</button
-              >
-            </div>
-          </div>
-        </form>
-      {:else}
-        <div
-          class="h-8 w-8 shrink-0 rounded-full shadow-sm"
-          style="background-color: {category.color}"
-        ></div>
-        <div class="flex-1">
-          <h1 class="text-2xl font-semibold tracking-tight">{category.title}</h1>
-          {#if category.description}
-            <p class="text-muted-foreground mt-0.5 text-sm">{category.description}</p>
+{#snippet header()}
+  <LayoutHeader hasDivider padding={5}>
+    <VStack gap={2}>
+      <Breadcrumbs variant="supporting">
+        <BreadcrumbItem href="/categories">Categories</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>{category?.title ?? 'Category'}</BreadcrumbItem>
+      </Breadcrumbs>
+
+      {#if category}
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+          <HStack gap={3} vAlign="center">
+            <CategoryDot color={category.color} size="lg" />
+            <VStack gap={0.5}>
+              <Heading level={1} maxLines={1}>{category.title}</Heading>
+              {#if category.description}
+                <Text type="supporting" color="secondary">{category.description}</Text>
+              {/if}
+            </VStack>
+          </HStack>
+
+          {#if !editing}
+            <HStack gap={2} vAlign="center">
+              <Button
+                label="Add entry"
+                variant="primary"
+                size="sm"
+                icon={addIcon}
+                onclick={() => (createEntryModalOpen = true)}
+              />
+              <Button
+                label="Edit"
+                variant="secondary"
+                size="sm"
+                icon={editIcon}
+                onclick={() => (editing = true)}
+              />
+              <Button
+                label="Delete"
+                variant="destructive"
+                size="sm"
+                icon={deleteIcon}
+                onclick={requestDelete}
+              />
+            </HStack>
           {/if}
-        </div>
-        <div class="flex gap-2">
-          <button onclick={() => (editing = true)} class="btn-icon" title="Edit">
-            <Pencil size={18} />
-          </button>
-          <button onclick={handleDelete} class="btn-icon-destructive" title="Delete">
-            <Trash2 size={18} />
-          </button>
-        </div>
+        </HStack>
       {/if}
-    </div>
+    </VStack>
+  </LayoutHeader>
+{/snippet}
 
-    <div class="bg-card border-border/50 rounded-xl border p-6 shadow-sm">
-      <h2 class="text-muted-foreground mb-1 text-sm font-medium">
-        Total ({currencyStore.defaultCurrencyCode})
-      </h2>
-      <p
-        class="text-3xl font-bold tracking-tight {categoryTotal >= 0
-          ? 'text-emerald-500'
-          : 'text-destructive'}"
-      >
-        {currencyStore.formatAmount(categoryTotal, currencyStore.defaultCurrencyCode, {
-          showPlus: true
-        })}
-      </p>
-    </div>
+{#snippet content()}
+  <LayoutContent padding={6} label="Category details">
+    {#if !category}
+      <EmptyState title="Category not found or deleted" actions={notFoundActions} />
+    {:else}
+      <VStack gap={5}>
+        {#if editing}
+          <Card padding={5}>
+            <form onsubmit={handleSaveEdit}>
+              <FormLayout>
+                <Heading level={3}>Edit category</Heading>
+                <TextInput
+                  label="Category title"
+                  value={editName}
+                  onChange={(v) => (editName = v)}
+                  isRequired
+                  hasAutoFocus
+                />
+                <TextArea
+                  label="Description"
+                  rows={2}
+                  value={editDescription}
+                  onChange={(v) => (editDescription = v)}
+                />
+                <ColorPicker bind:value={editColor} />
+                <HStack gap={2} hAlign="end">
+                  <Button
+                    label="Cancel"
+                    variant="secondary"
+                    icon={cancelIcon}
+                    onclick={cancelEdit}
+                  />
+                  <Button label="Save changes" type="submit" variant="primary" icon={saveIcon} />
+                </HStack>
+              </FormLayout>
+            </form>
+          </Card>
+        {/if}
 
-    <div class="pt-4">
-      <div class="border-border/50 mb-4 flex items-center justify-between border-b pb-2">
-        <h2 class="text-lg font-semibold tracking-tight">Transactions</h2>
-        <button onclick={() => (createEntryModalOpen = true)} class="btn gap-2 text-sm">
-          <Plus size={16} /> Add Entry
-        </button>
-      </div>
+        <Grid columns={{ minWidth: 200, max: 3 }} gap={4}>
+          <Card padding={4}>
+            <VStack gap={1}>
+              <Text type="supporting" color="secondary">Net total ({defaultCurrency})</Text>
+              <Text
+                size="xl"
+                weight="semibold"
+                hasTabularNumbers
+                class={categoryTotal >= 0 ? 'sunder-positive' : 'sunder-negative'}
+              >
+                {currencyStore.formatAmount(categoryTotal, defaultCurrency, { showPlus: true })}
+              </Text>
+            </VStack>
+          </Card>
 
-      {#if entries.length === 0}
-        <div
-          class="border-border/60 text-muted-foreground bg-card/50 rounded-xl border border-dashed p-12 text-center text-sm"
-        >
-          No transactions for this category yet.
-        </div>
-      {:else}
-        <div class="space-y-2">
-          {#each entries as entry (entry.id)}
-            {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
-            {@const isForeign = entryCode !== currencyStore.defaultCurrencyCode}
-            {@const converted = isForeign
-              ? currencyStore.tryConvert(
-                  entry.amount,
-                  entryCode,
-                  currencyStore.defaultCurrencyCode,
-                  entry.date || entry.created_at
-                )
-              : null}
-            <a
-              href="/entries/{entry.id}"
-              class="group bg-card border-border/50 hover:border-border block rounded-lg border p-3.5 shadow-sm transition-all hover:shadow-md"
-            >
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-foreground text-sm font-medium">{entry.title}</p>
-                  <div class="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-xs">
-                    <span>{getAccountName(entry.account_id)}</span>
-                    {#if entry.location}
-                      <span>•</span>
-                      <span>{entry.location}</span>
-                    {/if}
-                  </div>
-                </div>
-                <div class="text-right">
-                  <p
-                    class="text-sm font-semibold {entry.amount >= 0
-                      ? 'text-emerald-500'
-                      : 'text-destructive'}"
-                  >
-                    {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
-                  </p>
-                  {#if converted?.converted}
-                    <p class="text-muted-foreground text-[11px]">
-                      ≈ {currencyStore.formatAmount(
-                        converted.amount,
-                        currencyStore.defaultCurrencyCode,
-                        { showPlus: true }
-                      )}
-                    </p>
-                  {/if}
-                  <p class="text-muted-foreground mt-0.5 text-xs">
-                    {new Date(entry.date || entry.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </a>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  </div>
-{/if}
+          <Card padding={4}>
+            <VStack gap={1}>
+              <Text type="supporting" color="secondary">Transactions</Text>
+              <Text size="xl" weight="semibold" hasTabularNumbers>{entries.length}</Text>
+            </VStack>
+          </Card>
+
+          <Card padding={4}>
+            <VStack gap={1}>
+              <Text type="supporting" color="secondary">Average per entry</Text>
+              <Text
+                size="xl"
+                weight="semibold"
+                hasTabularNumbers
+                class={entries.length === 0
+                  ? undefined
+                  : averageEntry >= 0
+                    ? 'sunder-positive'
+                    : 'sunder-negative'}
+              >
+                {entries.length === 0
+                  ? '—'
+                  : currencyStore.formatAmount(averageEntry, defaultCurrency, { showPlus: true })}
+              </Text>
+            </VStack>
+          </Card>
+        </Grid>
+
+        <Card padding={0}>
+          <VStack gap={0}>
+            <HStack padding={4} hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+              <HStack gap={2} vAlign="center">
+                <Heading level={3}>Transactions</Heading>
+                <Badge label={String(entries.length)} />
+              </HStack>
+              <Button
+                label="Add entry"
+                variant="secondary"
+                size="sm"
+                icon={addIcon}
+                onclick={() => (createEntryModalOpen = true)}
+              />
+            </HStack>
+            <Divider />
+
+            {#if entries.length === 0}
+              <Stack padding={6}>
+                <EmptyState
+                  isCompact
+                  title="No transactions for this category yet"
+                  description="Add an entry tagged with this category to see it here."
+                />
+              </Stack>
+            {:else}
+              <List hasDividers edge="bleed">
+                {#each entries as entry (entry.id)}
+                  {@const entryCode = normalizeCurrencyCode(entry.currency_code)}
+                  {@const isForeign = entryCode !== defaultCurrency}
+                  {@const converted = isForeign
+                    ? currencyStore.tryConvert(
+                        entry.amount,
+                        entryCode,
+                        defaultCurrency,
+                        entry.date || entry.created_at
+                      )
+                    : null}
+                  {#snippet entryEnd()}
+                    <VStack gap={0} hAlign="end">
+                      <Text
+                        weight="semibold"
+                        hasTabularNumbers
+                        class={entry.amount >= 0 ? 'sunder-positive' : 'sunder-negative'}
+                      >
+                        {currencyStore.formatAmount(entry.amount, entryCode, { showPlus: true })}
+                      </Text>
+                      {#if converted?.converted}
+                        <Text type="supporting" color="secondary" hasTabularNumbers>
+                          ≈ {currencyStore.formatAmount(converted.amount, defaultCurrency, {
+                            showPlus: true
+                          })}
+                        </Text>
+                      {/if}
+                      <Text type="supporting" color="secondary">
+                        {new Date(entry.date || entry.created_at).toLocaleDateString()}
+                      </Text>
+                    </VStack>
+                  {/snippet}
+                  <ListItem
+                    label={entry.title}
+                    description="{getAccountName(entry.account_id)}{entry.location
+                      ? ` · ${entry.location}`
+                      : ''}"
+                    href="/entries/{entry.id}"
+                    endContent={entryEnd}
+                  />
+                {/each}
+              </List>
+            {/if}
+          </VStack>
+        </Card>
+      </VStack>
+    {/if}
+  </LayoutContent>
+{/snippet}
+
+<Layout height="fill" contentWidth={960} {header} {content} />
 
 <Modal bind:open={createEntryModalOpen} title="New Entry">
   <EntryForm
@@ -267,3 +379,13 @@
     oncancel={() => (createEntryModalOpen = false)}
   />
 </Modal>
+
+<AlertDialog
+  isOpen={deleteConfirmOpen}
+  onOpenChange={(next) => (deleteConfirmOpen = next)}
+  title="Delete {category?.title ?? 'category'}?"
+  description="The category will be marked as deleted and disappear from your lists."
+  actionLabel="Delete category"
+  actionVariant="destructive"
+  onAction={handleDelete}
+/>

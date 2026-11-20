@@ -26,6 +26,44 @@ defmodule SunderWeb.CurrencyControllerTest do
     end
   end
 
+  defmodule RangeMockFetcher do
+    @behaviour Sunder.Currencies.FetcherBehaviour
+
+    @impl true
+    def fetch_rates(_) do
+      {:ok,
+       %{
+         date: ~D[2026-11-19],
+         base: "USD",
+         source: "range_mock",
+         rates: %{
+           "USD" => Decimal.new("1"),
+           "EUR" => Decimal.new("0.90"),
+           "PLN" => Decimal.new("4.05")
+         }
+       }}
+    end
+
+    @impl true
+    def fetch_rates_range(%Date{} = from_date, %Date{} = to_date) do
+      rates_by_date =
+        Date.range(from_date, to_date)
+        |> Enum.filter(&(Date.day_of_week(&1) <= 5))
+        |> Map.new(fn date ->
+          day = Decimal.new(date.day)
+
+          {date,
+           %{
+             "USD" => Decimal.new("1"),
+             "EUR" => Decimal.add(Decimal.new("0.90"), Decimal.mult(day, Decimal.new("0.001"))),
+             "PLN" => Decimal.add(Decimal.new("4.00"), Decimal.mult(day, Decimal.new("0.01")))
+           }}
+        end)
+
+      {:ok, %{base: "USD", source: "range_mock", rates_by_date: rates_by_date}}
+    end
+  end
+
   setup do
     Catalog.sync_catalog!()
     prev_fetcher = Application.get_env(:sunder, :currency_fetcher)
@@ -352,6 +390,113 @@ defmodule SunderWeb.CurrencyControllerTest do
       assert "/currencies/rates/history" in paths
       assert "/currencies/convert" in paths
       assert "/dashboard/eco/preferences" in paths
+    end
+  end
+
+  describe "history range on-demand backfill" do
+    setup do
+      prev_on_demand = Application.get_env(:sunder, :currency_fetch_on_demand)
+      prev_fetcher = Application.get_env(:sunder, :currency_fetcher)
+      Application.put_env(:sunder, :currency_fetch_on_demand, true)
+      Application.put_env(:sunder, :currency_fetcher, RangeMockFetcher)
+
+      if :ets.whereis(:sunder_currency_fetch_cooldown) != :undefined do
+        :ets.delete_all_objects(:sunder_currency_fetch_cooldown)
+      end
+
+      on_exit(fn ->
+        Application.put_env(:sunder, :currency_fetch_on_demand, prev_on_demand)
+        Application.put_env(:sunder, :currency_fetcher, prev_fetcher)
+      end)
+
+      :ok
+    end
+
+    test "GET /currencies/rates/history backfills sparse ranges via a single timeseries fetch", %{
+      conn: conn
+    } do
+      {:ok, _} =
+        Currencies.store_rates(~D[2026-11-10], %{"EUR" => "0.90", "PLN" => "3.96"}, "test")
+
+      resp =
+        conn
+        |> get("/currencies/rates/history", base: "USD", from: "2026-11-09", to: "2026-11-13")
+        |> json_response(200)
+
+      assert resp["base"] == "USD"
+      assert resp["from"] == "2026-11-09"
+      assert resp["to"] == "2026-11-13"
+      assert resp["count"] == 5
+      assert resp["available_from"] == "2026-11-09"
+      assert resp["available_to"] == "2026-11-13"
+      assert map_size(resp["rates"]) == 5
+
+      # Provider series upserts over the pre-existing manual/test row (day 10)
+      assert_in_delta resp["rates"]["2026-11-10"]["EUR"], 0.910, 0.0001
+      assert_in_delta resp["rates"]["2026-11-10"]["PLN"], 4.10, 0.0001
+      assert_in_delta resp["rates"]["2026-11-12"]["PLN"], 4.12, 0.0001
+      assert Currencies.has_rates_for_date?(~D[2026-11-12])
+    end
+
+    test "backfilled history rebases to the requested base and filters symbols", %{conn: conn} do
+      resp =
+        conn
+        |> get("/currencies/rates/history",
+          base: "EUR",
+          from: "2026-11-09",
+          to: "2026-11-13",
+          symbols: "PLN"
+        )
+        |> json_response(200)
+
+      assert resp["base"] == "EUR"
+      assert resp["count"] == 5
+      assert_in_delta resp["rates"]["2026-11-11"]["PLN"], 4.11 / 0.911, 0.0001
+      assert Map.keys(resp["rates"]["2026-11-11"]) == ["PLN"]
+    end
+
+    test "history stays backward-compatible when the fetcher lacks fetch_rates_range/2", %{
+      conn: conn
+    } do
+      Application.put_env(:sunder, :currency_fetcher, ControllerMockFetcher)
+
+      {:ok, _} = Currencies.store_rates(~D[2026-11-10], %{"EUR" => "0.90"}, "test")
+      {:ok, _} = Currencies.store_rates(~D[2026-11-12], %{"EUR" => "0.91"}, "test")
+
+      resp =
+        conn
+        |> get("/currencies/rates/history", from: "2026-11-09", to: "2026-11-13")
+        |> json_response(200)
+
+      assert resp["count"] == 2
+      assert Map.keys(resp["rates"]) |> Enum.sort() == ["2026-11-10", "2026-11-12"]
+      assert resp["available_from"] == "2026-11-10"
+      assert resp["available_to"] == "2026-11-12"
+    end
+
+    test "disabling on-demand fetch leaves sparse history untouched", %{conn: conn} do
+      Application.put_env(:sunder, :currency_fetch_on_demand, false)
+
+      resp =
+        conn
+        |> get("/currencies/rates/history", from: "2026-11-09", to: "2026-11-13")
+        |> json_response(200)
+
+      assert resp["count"] == 0
+      assert resp["rates"] == %{}
+      assert resp["available_from"] == nil
+      assert resp["available_to"] == nil
+      refute Currencies.has_rates_for_date?(~D[2026-11-11])
+    end
+
+    test "invalid and oversized ranges still return 400", %{conn: conn} do
+      assert conn
+             |> get("/currencies/rates/history", from: "2026-11-13", to: "2026-11-09")
+             |> json_response(400) == %{"error" => "invalid_date_range"}
+
+      assert conn
+             |> get("/currencies/rates/history", from: "2024-01-01", to: "2026-11-13")
+             |> json_response(400) == %{"error" => "date_range_too_large"}
     end
   end
 end

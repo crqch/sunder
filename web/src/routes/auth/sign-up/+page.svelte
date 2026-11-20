@@ -1,4 +1,16 @@
 <script lang="ts">
+  import {
+    Banner,
+    Button,
+    Card,
+    Divider,
+    FormLayout,
+    Heading,
+    Link,
+    Text,
+    TextInput,
+    VStack
+  } from '@astryx-sv/core';
   import { register } from '$lib/auth';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
@@ -11,7 +23,7 @@
   let success = $state('');
   let loading = $state(false);
 
-  async function handleSubmit(e: Event) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
 
     if (!invite || !email || !username || !password) {
@@ -27,12 +39,10 @@
       await register(invite, email, username, password);
       success = 'Registration successful! You can now sign in.';
 
-      // Redirect to sign in after a short delay
       setTimeout(() => {
         goto('/auth/sign-in');
       }, 2000);
     } catch (err: any) {
-      // Handle specific error codes if available
       if (err.error_code) {
         switch (err.error_code) {
           case 'INVALID_INVITE':
@@ -60,82 +70,74 @@
   <title>Sign Up - Sunder</title>
 </svelte:head>
 
-<div class="bg-card border-border border p-8 shadow-xl">
-  <h2 class="text-card-foreground mb-6 text-2xl font-bold">Sign Up</h2>
+<Card padding={8} width="100%">
+  <form onsubmit={handleSubmit}>
+    <VStack gap={5}>
+      <VStack gap={1}>
+        <Text type="supporting" color="secondary">Invite-only access</Text>
+        <Heading level={2}>Create account</Heading>
+      </VStack>
 
-  <form onsubmit={handleSubmit} class="flex flex-col gap-4">
-    {#if error}
-      <div
-        class="bg-destructive/10 border-destructive text-destructive border p-3 font-mono text-sm"
-      >
-        {error}
-      </div>
-    {/if}
+      {#if error}
+        <Banner status="error" title={error} container="card" />
+      {/if}
 
-    {#if success}
-      <div class="bg-primary/10 border-primary text-primary border p-3 font-mono text-sm">
-        {success}
-      </div>
-    {/if}
+      {#if success}
+        <Banner status="success" title={success} container="card" />
+      {/if}
 
-    <div class="flex flex-col gap-2">
-      <label for="invite" class="text-card-foreground font-mono text-sm">Invite Code</label>
-      <input
-        type="text"
-        id="invite"
-        bind:value={invite}
-        class="bg-background border-border focus:ring-ring text-foreground w-full border p-2 font-mono focus:ring-2 focus:outline-none"
-        disabled={loading || success !== ''}
+      <FormLayout defaultOptionality="required">
+        <TextInput
+          label="Invite code"
+          value={invite}
+          onChange={(v) => (invite = v)}
+          isDisabled={loading || success !== ''}
+          hasAutoFocus={!invite}
+          size="lg"
+        />
+        <TextInput
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(v) => (email = v)}
+          isDisabled={loading || success !== ''}
+          hasAutoFocus={!!invite}
+          size="lg"
+        />
+        <TextInput
+          label="Username"
+          value={username}
+          onChange={(v) => (username = v)}
+          isDisabled={loading || success !== ''}
+          size="lg"
+        />
+        <TextInput
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(v) => (password = v)}
+          isDisabled={loading || success !== ''}
+          size="lg"
+        />
+      </FormLayout>
+
+      <Button
+        label={loading ? 'Creating account...' : 'Sign up'}
+        type="submit"
+        variant="primary"
+        size="lg"
+        width="100%"
+        isLoading={loading}
+        isDisabled={success !== ''}
       />
-    </div>
 
-    <div class="flex flex-col gap-2">
-      <label for="email" class="text-card-foreground font-mono text-sm">Email</label>
-      <input
-        type="email"
-        id="email"
-        bind:value={email}
-        class="bg-background border-border focus:ring-ring text-foreground w-full border p-2 font-mono focus:ring-2 focus:outline-none"
-        disabled={loading || success !== ''}
-        autocomplete="email"
-      />
-    </div>
+      <Divider />
 
-    <div class="flex flex-col gap-2">
-      <label for="username" class="text-card-foreground font-mono text-sm">Username</label>
-      <input
-        type="text"
-        id="username"
-        bind:value={username}
-        class="bg-background border-border focus:ring-ring text-foreground w-full border p-2 font-mono focus:ring-2 focus:outline-none"
-        disabled={loading || success !== ''}
-        autocomplete="username"
-      />
-    </div>
-
-    <div class="flex flex-col gap-2">
-      <label for="password" class="text-card-foreground font-mono text-sm">Password</label>
-      <input
-        type="password"
-        id="password"
-        bind:value={password}
-        class="bg-background border-border focus:ring-ring text-foreground w-full border p-2 font-mono focus:ring-2 focus:outline-none"
-        disabled={loading || success !== ''}
-        autocomplete="new-password"
-      />
-    </div>
-
-    <button
-      type="submit"
-      class="btn mt-4 w-full !rounded-none"
-      disabled={loading || success !== ''}
-    >
-      {loading ? 'CREATING ACCOUNT...' : 'SIGN UP'}
-    </button>
+      <VStack hAlign="center">
+        <Text type="supporting" color="secondary">
+          Already have an account? <Link href="/auth/sign-in" type="supporting">Sign in</Link>
+        </Text>
+      </VStack>
+    </VStack>
   </form>
-
-  <div class="border-border text-muted-foreground mt-6 border-t pt-6 text-center font-mono text-sm">
-    Already have an account?
-    <a href="/auth/sign-in" class="text-primary underline-offset-4 hover:underline">Sign in</a>
-  </div>
-</div>
+</Card>
